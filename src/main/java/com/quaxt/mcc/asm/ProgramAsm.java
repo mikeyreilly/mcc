@@ -1,5 +1,6 @@
 package com.quaxt.mcc.asm;
 
+import com.quaxt.mcc.BinaryOperator;
 import com.quaxt.mcc.UnaryOperator;
 
 import java.io.PrintWriter;
@@ -39,6 +40,8 @@ public record ProgramAsm(FunctionAsm functionAsm) {
                     yield "ret";
                 }
                 case Unary(UnaryOperator op, Operand operand) -> op.toString().toLowerCase() + "l\t" + formatOperand(operand);
+                case Binary(BinaryOperator op, Operand src, Operand dst) -> op.toString().toLowerCase() + "l\t" + formatOperand(src)+ ", "+ formatOperand(dst);
+                case Nullary nullary -> nullary.code;
             };
             printIndent(out, s);
         }

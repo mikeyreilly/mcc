@@ -101,7 +101,7 @@ public class Parser {
         return switch (type) {
             case MINUS -> BinaryOperator.SUBTRACT;
             case PLUS -> BinaryOperator.ADD;
-            case MULTIPLY -> BinaryOperator.MULTIPLY;
+            case MULTIPLY -> BinaryOperator.IMUL;
             case DIVIDE -> BinaryOperator.DIVIDE;
             case REMAINDER -> BinaryOperator.REMAINDER;
             default -> throw new IllegalStateException("Unexpected value: " + type);
@@ -111,7 +111,7 @@ public class Parser {
     private static int getPrecedence(BinaryOperator operator) {
         return switch (operator) {
             case SUBTRACT, ADD -> 45;
-            case MULTIPLY, DIVIDE, REMAINDER -> 50;
+            case IMUL, DIVIDE, REMAINDER -> 50;
             default -> throw new IllegalStateException("Unexpected value: " + operator);
         };
     }

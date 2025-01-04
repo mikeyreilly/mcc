@@ -4,7 +4,7 @@ import java.io.PrintWriter;
 import java.util.Locale;
 
 public enum Nullary implements Instruction {
-    RET;
+    CDQ,RET;
 
     final String code;
 

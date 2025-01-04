@@ -1,11 +1,13 @@
 package com.quaxt.mcc.asm;
 
+import com.quaxt.mcc.BinaryOperator;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.quaxt.mcc.asm.Nullary.CDQ;
 import static com.quaxt.mcc.asm.Nullary.RET;
 
 public class Codegen {
@@ -22,21 +24,51 @@ public class Codegen {
                 case Mov(Operand src, Operand dst) ->
                         new Mov(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
                 case Unary(UnaryOperator op, Operand operand) -> new Unary(op, dePseudo(operand, varTable, offset));
+                case Binary(BinaryOperator op, Operand src, Operand dst) ->
+                        new Binary(op, dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
             };
             instructions.set(i, newInst);
         }
         // Fix up instructions
 
         instructions.addFirst(new AllocateStack(-offset.get()));
-        // Fix illegal MOVs
+        // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
         for (int i = instructions.size() - 1; i >= 0; i--) {
             Instruction oldInst = instructions.get(i);
 
-            if (oldInst instanceof Mov(Operand src, Operand dst)) {
-                if (src instanceof Stack && dst instanceof Stack) {
-                    instructions.set(i, new Mov(src, Reg.R10));
-                    instructions.add(i + 1, new Mov(Reg.R10, dst));
+            switch (oldInst) {
+                case Unary(UnaryOperator op, Operand operand)->{
+                    if (op == UnaryOperator.IDIV && operand instanceof Imm) {
+                        instructions.set(i, new Mov(operand, Reg.R10));
+                        instructions.add(i + 1, new Unary(op, Reg.R10));
+                    }
                 }
+                case Mov(Operand src, Operand dst) -> {
+                    if (src instanceof Stack && dst instanceof Stack) {
+                        instructions.set(i, new Mov(src, Reg.R10));
+                        instructions.add(i + 1, new Mov(Reg.R10, dst));
+                    }
+                }
+                case Binary(BinaryOperator op, Operand src, Operand dst) -> {
+                    switch (op){
+                        case ADD,SUBTRACT -> {
+                            if (src instanceof Stack && dst instanceof Stack) {
+                                instructions.set(i, new Mov(src, Reg.R10));
+                                instructions.add(i + 1, new Binary(op, Reg.R10, dst));
+                            }
+                        }
+                        case IMUL -> {
+                            if (dst instanceof Stack) {
+                                instructions.set(i, new Mov(dst, Reg.R11));
+                                instructions.add(i + 1, new Binary(op, src, Reg.R11));
+                                instructions.set(i, new Mov(Reg.R11, dst));
+                            }
+                        }
+
+                    }
+
+                }
+                default -> {}
             }
 
         }
@@ -66,7 +98,28 @@ public class Codegen {
                     instructionAsms.add(new Mov(toOperand(src), dst));
                     instructionAsms.add(new Unary(op, dst));
                 }
-                default -> throw new IllegalStateException("Unexpected value: " + inst);
+                case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2, VarIr dstName) -> {
+                    switch (op) {
+                        case ADD, SUBTRACT, IMUL -> {
+                            instructionAsms.add(new Mov(toOperand(v1), toOperand(dstName)));
+                            instructionAsms.add(new Binary(op, toOperand(v2), toOperand(dstName)));
+                        }
+                        case DIVIDE -> {
+                            instructionAsms.add(new Mov(toOperand(v1), Reg.EAX));
+                            instructionAsms.add(CDQ);
+                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
+                            instructionAsms.add(new Mov(Reg.EAX, toOperand(dstName)));
+
+                        }
+                        case REMAINDER -> {
+                            instructionAsms.add(new Mov(toOperand(v1), Reg.EAX));
+                            instructionAsms.add(CDQ);
+                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
+                            instructionAsms.add(new Mov(Reg.EDX, toOperand(dstName)));
+                        }
+                    }
+
+                }
             }
         }
         return instructionAsms;
