@@ -91,7 +91,7 @@ public class Codegen {
             switch (inst) {
                 case ReturnInstructionIr(ValIr val) -> {
                     Operand src = toOperand(val);
-                    instructionAsms.add(new Mov(src, Reg.EAX));
+                    instructionAsms.add(new Mov(src, Reg.RAX));
                     instructionAsms.add(RET);
                 }
                 case UnaryIr(UnaryOperator op, ValIr src, ValIr dstIr) -> {
@@ -106,17 +106,17 @@ public class Codegen {
                             instructionAsms.add(new Binary(op, toOperand(v2), toOperand(dstName)));
                         }
                         case DIVIDE -> {
-                            instructionAsms.add(new Mov(toOperand(v1), Reg.EAX));
+                            instructionAsms.add(new Mov(toOperand(v1), Reg.RAX));
                             instructionAsms.add(CDQ);
                             instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(Reg.EAX, toOperand(dstName)));
+                            instructionAsms.add(new Mov(Reg.RAX, toOperand(dstName)));
 
                         }
                         case REMAINDER -> {
-                            instructionAsms.add(new Mov(toOperand(v1), Reg.EAX));
+                            instructionAsms.add(new Mov(toOperand(v1), Reg.RAX));
                             instructionAsms.add(CDQ);
                             instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(Reg.EDX, toOperand(dstName)));
+                            instructionAsms.add(new Mov(Reg.RDX, toOperand(dstName)));
                         }
                     }
 

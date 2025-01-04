@@ -40,7 +40,8 @@ public record ProgramAsm(FunctionAsm functionAsm) {
                     yield "ret";
                 }
                 case Unary(UnaryOperator op, Operand operand) ->
-                        op.toString().toLowerCase() + (op == UnaryOperator.IDIV ? "q\t" : "l\t") + formatOperand(operand);
+                        op.toString().toLowerCase() + "q\t" //(op == UnaryOperator.IDIV ? "q\t" : "l\t")
+                                + formatOperand(operand);
                 case Binary(BinaryOperator op, Operand src, Operand dst) ->
                         op.toString().toLowerCase() + "q\t" + formatOperand(src) + ", " + formatOperand(dst);
                 case Nullary nullary -> nullary.code;
@@ -53,6 +54,6 @@ public record ProgramAsm(FunctionAsm functionAsm) {
     }
 
     private static String formatMov(Operand o) {
-        return "mov" + (o == Reg.EAX ? 'l' : 'q');
+        return "movq";
     }
 }
