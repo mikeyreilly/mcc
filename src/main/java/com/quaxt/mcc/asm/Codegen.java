@@ -61,7 +61,7 @@ public class Codegen {
                             if (dst instanceof Stack) {
                                 instructions.set(i, new Mov(dst, Reg.R11));
                                 instructions.add(i + 1, new Binary(op, src, Reg.R11));
-                                instructions.set(i, new Mov(Reg.R11, dst));
+                                instructions.add(i + 2, new Mov(Reg.R11, dst));
                             }
                         }
 
