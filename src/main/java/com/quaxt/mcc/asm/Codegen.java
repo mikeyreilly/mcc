@@ -15,7 +15,7 @@ public class Codegen {
         ProgramAsm programAsm = convertToAsm(programIr);
         // Replace Pseudo Registers
         List<Instruction> instructions = programAsm.functionAsm().instructions();
-        AtomicInteger offset = new AtomicInteger(-4);
+        AtomicInteger offset = new AtomicInteger(-8);
         Map<String, Integer> varTable = new HashMap<>();
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
@@ -138,7 +138,7 @@ public class Codegen {
         return switch (in) {
             case Imm _, Reg _, Stack _ -> in;
             case Pseudo(String identifier) -> {
-                Integer varOffset = varTable.computeIfAbsent(identifier, (k) -> offset.getAndAdd(-4));
+                Integer varOffset = varTable.computeIfAbsent(identifier, (k) -> offset.getAndAdd(-8));
                 yield new Stack(varOffset);
             }
         };
