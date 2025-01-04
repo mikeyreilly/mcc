@@ -3,7 +3,7 @@ package com.quaxt.mcc;
 import java.util.Locale;
 
 public enum BinaryOperator {
-    ADD, SUBTRACT, IMUL, DIVIDE, REMAINDER;
+    ADD, SUB, IMUL, DIVIDE, REMAINDER;
 
     final String code;
 

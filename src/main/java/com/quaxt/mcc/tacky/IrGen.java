@@ -47,7 +47,7 @@ public class IrGen {
             }
             case BinaryOp(BinaryOperator op, Exp left, Exp right):
                 ValIr v1 = emitInstructions(left, instructions);
-                ValIr v2 = emitInstructions(left, instructions);
+                ValIr v2 = emitInstructions(right, instructions);
                 VarIr dstName = makeTemporary();
                 instructions.add(new BinaryIr(op, v1, v2, dstName));
                 return dstName;

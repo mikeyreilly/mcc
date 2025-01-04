@@ -89,9 +89,9 @@ public class Mcc {
             return;
         }
         int exitCode = assemble(asmFile, intermediateFile.resolveSibling(bareFileName));
-        if (exitCode == 0) {
-            Files.delete(asmFile);
-        }
+//        if (exitCode == 0) {
+//            Files.delete(asmFile);
+//        }
         System.exit(exitCode);
     }
 

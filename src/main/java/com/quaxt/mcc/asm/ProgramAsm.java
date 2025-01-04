@@ -39,8 +39,10 @@ public record ProgramAsm(FunctionAsm functionAsm) {
                     printIndent(out, "popq\t%rbp");
                     yield "ret";
                 }
-                case Unary(UnaryOperator op, Operand operand) -> op.toString().toLowerCase() + "l\t" + formatOperand(operand);
-                case Binary(BinaryOperator op, Operand src, Operand dst) -> op.toString().toLowerCase() + "l\t" + formatOperand(src)+ ", "+ formatOperand(dst);
+                case Unary(UnaryOperator op, Operand operand) ->
+                        op.toString().toLowerCase() + (op == UnaryOperator.IDIV ? "q\t" : "l\t") + formatOperand(operand);
+                case Binary(BinaryOperator op, Operand src, Operand dst) ->
+                        op.toString().toLowerCase() + "q\t" + formatOperand(src) + ", " + formatOperand(dst);
                 case Nullary nullary -> nullary.code;
             };
             printIndent(out, s);

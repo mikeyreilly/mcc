@@ -37,7 +37,7 @@ public class Codegen {
             Instruction oldInst = instructions.get(i);
 
             switch (oldInst) {
-                case Unary(UnaryOperator op, Operand operand)->{
+                case Unary(UnaryOperator op, Operand operand) -> {
                     if (op == UnaryOperator.IDIV && operand instanceof Imm) {
                         instructions.set(i, new Mov(operand, Reg.R10));
                         instructions.add(i + 1, new Unary(op, Reg.R10));
@@ -50,8 +50,8 @@ public class Codegen {
                     }
                 }
                 case Binary(BinaryOperator op, Operand src, Operand dst) -> {
-                    switch (op){
-                        case ADD,SUBTRACT -> {
+                    switch (op) {
+                        case ADD, SUB -> {
                             if (src instanceof Stack && dst instanceof Stack) {
                                 instructions.set(i, new Mov(src, Reg.R10));
                                 instructions.add(i + 1, new Binary(op, Reg.R10, dst));
@@ -68,7 +68,8 @@ public class Codegen {
                     }
 
                 }
-                default -> {}
+                default -> {
+                }
             }
 
         }
@@ -100,7 +101,7 @@ public class Codegen {
                 }
                 case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2, VarIr dstName) -> {
                     switch (op) {
-                        case ADD, SUBTRACT, IMUL -> {
+                        case ADD, SUB, IMUL -> {
                             instructionAsms.add(new Mov(toOperand(v1), toOperand(dstName)));
                             instructionAsms.add(new Binary(op, toOperand(v2), toOperand(dstName)));
                         }

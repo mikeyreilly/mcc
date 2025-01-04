@@ -99,7 +99,7 @@ public class Parser {
 
     private static BinaryOperator toBinaryOperator(TokenType type) {
         return switch (type) {
-            case MINUS -> BinaryOperator.SUBTRACT;
+            case MINUS -> BinaryOperator.SUB;
             case PLUS -> BinaryOperator.ADD;
             case MULTIPLY -> BinaryOperator.IMUL;
             case DIVIDE -> BinaryOperator.DIVIDE;
@@ -110,7 +110,7 @@ public class Parser {
 
     private static int getPrecedence(BinaryOperator operator) {
         return switch (operator) {
-            case SUBTRACT, ADD -> 45;
+            case SUB, ADD -> 45;
             case IMUL, DIVIDE, REMAINDER -> 50;
             default -> throw new IllegalStateException("Unexpected value: " + operator);
         };
