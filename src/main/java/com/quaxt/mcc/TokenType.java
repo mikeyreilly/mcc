@@ -7,9 +7,7 @@ public enum TokenType implements Token {
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), NUMERIC("[0-9]+\\b"), SEMICOLON(";"),
     SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
             Pattern.DOTALL)), INT(), RETURN(), VOID(),
-    DECREMENT("--"), INCREMENT("\\+\\+"), MINUS("-"), COMPLIMENT("~"),
-    PLUS("\\+"), MULTIPLY("\\*"), DIVIDE("/"), REMAINDER("%");
-
+    DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~");
     final Pattern regex;
 
     TokenType(String pattern) {
@@ -22,5 +20,9 @@ public enum TokenType implements Token {
 
     TokenType() {
         regex = null;
+    }
+
+    public Pattern regex(){
+        return regex;
     }
 }

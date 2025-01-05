@@ -62,7 +62,7 @@ public class Parser {
     private static Exp parseFactor(List<Token> tokens) {
         Token token = tokens.removeFirst();
         return switch (token) {
-            case TokenType.MINUS ->
+            case BinaryOperator.SUB ->
                     new UnaryOp(UnaryOperator.NEG, parseFactor(tokens));
             case TokenType.COMPLIMENT ->
                     new UnaryOp(UnaryOperator.NOT, parseFactor(tokens));
@@ -83,38 +83,22 @@ public class Parser {
 
     private static Exp parseExp(List<Token> tokens, int minPrec) {
         Exp left = parseFactor(tokens);
-        loop:
+
         while (!tokens.isEmpty()) {
-            Token token = tokens.getFirst();
-            BinaryOperator operator;
-            switch (token) {
-                case TokenType.MINUS:
-                    operator = BinaryOperator.SUB;
+            if (tokens.getFirst() instanceof BinaryOperator binop) {
+                int prec = switch (binop) {
+                    case BinaryOperator.SUB, BinaryOperator.ADD ->  45;
+                    case BinaryOperator.IMUL, BinaryOperator.DIVIDE,
+                         BinaryOperator.REMAINDER ->  50;
+                };
+                if (prec < minPrec)
                     break;
-                case TokenType.PLUS:
-                    operator = BinaryOperator.ADD;
-                    break;
-                case TokenType.MULTIPLY:
-                    operator = BinaryOperator.IMUL;
-                    break;
-                case TokenType.DIVIDE:
-                    operator = BinaryOperator.DIVIDE;
-                    break;
-                case TokenType.REMAINDER:
-                    operator = BinaryOperator.REMAINDER;
-                    break;
-                default:
-                    break loop;
-            }
-            int prec = switch (operator) {
-                case SUB, ADD -> 45;
-                case IMUL, DIVIDE, REMAINDER -> 50;
-            };
-            if (prec < minPrec)
+                tokens.removeFirst();
+                Exp right = parseExp(tokens, prec + 1);
+                left = new BinaryOp(binop, left, right);
+            } else {
                 break;
-            tokens.removeFirst();
-            Exp right = parseExp(tokens, prec + 1);
-            left = new BinaryOp(operator, left, right);
+            }
         }
         return left;
     }

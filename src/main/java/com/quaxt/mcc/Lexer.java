@@ -5,13 +5,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
-    static final TokenType[] TOKEN_TYPES_TO_MATCH =
-            Arrays.stream(TokenType.values())
-                    .filter(t -> t.regex != null)
-                    .toArray(TokenType[]::new);
+    static final Token[] TOKEN_TYPES_TO_MATCH =
+            Stream.concat(Arrays.stream(TokenType.values()),Arrays.stream(BinaryOperator.values()))
+                    .filter(t -> t.regex() != null)
+                    .toArray(Token[]::new);
 
     public static List<Token> lex(String src) {
         Matcher matcher = TokenType.IDENTIFIER.regex.matcher(src);
@@ -28,8 +29,8 @@ public class Lexer {
                     break;
                 }
             }
-            for (TokenType tokenType : TOKEN_TYPES_TO_MATCH) {
-                matcher.usePattern(tokenType.regex);
+            for (Token tokenType : TOKEN_TYPES_TO_MATCH) {
+                matcher.usePattern(tokenType.regex());
                 if (matcher.lookingAt()) {
                     int end = matcher.end();
                     if (tokenType != TokenType.SINGLE_LINE_COMMENT && tokenType != TokenType.MULTILINE_COMMENT) {

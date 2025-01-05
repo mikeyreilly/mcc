@@ -1,13 +1,25 @@
 package com.quaxt.mcc;
 
-import java.util.Locale;
+import java.util.regex.Pattern;
+/*sometimes not binary (e.g. minus)*/
+public enum BinaryOperator implements Token {
+    SUB("-"), ADD("\\+"), IMUL("\\*"), DIVIDE("/"), REMAINDER("%");
 
-public enum BinaryOperator {
-    ADD, SUB, IMUL, DIVIDE, REMAINDER;
+    final Pattern regex;
 
-    final String code;
+    BinaryOperator(String pattern) {
+       this(Pattern.compile(pattern));
+    }
 
-    BinaryOperator(){
-        this.code = name().toLowerCase(Locale.ROOT);
+    BinaryOperator(Pattern pattern) {
+        regex = pattern;
+    }
+
+    BinaryOperator() {
+        regex = null;
+    }
+
+    public Pattern regex(){
+        return regex;
     }
 }
