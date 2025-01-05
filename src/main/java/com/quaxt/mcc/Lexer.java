@@ -1,15 +1,19 @@
 package com.quaxt.mcc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
+    static final TokenType[] TOKEN_TYPES_TO_MATCH =
+            Arrays.stream(TokenType.values())
+                    .filter(t -> t.regex != null)
+                    .toArray(TokenType[]::new);
 
     public static List<Token> lex(String src) {
-        TokenType[] tokenTypes = TokenType.values();
         Matcher matcher = TokenType.IDENTIFIER.regex.matcher(src);
         List<Token> tokens = new ArrayList<>();
         outer:
@@ -24,16 +28,23 @@ public class Lexer {
                     break;
                 }
             }
-            for (TokenType tokenType : tokenTypes) {
+            for (TokenType tokenType : TOKEN_TYPES_TO_MATCH) {
                 matcher.usePattern(tokenType.regex);
                 if (matcher.lookingAt()) {
-                    int start = matcher.start();
                     int end = matcher.end();
-                    if (!tokenType.isComment()){
-                        if (tokenType.hasValue()) {
-                            tokens.add(Token.of(tokenType, src.substring(start, end)));
+                    if (tokenType != TokenType.SINGLE_LINE_COMMENT && tokenType != TokenType.MULTILINE_COMMENT) {
+                        if (tokenType == TokenType.IDENTIFIER || tokenType == TokenType.NUMERIC) {
+                            int start = matcher.start();
+                            String value = src.substring(start, end);
+                            Token token = switch (value) {
+                                case "int" -> TokenType.INT;
+                                case "void" -> TokenType.VOID;
+                                case "return" -> TokenType.RETURN;
+                                default -> new TokenWithValue(tokenType, value);
+                            };
+                            tokens.add(token);
                         } else {
-                            tokens.add(Token.of(tokenType));
+                            tokens.add(tokenType);
                         }
                     }
 
