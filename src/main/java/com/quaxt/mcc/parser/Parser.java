@@ -58,32 +58,33 @@ public class Parser {
 
     private static Exp parseFactor(List<Token> tokens) {
         Token token = tokens.removeFirst();
-        if (TokenType.NUMERIC == token.type()) {
-            return new Int(Integer.parseInt(token.value()));
-        } else if (TokenType.MINUS == token.type()) {
-            return new UnaryOp(UnaryOperator.NEG, parseFactor(tokens));
-        } else if (TokenType.COMPLIMENT == token.type()) {
-            return new UnaryOp(UnaryOperator.NOT, parseFactor(tokens));
-        } else if (TokenType.OPEN_PAREN == token.type()) {
-            Exp r = parseExp(tokens, 0);
-            expect(Token.CLOSE_PAREN, tokens);
-            return r;
-        }
-        throw new IllegalArgumentException("Expected exp, got " + token);
+        return switch (token.type()) {
+            case NUMERIC -> new Int(Integer.parseInt(token.value()));
+            case MINUS -> new UnaryOp(UnaryOperator.NEG, parseFactor(tokens));
+            case COMPLIMENT ->
+                    new UnaryOp(UnaryOperator.NOT, parseFactor(tokens));
+            case OPEN_PAREN -> {
+                Exp r = parseExp(tokens, 0);
+                expect(Token.CLOSE_PAREN, tokens);
+                yield r;
+            }
+            default -> throw new IllegalArgumentException("Expected exp, got "
+                    + token);
+        };
     }
 
 
     private static Exp parseExp(List<Token> tokens, int minPrec) {
         Exp left = parseFactor(tokens);
-        if (tokens.isEmpty()){
-         return left;
+        if (tokens.isEmpty()) {
+            return left;
         }
         Token nextToken = tokens.getFirst();
         while (nextToken.type().isBinaryOperator() && getPrecedence(toBinaryOperator(nextToken.type())) >= minPrec) {
             BinaryOperator operator = parseBinaryOperator(tokens);
             Exp right = parseExp(tokens, getPrecedence(operator) + 1);
             left = new BinaryOp(operator, left, right);
-            if (tokens.isEmpty()){
+            if (tokens.isEmpty()) {
                 break;
             }
             nextToken = tokens.getFirst();
@@ -104,7 +105,8 @@ public class Parser {
             case MULTIPLY -> BinaryOperator.IMUL;
             case DIVIDE -> BinaryOperator.DIVIDE;
             case REMAINDER -> BinaryOperator.REMAINDER;
-            default -> throw new IllegalStateException("Unexpected value: " + type);
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + type);
         };
     }
 
@@ -112,7 +114,6 @@ public class Parser {
         return switch (operator) {
             case SUB, ADD -> 45;
             case IMUL, DIVIDE, REMAINDER -> 50;
-            default -> throw new IllegalStateException("Unexpected value: " + operator);
         };
     }
 

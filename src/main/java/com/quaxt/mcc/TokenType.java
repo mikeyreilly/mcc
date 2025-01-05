@@ -3,13 +3,12 @@ package com.quaxt.mcc;
 import java.util.regex.Pattern;
 
 public enum TokenType {
-    IDENTIFIER("[a-zA-Z_]\\w*\\b"),
-    OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
-    OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), NUMERIC("[0-9]+\\b"), SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*"),
-    MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL)),
-    INT("int"), RETURN("return"), VOID("void"), DECREMENT("--"), INCREMENT("\\+\\+"), MINUS("-"), COMPLIMENT("~"),
-    PLUS("\\+"),
-    MULTIPLY("\\*"), DIVIDE("/"), REMAINDER("%");
+    IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
+    OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), NUMERIC("[0-9]+\\b"), SEMICOLON(";"),
+    SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
+            Pattern.DOTALL)), INT("int"), RETURN("return"), VOID("void"),
+    DECREMENT("--"), INCREMENT("\\+\\+"), MINUS("-"), COMPLIMENT("~"),
+    PLUS("\\+"), MULTIPLY("\\*"), DIVIDE("/"), REMAINDER("%");
 
     Pattern regex;
 
