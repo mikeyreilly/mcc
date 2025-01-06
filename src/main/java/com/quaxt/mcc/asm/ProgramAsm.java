@@ -32,7 +32,8 @@ public record ProgramAsm(FunctionAsm functionAsm) {
         for (Instruction instruction : instructions) {
             String s = switch (instruction) {
                 case AllocateStack(int i) -> "subq\t$" + i + ", %rsp";
-                case Mov(Operand src, Operand dst) -> "movq" + "\t" + formatOperand(src) + ", " + formatOperand(dst);
+                case Mov(Operand src, Operand dst) ->
+                        "movq" + "\t" + formatOperand(src) + ", " + formatOperand(dst);
                 case Nullary.RET -> {
                     printIndent(out, "movq\t%rbp, %rsp");
                     printIndent(out, "popq\t%rbp");
@@ -41,7 +42,11 @@ public record ProgramAsm(FunctionAsm functionAsm) {
                 case Unary(UnaryOperator op, Operand operand) -> switch (op) {
                     case IDIV -> operand == Reg.R10 ? "idivl\t%r10d" : "idivl\t"
                             + formatOperand(operand);
-                    case NOT, NEG -> op.toString().toLowerCase() + "q\t"
+                    case NEGATE -> "notq\t"
+                            + formatOperand(operand);
+                    case COMPLEMENT -> "negq\t"
+                            + formatOperand(operand);
+                    case NOT -> "TODOq\t"
                             + formatOperand(operand);
                 };
                 case Binary(BinaryOperator op, Operand src, Operand dst) ->
