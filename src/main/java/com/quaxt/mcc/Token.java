@@ -7,7 +7,5 @@ public sealed interface Token permits BinaryOperator, TokenType, TokenWithValue 
         return this;
     }
 
-   default Pattern regex(){
-        throw new IllegalArgumentException("can't do this");
-   }
+    Pattern regex();
 }

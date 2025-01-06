@@ -5,6 +5,8 @@ import com.quaxt.mcc.*;
 
 import java.util.List;
 
+import static com.quaxt.mcc.TokenType.NOT;
+
 public class Parser {
 
     private static void expect(Token expected, List<Token> tokens) {
@@ -87,9 +89,14 @@ public class Parser {
         while (!tokens.isEmpty()) {
             if (tokens.getFirst() instanceof BinaryOperator binop) {
                 int prec = switch (binop) {
-                    case BinaryOperator.SUB, BinaryOperator.ADD ->  45;
-                    case BinaryOperator.IMUL, BinaryOperator.DIVIDE,
-                         BinaryOperator.REMAINDER ->  50;
+                    case IMUL, DIVIDE,
+                         REMAINDER -> 50;
+                    case SUB, ADD -> 45;
+                    case LESS_THAN, LESS_THAN_OR_EQUAL,
+                         GREATER_THAN, GREATER_THAN_OR_EQUAL -> 35;
+                    case EQUALS, NOT_EQUALS -> 30;
+                    case AND -> 10;
+                    case OR -> 5;
                 };
                 if (prec < minPrec)
                     break;
