@@ -6,21 +6,16 @@ import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 public class IrGen {
     public static ProgramIr programIr(Program program) {
         List<InstructionIr> instructions = new ArrayList<>();
-        emitInstructions(program.function(), instructions);
-        //
-        FunctionIr f = new FunctionIr(program.function().name(), program.function().returnType(), instructions);
-        return new ProgramIr(f);
-    }
-
-    private static void emitInstructions(Function function, List<InstructionIr> instructions) {
+        Function function = program.function();
         emitInstructions(function.statement(), instructions);
         FunctionIr f = new FunctionIr(function.name(), function.returnType(), instructions);
-
+        return new ProgramIr(f);
     }
 
     private static void emitInstructions(Statement statement, List<InstructionIr> instructions) {
@@ -53,9 +48,10 @@ public class IrGen {
                 return dstName;
         }
     }
+    static AtomicLong tempCount = new AtomicLong(0L);
 
     private static VarIr makeTemporary() {
-        return VarIr.newTemprary();
+        return new VarIr("tmp." + tempCount.getAndIncrement());
     }
 
 }
