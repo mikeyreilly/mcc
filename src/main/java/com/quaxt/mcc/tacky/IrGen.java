@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.quaxt.mcc.ArithmeticOperator.AND;
+import static com.quaxt.mcc.ArithmeticOperator.OR;
+
 
 public class IrGen {
     public static ProgramIr programIr(Program program) {
@@ -31,8 +34,7 @@ public class IrGen {
     private static ValIr emitInstructions(Exp expr, List<InstructionIr> instructions) {
         switch (expr) {
             case Int(int i): {
-                    return new IntIr(i);
-
+                return new IntIr(i);
             }
             case UnaryOp(UnaryOperator op, Exp exp): {
                 ValIr src = emitInstructions(exp, instructions);
@@ -41,13 +43,64 @@ public class IrGen {
                 return dst;
             }
             case BinaryOp(BinaryOperator op, Exp left, Exp right):
-                ValIr v1 = emitInstructions(left, instructions);
-                ValIr v2 = emitInstructions(right, instructions);
-                VarIr dstName = makeTemporary();
-                instructions.add(new BinaryIr(op, v1, v2, dstName));
-                return dstName;
+                switch (op) {
+                    case AND -> {
+                        VarIr result = makeTemporary();
+
+                        LabelIr falseLabel = newLabel("false");
+                        LabelIr endLabel = newLabel("end");
+                        ValIr v1 = emitInstructions(left, instructions);
+                        instructions.add(new JumpIfZero(v1, falseLabel.label()));
+
+                        ValIr v2 = emitInstructions(right, instructions);
+                        instructions.add(new JumpIfZero(v2, falseLabel.label()));
+                        instructions.add(new Copy(new IntIr(1), result));
+                        instructions.add(new Jump(endLabel.label()));
+
+                        instructions.add(falseLabel);
+                        instructions.add(new Copy(new IntIr(0), result));
+                        instructions.add(endLabel);
+
+                        return result;
+                    }
+                    case OR -> {
+                        VarIr result = makeTemporary();
+
+                        LabelIr trueLabel = newLabel("true");
+                        LabelIr endLabel = newLabel("end");
+                        ValIr v1 = emitInstructions(left, instructions);
+                        instructions.add(new JumpIfNotZero(v1, trueLabel.label()));
+
+                        ValIr v2 = emitInstructions(right, instructions);
+                        instructions.add(new JumpIfNotZero(v2, trueLabel.label()));
+                        instructions.add(new Copy(new IntIr(0), result));
+                        instructions.add(new Jump(endLabel.label()));
+
+                        instructions.add(trueLabel);
+                        instructions.add(new Copy(new IntIr(1), result));
+                        instructions.add(endLabel);
+
+                        return result;
+                    }
+                    default -> {
+                        ValIr v1 = emitInstructions(left, instructions);
+                        ValIr v2 = emitInstructions(right, instructions);
+                        VarIr dstName = makeTemporary();
+                        instructions.add(new BinaryIr(op, v1, v2, dstName));
+                        return dstName;
+                    }
+                }
         }
     }
+
+
+    static AtomicLong labelCount = new AtomicLong(0L);
+
+
+    private static LabelIr newLabel(String prefix) {
+        return new LabelIr(prefix + labelCount.getAndIncrement());
+    }
+
     static AtomicLong tempCount = new AtomicLong(0L);
 
     private static VarIr makeTemporary() {

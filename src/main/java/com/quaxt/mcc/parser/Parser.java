@@ -5,6 +5,9 @@ import com.quaxt.mcc.*;
 
 import java.util.List;
 
+import static com.quaxt.mcc.ArithmeticOperator.*;
+import static com.quaxt.mcc.CmpOperator.*;
+
 public class Parser {
 
     private static void expect(Token expected, List<Token> tokens) {
@@ -62,7 +65,7 @@ public class Parser {
     private static Exp parseFactor(List<Token> tokens) {
         Token token = tokens.removeFirst();
         return switch (token) {
-            case BinaryOperator.SUB ->
+            case ArithmeticOperator.SUB ->
                     new UnaryOp(UnaryOperator.COMPLEMENT, parseFactor(tokens));
             case TokenType.COMPLIMENT ->
                     new UnaryOp(UnaryOperator.NEGATE, parseFactor(tokens));

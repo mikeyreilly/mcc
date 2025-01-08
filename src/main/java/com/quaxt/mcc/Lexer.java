@@ -1,12 +1,12 @@
 package com.quaxt.mcc;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.quaxt.mcc.BinaryOperator.*;
+import static com.quaxt.mcc.ArithmeticOperator.*;
+import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.TokenType.*;
 
 public class Lexer {
