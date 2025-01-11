@@ -17,7 +17,8 @@ public class Lexer {
                     MULTILINE_COMMENT, DECREMENT, INCREMENT, COMPLIMENT, SUB,
                     ADD, IMUL, DIVIDE, REMAINDER,
                     AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
-                    GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT};
+                    GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
+                    BECOMES};
 
 
     public static List<Token> lex(String src) {

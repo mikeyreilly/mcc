@@ -5,7 +5,7 @@ import java.util.regex.Pattern;
 /*sometimes not binary (e.g. minus)*/
 public enum ArithmeticOperator implements BinaryOperator {
     SUB("-"), ADD("\\+"), IMUL("\\*"), DIVIDE("/"), REMAINDER("%"),
-    AND("&&"), OR("\\|\\|");
+    AND("&&"), OR("\\|\\|"), BECOMES("=");
 
     final Pattern regex;
 

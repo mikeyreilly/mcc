@@ -4,8 +4,6 @@ import com.quaxt.mcc.ArithmeticOperator;
 import com.quaxt.mcc.CmpOperator;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.tacky.Jump;
-import com.quaxt.mcc.tacky.JumpIfNotZero;
-import com.quaxt.mcc.tacky.JumpIfZero;
 import com.quaxt.mcc.tacky.LabelIr;
 
 import java.io.PrintWriter;
@@ -74,6 +72,8 @@ public record ProgramAsm(FunctionAsm functionAsm) {
                              OR -> {
                             yield op.toString().toLowerCase() + "l\t" + srcF + ", " + dstF;
                         }
+                        default ->
+                                throw new IllegalStateException("Unexpected value: " + op);
                     };
 
                 }

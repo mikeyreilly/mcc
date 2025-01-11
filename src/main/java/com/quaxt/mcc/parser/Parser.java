@@ -65,7 +65,7 @@ public class Parser {
     private static Exp parseFactor(List<Token> tokens) {
         Token token = tokens.removeFirst();
         return switch (token) {
-            case ArithmeticOperator.SUB ->
+            case SUB ->
                     new UnaryOp(UnaryOperator.COMPLEMENT, parseFactor(tokens));
             case TokenType.COMPLIMENT ->
                     new UnaryOp(UnaryOperator.NEGATE, parseFactor(tokens));
@@ -100,6 +100,7 @@ public class Parser {
                     case EQUALS, NOT_EQUALS -> 30;
                     case AND -> 10;
                     case OR -> 5;
+                    case BECOMES -> 1;
                 };
                 if (prec < minPrec)
                     break;
