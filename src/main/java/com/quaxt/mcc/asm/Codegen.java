@@ -44,8 +44,6 @@ public class Codegen {
                         Operand operand
                 ) -> new SetCC(cmpOperator,
                         dePseudo(operand, varTable, offset));
-                default ->
-                        throw new IllegalStateException("Unexpected value: " + oldInst);
             };
             instructions.set(i, newInst);
         }
@@ -171,7 +169,6 @@ public class Codegen {
                     }
 
                 }
-////
                 case BinaryIr(
                         CmpOperator op, ValIr v1, ValIr v2, VarIr dstName
                 ) -> {
@@ -179,18 +176,10 @@ public class Codegen {
                     instructionAsms.add(new Cmp(toOperand(v2), toOperand(v1)));
                     instructionAsms.add(new Mov(new Imm(0), toOperand(dstName)));
                     instructionAsms.add(new SetCC(op, toOperand(dstName)));
-
-
                 }
-////
-                case Copy(ValIr val, VarIr dst) -> {
-                    instructionAsms.add(new Mov(toOperand(val), toOperand(dst)));
-                }
-                case Jump jump -> {
-                    instructionAsms.add(jump);
-                }
+                case Copy(ValIr val, VarIr dst) -> instructionAsms.add(new Mov(toOperand(val), toOperand(dst)));
+                case Jump jump -> instructionAsms.add(jump);
                 case JumpIfNotZero(ValIr v, String label) -> {
-
                     instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
                     instructionAsms.add(new JmpCC(NOT_EQUALS, label));
                 }
@@ -198,9 +187,7 @@ public class Codegen {
                     instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
                     instructionAsms.add(new JmpCC(EQUALS, label));
                 }
-                case LabelIr labelIr -> {
-                    instructionAsms.add(labelIr);
-                }
+                case LabelIr labelIr -> instructionAsms.add(labelIr);
             }
         }
         return instructionAsms;
@@ -218,7 +205,7 @@ public class Codegen {
         return switch (in) {
             case Imm _, Reg _, Stack _ -> in;
             case Pseudo(String identifier) -> {
-                Integer varOffset = varTable.computeIfAbsent(identifier, (k) -> offset.getAndAdd(-8));
+                Integer varOffset = varTable.computeIfAbsent(identifier, _ -> offset.getAndAdd(-8));
                 yield new Stack(varOffset);
             }
         };
