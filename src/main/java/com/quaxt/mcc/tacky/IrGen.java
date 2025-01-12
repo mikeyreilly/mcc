@@ -14,21 +14,23 @@ import static com.quaxt.mcc.ArithmeticOperator.OR;
 
 public class IrGen {
     public static ProgramIr programIr(Program program) {
-        List<InstructionIr> instructions = new ArrayList<>();
-        Function function = program.function();
-        emitInstructions(function.statement(), instructions);
-        FunctionIr f = new FunctionIr(function.name(), function.returnType(), instructions);
-        return new ProgramIr(f);
+        throw new RuntimeException("fix me");
+//        List<InstructionIr> instructions = new ArrayList<>();
+//        Function function = program.function();
+//        emitInstructions(function.blockItems(), instructions);
+//        FunctionIr f = new FunctionIr(function.name(), function.returnType(), instructions);
+//        return new ProgramIr(f);
     }
 
     private static void emitInstructions(Statement statement, List<InstructionIr> instructions) {
-        switch (statement) {
-            case Return r: {
-                ValIr retVal = emitInstructions(r.exp(), instructions);
-                ReturnInstructionIr ret = new ReturnInstructionIr(retVal);
-                instructions.add(ret);
-            }
-        }
+        throw new RuntimeException("fix me2");
+//        switch (statement) {
+//            case Return r: {
+//                ValIr retVal = emitInstructions(r.exp(), instructions);
+//                ReturnInstructionIr ret = new ReturnInstructionIr(retVal);
+//                instructions.add(ret);
+//            }
+//        }
     }
 
     private static ValIr emitInstructions(Exp expr, List<InstructionIr> instructions) {
@@ -90,6 +92,8 @@ public class IrGen {
                         return dstName;
                     }
                 }
+            default:
+                throw new IllegalStateException("Unexpected value: " + expr);
         }
     }
 

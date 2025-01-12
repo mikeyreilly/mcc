@@ -2,6 +2,8 @@ package com.quaxt.mcc.parser;
 
 import com.quaxt.mcc.Token;
 
-public record Function(String name, Token returnType, Statement statement) {
+import java.util.List;
+
+public record Function(String name, Token returnType, List<BlockItem> blockItems) {
 }
 
