@@ -119,7 +119,7 @@ public class Parser {
             case TokenWithValue(
                     TokenType type, String value
             ) ->
-                    type == NUMERIC ? new Int(Integer.parseInt(value)) : new Identifier(value);
+                    type == NUMERIC ? new Int(Integer.parseInt(value)) : new Var(value);
 
             default ->
                     throw new IllegalArgumentException("Expected exp, got " + token);
