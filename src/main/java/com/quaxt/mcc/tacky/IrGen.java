@@ -20,6 +20,8 @@ public class IrGen {
         Function function = program.function();
         emitInstructions(function.blockItems(), instructions);
         FunctionIr f = new FunctionIr(function.name(), function.returnType(), instructions);
+        ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
+        instructions.add(ret);
         return new ProgramIr(f);
     }
 
