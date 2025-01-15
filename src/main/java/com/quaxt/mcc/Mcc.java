@@ -4,6 +4,7 @@ import com.quaxt.mcc.asm.Codegen;
 import com.quaxt.mcc.asm.ProgramAsm;
 import com.quaxt.mcc.parser.Parser;
 import com.quaxt.mcc.parser.Program;
+import com.quaxt.mcc.semantic.SemanticAnalysis;
 import com.quaxt.mcc.tacky.IrGen;
 import com.quaxt.mcc.tacky.ProgramIr;
 
@@ -13,11 +14,19 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class Mcc {
 
-    enum Mode {LEX, PARSE, CODEGEN, COMPILE, TACKY, ASSEMBLE}
+
+    private static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
+
+    public static String makeTemporary(String prefix) {
+        return prefix + TEMP_COUNT.getAndIncrement();
+    }
+
+    enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE}
 
     public static int preprocess(Path cFile, Path iFile) throws IOException, InterruptedException {
         ProcessBuilder pb =
@@ -40,6 +49,7 @@ public class Mcc {
             Mode newMode = switch (args.get(i)) {
                 case "--lex" -> Mode.LEX;
                 case "--parse" -> Mode.PARSE;
+                case "--validate" -> Mode.VALIDATE;
                 case "--codegen" -> Mode.CODEGEN;
                 case "--tacky" -> Mode.TACKY;
                 case "-S" -> Mode.COMPILE;
@@ -71,6 +81,10 @@ public class Mcc {
             return;
         }
 
+        program = SemanticAnalysis.resolveVars(program);
+        if (mode == Mode.VALIDATE) {
+            return;
+        }
         ProgramIr programIr = IrGen.programIr(program);
         if (mode == Mode.TACKY) {
             return;

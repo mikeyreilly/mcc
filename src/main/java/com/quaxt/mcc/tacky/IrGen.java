@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.BinaryOperator;
+import com.quaxt.mcc.Mcc;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.parser.*;
 
@@ -105,10 +106,8 @@ public class IrGen {
         return new LabelIr(prefix + labelCount.getAndIncrement());
     }
 
-    static AtomicLong tempCount = new AtomicLong(0L);
-
     private static VarIr makeTemporary() {
-        return new VarIr("tmp." + tempCount.getAndIncrement());
+        return new VarIr(Mcc.makeTemporary("tmp."));
     }
 
 }
