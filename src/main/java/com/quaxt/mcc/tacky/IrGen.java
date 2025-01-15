@@ -39,7 +39,10 @@ public class IrGen {
                 ReturnInstructionIr ret = new ReturnInstructionIr(retVal);
                 instructions.add(ret);
             }
-            case Declaration(String _, Optional<Exp> init) -> {
+            case Declaration(String left, Optional<Exp> init) -> {
+                if (init.isPresent()) {
+                    return assign(left, init.get(), instructions);
+                }
                 init.ifPresent(exp -> emitInstructions(exp, instructions));
             }
             case Exp exp -> {
@@ -112,10 +115,7 @@ private static ValIr emitInstructions(Exp expr, List<InstructionIr> instructions
                 }
             }
         case Assignment(Var left, Exp right):
-            ValIr result = emitInstructions(right, instructions);
-            VarIr v = new VarIr(left.value());
-            instructions.add(new Copy(result, v));
-            return v;
+            return assign(left.value(), right, instructions);
         case Var(String name):
             return new VarIr(name);
         default:
@@ -123,8 +123,15 @@ private static ValIr emitInstructions(Exp expr, List<InstructionIr> instructions
     }
 }
 
+    private static VarIr assign(String left, Exp right, List<InstructionIr> instructions) {
+        ValIr result = emitInstructions(right, instructions);
+        VarIr v = new VarIr(left);
+        instructions.add(new Copy(result, v));
+        return v;
+    }
 
-static AtomicLong labelCount = new AtomicLong(0L);
+
+    static AtomicLong labelCount = new AtomicLong(0L);
 
 
 private static LabelIr newLabel(String prefix) {
