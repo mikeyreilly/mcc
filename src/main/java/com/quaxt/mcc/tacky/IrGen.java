@@ -45,9 +45,7 @@ public class IrGen {
                 }
                 init.ifPresent(exp -> emitInstructions(exp, instructions));
             }
-            case Exp exp -> {
-                emitInstructions(exp, instructions);
-            }
+            case Exp exp -> emitInstructions(exp, instructions);
             default -> {
             }
         }
