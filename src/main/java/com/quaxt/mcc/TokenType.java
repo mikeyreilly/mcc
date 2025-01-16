@@ -6,9 +6,9 @@ public enum TokenType implements Token {
     IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), NUMERIC("[0-9]+\\b"), SEMICOLON(";"),
     SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
-            Pattern.DOTALL)), INT(), RETURN(), VOID(),
+            Pattern.DOTALL)), INT(), RETURN(), VOID(),ELSE(),IF(),
     DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~"),
-    NOT("!");
+    NOT("!"),QUESTION_MARK("\\?"),COLON(":");
     final Pattern regex;
 
     TokenType(String pattern) {

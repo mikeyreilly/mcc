@@ -18,7 +18,7 @@ public class Lexer {
                     ADD, IMUL, DIVIDE, REMAINDER,
                     AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
                     GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
-                    BECOMES};
+                    BECOMES, QUESTION_MARK, COLON};
 
 
     public static List<Token> lex(String src) {
@@ -48,6 +48,8 @@ public class Lexer {
                                 case "int" -> TokenType.INT;
                                 case "void" -> TokenType.VOID;
                                 case "return" -> TokenType.RETURN;
+                                case "if" -> TokenType.IF;
+                                case "else" -> TokenType.ELSE;
                                 default -> new TokenWithValue(tokenType, value);
                             };
                             tokens.add(token);
