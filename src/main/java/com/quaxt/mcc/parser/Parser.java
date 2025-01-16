@@ -22,7 +22,7 @@ public class Parser {
 
     static Statement parseStatement(List<Token> tokens) {
         Token token = tokens.getFirst();
-        if (TokenType.RETURN == token.type()) {
+        if (RETURN == token.type()) {
             tokens.removeFirst();
             Exp exp = parseExp(tokens, 0);
             expect(SEMICOLON, tokens);
@@ -30,6 +30,21 @@ public class Parser {
         } else if (token == SEMICOLON) {
             tokens.removeFirst();
             return NULL_STATEMENT;
+        } else if (token == IF) {
+            tokens.removeFirst();
+            expect(OPEN_PAREN, tokens);
+            Exp condition = parseExp(tokens, 0);
+            expect(CLOSE_PAREN, tokens);
+            Statement ifTrue = parseStatement(tokens);
+            Optional<Statement> ifFalse = switch (tokens.getFirst()) {
+                case ELSE -> {
+                    tokens.removeFirst();
+                    yield Optional.of(parseStatement(tokens));
+                }
+                default -> Optional.empty();
+            };
+            return new If(condition, ifTrue, ifFalse);
+
         }
         Exp exp = parseExp(tokens, 0);
         expect(SEMICOLON, tokens);
@@ -38,7 +53,7 @@ public class Parser {
 
     private static Declaration parseDeclaration(List<Token> tokens) {
         // parse int i; or int i=5;
-        expect(TokenType.INT, tokens);
+        expect(INT, tokens);
         String name = parseIdentifier(tokens);
         Token token = tokens.removeFirst();
         return new Declaration(name, switch (token.type()) {
@@ -60,7 +75,7 @@ public class Parser {
 
     private static Token parseType(List<Token> tokens) {
         Token type = tokens.removeFirst();
-        if (TokenType.IDENTIFIER == type.type() || TokenType.INT == type || TokenType.VOID == type) {
+        if (IDENTIFIER == type.type() || INT == type || VOID == type) {
             return type;
         }
         throw new IllegalArgumentException("Expected type, got " + type);
@@ -70,7 +85,7 @@ public class Parser {
         Token identifier = tokens.removeFirst();
         if (identifier instanceof TokenWithValue(
                 TokenType type, String value
-        ) && type == TokenType.IDENTIFIER) {
+        ) && type == IDENTIFIER) {
             return value;
         }
         throw new IllegalArgumentException("Expected identifier, got " + identifier);
@@ -79,10 +94,10 @@ public class Parser {
     private static Function parseFunction(List<Token> tokens) {
         Token returnType = parseType(tokens);
         String name = parseIdentifier(tokens);
-        expect(TokenType.OPEN_PAREN, tokens);
-        expect(TokenType.VOID, tokens);
-        expect(TokenType.CLOSE_PAREN, tokens);
-        expect(TokenType.OPEN_BRACE, tokens);
+        expect(OPEN_PAREN, tokens);
+        expect(VOID, tokens);
+        expect(CLOSE_PAREN, tokens);
+        expect(OPEN_BRACE, tokens);
         List<BlockItem> blockItems = new ArrayList<>();
         while (tokens.getFirst() != CLOSE_BRACE) {
             blockItems.add(parseBlockItem(tokens));
@@ -95,7 +110,7 @@ public class Parser {
     }
 
     private static BlockItem parseBlockItem(List<Token> tokens) {
-        if (tokens.getFirst() == TokenType.INT) {
+        if (tokens.getFirst() == INT) {
             return parseDeclaration(tokens);
         }
         return parseStatement(tokens);
@@ -107,13 +122,12 @@ public class Parser {
         return switch (token) {
             case SUB ->
                     new UnaryOp(UnaryOperator.COMPLEMENT, parseFactor(tokens));
-            case TokenType.COMPLIMENT ->
+            case COMPLIMENT ->
                     new UnaryOp(UnaryOperator.NEGATE, parseFactor(tokens));
-            case TokenType.NOT ->
-                    new UnaryOp(UnaryOperator.NOT, parseFactor(tokens));
-            case TokenType.OPEN_PAREN -> {
+            case NOT -> new UnaryOp(UnaryOperator.NOT, parseFactor(tokens));
+            case OPEN_PAREN -> {
                 Exp r = parseExp(tokens, 0);
-                expect(TokenType.CLOSE_PAREN, tokens);
+                expect(CLOSE_PAREN, tokens);
                 yield r;
             }
             case TokenWithValue(
@@ -132,31 +146,43 @@ public class Parser {
         Exp left = parseFactor(tokens);
 
         while (!tokens.isEmpty()) {
-            if (tokens.getFirst() instanceof BinaryOperator binop) {
-                int precedence = switch (binop) {
-                    case IMUL, DIVIDE, REMAINDER -> 50;
-                    case SUB, ADD -> 45;
-                    case LESS_THAN, LESS_THAN_OR_EQUAL, GREATER_THAN,
-                         GREATER_THAN_OR_EQUAL -> 35;
-                    case EQUALS, NOT_EQUALS -> 30;
-                    case AND -> 10;
-                    case OR -> 5;
-                    case BECOMES -> 1;
-                };
+            Token token = tokens.getFirst();
+            if (tokens.getFirst() instanceof BinaryOperator || token == QUESTION_MARK) {
+                int precedence = getPrecedence(token);
                 if (precedence < minPrecedence) break;
                 tokens.removeFirst();
-                if (binop == BECOMES) {
+                if (token == BECOMES) {
                     Exp right = parseExp(tokens, precedence);
                     left = new Assignment(left, right);
-
-                } else {
+                } else if (token instanceof BinaryOperator binop) {
                     Exp right = parseExp(tokens, precedence + 1);
                     left = new BinaryOp(binop, left, right);
+                } else { // QUESTION_MARK
+                    Exp middle = parseExp(tokens, 0);
+                    expect(COLON, tokens);
+                    Exp right = parseExp(tokens, precedence);
+                    left = new Conditional(left, middle, right);
                 }
             } else {
                 break;
             }
         }
         return left;
+    }
+
+    private static int getPrecedence(Token t) {
+        return switch (t) {
+            case IMUL, DIVIDE, REMAINDER -> 50;
+            case SUB, ADD -> 45;
+            case LESS_THAN, LESS_THAN_OR_EQUAL, GREATER_THAN,
+                 GREATER_THAN_OR_EQUAL -> 35;
+            case EQUALS, NOT_EQUALS -> 30;
+            case AND -> 10;
+            case OR -> 5;
+            case QUESTION_MARK -> 3;
+            case BECOMES -> 1;
+            default ->
+                    throw new IllegalStateException("No precedence for: " + t);
+        };
     }
 }

@@ -59,9 +59,12 @@ public class SemanticAnalysis {
             case BinaryOp(BinaryOperator op, Exp left, Exp right) ->
                     new BinaryOp(op, resolveExp(left, variableMap), resolveExp(right, variableMap));
             case Constant constant -> constant;
-            case UnaryOp(UnaryOperator op, Exp arg) -> new UnaryOp(op, resolveExp(arg, variableMap));
+            case UnaryOp(UnaryOperator op, Exp arg) ->
+                    new UnaryOp(op, resolveExp(arg, variableMap));
             case Var(String name) ->
                     variableMap.get(name) instanceof String s ? new Var(s) : fail("Undeclared variable");
+            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse) ->
+                    new Conditional(resolveExp(condition, variableMap), resolveExp(ifTrue, variableMap), resolveExp(ifFalse, variableMap));
         };
     }
 
