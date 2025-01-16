@@ -27,99 +27,94 @@ public class IrGen {
 
     private static void emitInstructions(List<BlockItem> blockItems, List<InstructionIr> instructions) {
         for (BlockItem i : blockItems) {
-            emitInstructions(i, instructions);
-        }
-    }
-
-
-    private static ValIr emitInstructions(BlockItem statement, List<InstructionIr> instructions) {
-        switch (statement) {
-            case Return r -> {
-                ValIr retVal = emitInstructions(r.exp(), instructions);
-                ReturnInstructionIr ret = new ReturnInstructionIr(retVal);
-                instructions.add(ret);
-            }
-            case Declaration(String left, Optional<Exp> init) -> {
-                if (init.isPresent()) {
-                    return assign(left, init.get(), instructions);
+            switch (i) {
+                case Return r -> {
+                    ValIr retVal = emitInstructions(r.exp(), instructions);
+                    ReturnInstructionIr ret = new ReturnInstructionIr(retVal);
+                    instructions.add(ret);
                 }
-                init.ifPresent(exp -> emitInstructions(exp, instructions));
-            }
-            case Exp exp -> emitInstructions(exp, instructions);
-            default -> {
-            }
-        }
-        return null;
-    }
-
-
-private static ValIr emitInstructions(Exp expr, List<InstructionIr> instructions) {
-    switch (expr) {
-        case Int(int i): {
-            return new IntIr(i);
-        }
-        case UnaryOp(UnaryOperator op, Exp exp): {
-            ValIr src = emitInstructions(exp, instructions);
-            VarIr dst = makeTemporary();
-            instructions.add(new UnaryIr(op, src, dst));
-            return dst;
-        }
-        case BinaryOp(BinaryOperator op, Exp left, Exp right):
-            switch (op) {
-                case AND -> {
-                    VarIr result = makeTemporary();
-
-                    LabelIr falseLabel = newLabel("false");
-                    LabelIr endLabel = newLabel("end");
-                    ValIr v1 = emitInstructions(left, instructions);
-                    instructions.add(new JumpIfZero(v1, falseLabel.label()));
-
-                    ValIr v2 = emitInstructions(right, instructions);
-                    instructions.add(new JumpIfZero(v2, falseLabel.label()));
-                    instructions.add(new Copy(new IntIr(1), result));
-                    instructions.add(new Jump(endLabel.label()));
-
-                    instructions.add(falseLabel);
-                    instructions.add(new Copy(new IntIr(0), result));
-                    instructions.add(endLabel);
-
-                    return result;
+                case Declaration(String left, Optional<Exp> init) -> {
+                    if (init.isPresent()) {
+                        assign(left, init.get(), instructions);
+                        continue;
+                    }
+                    init.ifPresent(exp -> emitInstructions(exp, instructions));
                 }
-                case OR -> {
-                    VarIr result = makeTemporary();
-
-                    LabelIr trueLabel = newLabel("true");
-                    LabelIr endLabel = newLabel("end");
-                    ValIr v1 = emitInstructions(left, instructions);
-                    instructions.add(new JumpIfNotZero(v1, trueLabel.label()));
-
-                    ValIr v2 = emitInstructions(right, instructions);
-                    instructions.add(new JumpIfNotZero(v2, trueLabel.label()));
-                    instructions.add(new Copy(new IntIr(0), result));
-                    instructions.add(new Jump(endLabel.label()));
-
-                    instructions.add(trueLabel);
-                    instructions.add(new Copy(new IntIr(1), result));
-                    instructions.add(endLabel);
-
-                    return result;
-                }
+                case Exp exp -> emitInstructions(exp, instructions);
                 default -> {
-                    ValIr v1 = emitInstructions(left, instructions);
-                    ValIr v2 = emitInstructions(right, instructions);
-                    VarIr dstName = makeTemporary();
-                    instructions.add(new BinaryIr(op, v1, v2, dstName));
-                    return dstName;
                 }
             }
-        case Assignment(Var left, Exp right):
-            return assign(left.value(), right, instructions);
-        case Var(String name):
-            return new VarIr(name);
-        default:
-            throw new IllegalStateException("Unexpected value: " + expr);
+        }
     }
-}
+
+
+    private static ValIr emitInstructions(Exp expr, List<InstructionIr> instructions) {
+        switch (expr) {
+            case Int(int i): {
+                return new IntIr(i);
+            }
+            case UnaryOp(UnaryOperator op, Exp exp): {
+                ValIr src = emitInstructions(exp, instructions);
+                VarIr dst = makeTemporary();
+                instructions.add(new UnaryIr(op, src, dst));
+                return dst;
+            }
+            case BinaryOp(BinaryOperator op, Exp left, Exp right):
+                switch (op) {
+                    case AND -> {
+                        VarIr result = makeTemporary();
+
+                        LabelIr falseLabel = newLabel("false");
+                        LabelIr endLabel = newLabel("end");
+                        ValIr v1 = emitInstructions(left, instructions);
+                        instructions.add(new JumpIfZero(v1, falseLabel.label()));
+
+                        ValIr v2 = emitInstructions(right, instructions);
+                        instructions.add(new JumpIfZero(v2, falseLabel.label()));
+                        instructions.add(new Copy(new IntIr(1), result));
+                        instructions.add(new Jump(endLabel.label()));
+
+                        instructions.add(falseLabel);
+                        instructions.add(new Copy(new IntIr(0), result));
+                        instructions.add(endLabel);
+
+                        return result;
+                    }
+                    case OR -> {
+                        VarIr result = makeTemporary();
+
+                        LabelIr trueLabel = newLabel("true");
+                        LabelIr endLabel = newLabel("end");
+                        ValIr v1 = emitInstructions(left, instructions);
+                        instructions.add(new JumpIfNotZero(v1, trueLabel.label()));
+
+                        ValIr v2 = emitInstructions(right, instructions);
+                        instructions.add(new JumpIfNotZero(v2, trueLabel.label()));
+                        instructions.add(new Copy(new IntIr(0), result));
+                        instructions.add(new Jump(endLabel.label()));
+
+                        instructions.add(trueLabel);
+                        instructions.add(new Copy(new IntIr(1), result));
+                        instructions.add(endLabel);
+
+                        return result;
+                    }
+                    default -> {
+                        ValIr v1 = emitInstructions(left, instructions);
+                        ValIr v2 = emitInstructions(right, instructions);
+                        VarIr dstName = makeTemporary();
+                        instructions.add(new BinaryIr(op, v1, v2, dstName));
+                        return dstName;
+                    }
+                }
+            case Assignment(Var left, Exp right):
+                return assign(left.value(), right, instructions);
+            case Var(String name):
+                return new VarIr(name);
+            default:
+                throw new IllegalStateException("Unexpected value: " + expr);
+        }
+    }
 
     private static VarIr assign(String left, Exp right, List<InstructionIr> instructions) {
         ValIr result = emitInstructions(right, instructions);
@@ -132,12 +127,12 @@ private static ValIr emitInstructions(Exp expr, List<InstructionIr> instructions
     static AtomicLong labelCount = new AtomicLong(0L);
 
 
-private static LabelIr newLabel(String prefix) {
-    return new LabelIr(prefix + labelCount.getAndIncrement());
-}
+    private static LabelIr newLabel(String prefix) {
+        return new LabelIr(prefix + labelCount.getAndIncrement());
+    }
 
-private static VarIr makeTemporary() {
-    return new VarIr(Mcc.makeTemporary("tmp."));
-}
+    private static VarIr makeTemporary() {
+        return new VarIr(Mcc.makeTemporary("tmp."));
+    }
 
 }
