@@ -33,13 +33,19 @@ public class SemanticAnalysis {
         };
     }
 
-    private static BlockItem resolveStatement(Statement blockItem, Map<String, String> variableMap) {
+    private static Statement resolveStatement(Statement blockItem, Map<String, String> variableMap) {
         return switch (blockItem) {
             case Exp exp -> resolveExp(exp, variableMap);
             case Return(Exp exp) -> new Return(resolveExp(exp, variableMap));
+            case If(
+                    Exp condition, Statement ifTrue, Optional<Statement> ifFalse
+            ) -> new If(resolveExp(condition, variableMap), resolveStatement(ifTrue, variableMap),
+                    ifFalse.map(s-> resolveStatement(s, variableMap)));
+
             default -> blockItem;
         };
     }
+
 
     private static BlockItem resolveDeclaration(Declaration d, Map<String, String> variableMap) {
         if (variableMap.containsKey(d.name())) {
