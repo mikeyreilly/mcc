@@ -185,7 +185,7 @@ public class IrGen {
 
 
     private static LabelIr newLabel(String prefix) {
-        return new LabelIr(prefix + labelCount.getAndIncrement());
+        return new LabelIr(".L" + prefix + labelCount.getAndIncrement());
     }
 
     private static VarIr makeTemporary(String prefix) {
