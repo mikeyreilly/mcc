@@ -46,7 +46,6 @@ public class SemanticAnalysis {
         };
     }
 
-
     private static BlockItem resolveDeclaration(Declaration d, Map<String, String> variableMap) {
         if (variableMap.containsKey(d.name())) {
             fail("Duplicate variable declaration");
@@ -55,7 +54,6 @@ public class SemanticAnalysis {
         variableMap.put(d.name(), uniqueName);
         Optional<Exp> init = d.init();
         return init.map(exp -> new Declaration(uniqueName, Optional.of(resolveExp(exp, variableMap)))).orElseGet(() -> new Declaration(uniqueName, init));
-
     }
 
     private static Exp resolveExp(Exp exp, Map<String, String> variableMap) {
