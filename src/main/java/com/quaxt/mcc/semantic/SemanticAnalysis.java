@@ -18,10 +18,10 @@ public class SemanticAnalysis {
 
     private static Function resolveVars(Function function, Map<String, String> variableMap) {
         return new Function(function.name(), function.returnType(),
-                function.blockItems().stream()
+             new Block(function.block().blockItems().stream()
                         .map((BlockItem blockItem) ->
                                 resolveVarsBlockItem(blockItem, variableMap))
-                        .collect(Collectors.toList()));
+                        .collect(Collectors.toList())));
     }
 
     private static BlockItem resolveVarsBlockItem(BlockItem blockItem, Map<String, String> variableMap) {

@@ -18,7 +18,7 @@ public class IrGen {
     public static ProgramIr programIr(Program program) {
         List<InstructionIr> instructions = new ArrayList<>();
         Function function = program.function();
-        compileBlockItems(function.blockItems(), instructions);
+        compileBlockItems(function.block().blockItems(), instructions);
         FunctionIr f = new FunctionIr(function.name(), function.returnType(), instructions);
         ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
         instructions.add(ret);
@@ -86,6 +86,8 @@ public class IrGen {
             }
             case NullStatement _ -> {
             }
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + i);
         }
     }
 

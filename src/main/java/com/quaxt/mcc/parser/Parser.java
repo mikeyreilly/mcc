@@ -45,6 +45,8 @@ public class Parser {
             };
             return new If(condition, ifTrue, ifFalse);
 
+        } else if (token == OPEN_BRACE){
+            return parseBlock(tokens);
         }
         Exp exp = parseExp(tokens, 0);
         expect(SEMICOLON, tokens);
@@ -97,16 +99,21 @@ public class Parser {
         expect(OPEN_PAREN, tokens);
         expect(VOID, tokens);
         expect(CLOSE_PAREN, tokens);
+        Block block = parseBlock(tokens);
+
+        return new Function(name, returnType, block);
+    }
+
+    private static Block parseBlock(List<Token> tokens) {
         expect(OPEN_BRACE, tokens);
+
         List<BlockItem> blockItems = new ArrayList<>();
         while (tokens.getFirst() != CLOSE_BRACE) {
             blockItems.add(parseBlockItem(tokens));
         }
         tokens.removeFirst();
-        //    Statement blockItems = parseStatement(tokens);
-        // expect(CLOSE_BRACE, tokens);
-
-        return new Function(name, returnType, blockItems);
+        Block block =new Block(blockItems);
+        return block;
     }
 
     private static BlockItem parseBlockItem(List<Token> tokens) {

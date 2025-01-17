@@ -4,6 +4,6 @@ import com.quaxt.mcc.Token;
 
 import java.util.List;
 
-public record Function(String name, Token returnType, List<BlockItem> blockItems) {
+public record Function(String name, Token returnType, Block block) {
 }
 
