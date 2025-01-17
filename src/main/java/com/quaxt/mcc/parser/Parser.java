@@ -112,8 +112,7 @@ public class Parser {
             blockItems.add(parseBlockItem(tokens));
         }
         tokens.removeFirst();
-        Block block =new Block(blockItems);
-        return block;
+        return new Block(blockItems);
     }
 
     private static BlockItem parseBlockItem(List<Token> tokens) {
