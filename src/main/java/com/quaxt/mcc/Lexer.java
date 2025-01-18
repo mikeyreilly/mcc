@@ -50,6 +50,11 @@ public class Lexer {
                                 case "return" -> TokenType.RETURN;
                                 case "if" -> TokenType.IF;
                                 case "else" -> TokenType.ELSE;
+                                case "break" -> TokenType.BREAK;
+                                case "continue" -> TokenType.CONTINUE;
+                                case "while" -> TokenType.WHILE;
+                                case "do" -> TokenType.DO;
+                                case "for" -> TokenType.FOR;
                                 default -> new TokenWithValue(tokenType, value);
                             };
                             tokens.add(token);

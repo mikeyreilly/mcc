@@ -7,6 +7,7 @@ public enum TokenType implements Token {
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), NUMERIC("[0-9]+\\b"), SEMICOLON(";"),
     SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
             Pattern.DOTALL)), INT(), RETURN(), VOID(),ELSE(),IF(),
+    BREAK(), CONTINUE(), WHILE(), DO(), FOR(),
     DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~"),
     NOT("!"),QUESTION_MARK("\\?"),COLON(":");
     final Pattern regex;

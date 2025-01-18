@@ -59,6 +59,7 @@ public class SemanticAnalysis {
             }
             case Block block -> resolveBlock(block, variableMap);
             case NullStatement nullStatement -> nullStatement;
+            default -> throw new RuntimeException("todo:" + blockItem);
         };
     }
 

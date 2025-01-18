@@ -10,6 +10,8 @@ import java.util.Optional;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.TokenType.*;
+import static com.quaxt.mcc.parser.Break.BREAK;
+import static com.quaxt.mcc.parser.Continue.CONTINUE;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
 
 public class Parser {
@@ -45,12 +47,37 @@ public class Parser {
             };
             return new If(condition, ifTrue, ifFalse);
 
-        } else if (token == OPEN_BRACE){
+        } else if (token == OPEN_BRACE) {
             return parseBlock(tokens);
+        } else if (token == WHILE) {
+            return parseWhile(tokens);
+        } else if (token == DO) {
+            return parseDoWhile(tokens);
+        } else if (token == FOR) {
+            return parseFor(tokens);
+        } else if (token == TokenType.BREAK) {
+            tokens.removeFirst();
+            expect(SEMICOLON, tokens);
+            return BREAK;
+        }else if (token == TokenType.CONTINUE) {
+            tokens.removeFirst();
+            expect(SEMICOLON, tokens);
+            return CONTINUE;
         }
         Exp exp = parseExp(tokens, 0);
         expect(SEMICOLON, tokens);
         return exp;
+    }
+
+    private static DoWhile parseDoWhile(List<Token> tokens) {
+        expect(DO, tokens);
+        Statement body = parseStatement(tokens);
+        expect(WHILE, tokens);
+        expect(OPEN_PAREN, tokens);
+        Exp condition = parseExp(tokens, 0);
+        expect(CLOSE_PAREN, tokens);
+        expect(SEMICOLON, tokens);
+        return new DoWhile(body, condition);
     }
 
     private static Declaration parseDeclaration(List<Token> tokens) {
@@ -114,6 +141,16 @@ public class Parser {
         tokens.removeFirst();
         return new Block(blockItems);
     }
+
+    private static While parseWhile(List<Token> tokens) {
+        expect(WHILE, tokens);
+        expect(OPEN_PAREN, tokens);
+        Exp condition = parseExp(tokens, 0);
+        expect(CLOSE_PAREN, tokens);
+        Statement body = parseStatement(tokens);
+        return new While(condition, body);
+    }
+
 
     private static BlockItem parseBlockItem(List<Token> tokens) {
         if (tokens.getFirst() == INT) {
@@ -191,4 +228,27 @@ public class Parser {
                     throw new IllegalStateException("No precedence for: " + t);
         };
     }
+
+    private static ForInit parseForInit(List<Token> tokens) {
+        Token t = tokens.getFirst();
+        if (t == INT) return parseDeclaration(tokens);
+        Exp r = t == SEMICOLON ? null : parseExp(tokens, 0);
+        expect(SEMICOLON, tokens);
+        return r;
+    }
+
+    private static For parseFor(List<Token> tokens) {
+        expect(FOR, tokens);
+        expect(OPEN_PAREN, tokens);
+        ForInit init = parseForInit(tokens);
+        Token t = tokens.getFirst();
+        Exp condition = t == SEMICOLON ? null : parseExp(tokens, 0);
+        expect(SEMICOLON, tokens);
+        t = tokens.getFirst();
+        Exp post = t == CLOSE_PAREN ? null : parseExp(tokens, 0);
+        expect(CLOSE_PAREN, tokens);
+        Statement body = parseStatement(tokens);
+        return new For(init, post, condition, body);
+    }
+
 }
