@@ -10,8 +10,6 @@ import java.util.Optional;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.TokenType.*;
-import static com.quaxt.mcc.parser.Break.BREAK;
-import static com.quaxt.mcc.parser.Continue.CONTINUE;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
 
 public class Parser {
@@ -58,11 +56,11 @@ public class Parser {
         } else if (token == TokenType.BREAK) {
             tokens.removeFirst();
             expect(SEMICOLON, tokens);
-            return BREAK;
+            return new Break();
         }else if (token == TokenType.CONTINUE) {
             tokens.removeFirst();
             expect(SEMICOLON, tokens);
-            return CONTINUE;
+            return new Continue();
         }
         Exp exp = parseExp(tokens, 0);
         expect(SEMICOLON, tokens);
@@ -77,7 +75,7 @@ public class Parser {
         Exp condition = parseExp(tokens, 0);
         expect(CLOSE_PAREN, tokens);
         expect(SEMICOLON, tokens);
-        return new DoWhile(body, condition);
+        return new DoWhile(body, condition, null);
     }
 
     private static Declaration parseDeclaration(List<Token> tokens) {
@@ -134,7 +132,7 @@ public class Parser {
     private static Block parseBlock(List<Token> tokens) {
         expect(OPEN_BRACE, tokens);
 
-        List<BlockItem> blockItems = new ArrayList<>();
+        ArrayList<BlockItem> blockItems = new ArrayList<>();
         while (tokens.getFirst() != CLOSE_BRACE) {
             blockItems.add(parseBlockItem(tokens));
         }
@@ -148,7 +146,7 @@ public class Parser {
         Exp condition = parseExp(tokens, 0);
         expect(CLOSE_PAREN, tokens);
         Statement body = parseStatement(tokens);
-        return new While(condition, body);
+        return new While(condition, body, null);
     }
 
 
@@ -248,7 +246,7 @@ public class Parser {
         Exp post = t == CLOSE_PAREN ? null : parseExp(tokens, 0);
         expect(CLOSE_PAREN, tokens);
         Statement body = parseStatement(tokens);
-        return new For(init, post, condition, body);
+        return new For(init, post, condition, body, null);
     }
 
 }

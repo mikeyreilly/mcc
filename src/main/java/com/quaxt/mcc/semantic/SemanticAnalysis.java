@@ -5,12 +5,100 @@ import com.quaxt.mcc.Mcc;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.parser.*;
 
-import java.util.HashMap;
 import java.util.*;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 public class SemanticAnalysis {
+
+
+    public static Program loopLabelProgram(Program program) {
+        return new Program(loopLabelFunction(program.function()));
+    }
+
+    private static Function loopLabelFunction(Function function) {
+        return new Function(function.name(),
+                function.returnType(),
+                loopLabelStatement(function.block(), null));
+
+    }
+
+    private static <T extends Statement> T loopLabelStatement(T statement, String currentLabel) {
+        return switch (statement) {
+            case null -> null;
+            case Block block -> {//update the blockItems in-place
+                ArrayList<BlockItem> blockItems = block.blockItems();
+                for (int i = 0; i < blockItems.size(); i++) {
+                    BlockItem b = switch (blockItems.get(i)) {
+                        case Declaration declaration ->
+                                loopLabelDeclaration(declaration, currentLabel);
+                        case Statement innerStatement ->
+                                loopLabelStatement(innerStatement, currentLabel);
+                    };
+                    blockItems.set(i, b);
+                }
+                yield (T) block;
+            }
+            case Break aBreak -> {
+                if (currentLabel == null) {
+                    fail("break statement outside of loop");
+                }
+                aBreak.label = currentLabel;
+                yield statement;
+            }
+            case Compound compound ->
+                    throw new RuntimeException("todo: get rid of compound");
+            case Continue aContinue -> {
+                if (currentLabel == null) {
+                    fail("continue statement outside of loop");
+                }
+                aContinue.label = currentLabel;
+                yield statement;
+            }
+            case DoWhile(Statement body, Exp condition, String _) -> {
+                String newLabel = makeLabel();
+                yield (T) new DoWhile(loopLabelStatement(body, newLabel), condition, newLabel);
+
+            }
+            case Exp exp -> statement;
+            case For(
+                    ForInit init, Exp condition, Exp post, Statement body,
+                    String _
+            ) -> {
+                String newLabel = makeLabel();
+                ForInit labeledForInit = switch (init) {
+                    case null -> null;
+                    case Declaration declaration ->
+                            loopLabelDeclaration(declaration, newLabel);
+                    case Exp exp -> loopLabelStatement(exp, newLabel);
+                };
+                Exp labeledCondition = loopLabelStatement(condition, newLabel);
+                Exp labelledPost = loopLabelStatement(post, newLabel);
+                Statement labelledBody = loopLabelStatement(body, newLabel);
+                yield (T) new For(labeledForInit, labeledCondition, labelledPost, labelledBody, newLabel);
+
+
+            }
+            case If(Exp condition, Statement ifTrue, Optional<Statement> ifFalse) ->
+                    (T) new If(condition, loopLabelStatement(ifTrue, currentLabel), ifFalse.map(s->loopLabelStatement(s, currentLabel)));
+            case NullStatement nullStatement -> statement;
+            case Return(Exp exp) ->
+                    (T) new Return(loopLabelStatement(exp, currentLabel));
+            case While(Exp condition, Statement body, String _) -> {
+                String newLabel = makeLabel();
+                yield (T) new While(condition, loopLabelStatement(body, newLabel), newLabel);
+
+            }
+        };
+    }
+
+    private static String makeLabel() {
+        return Mcc.makeTemporary("label");
+    }
+
+    private static Declaration loopLabelDeclaration(Declaration declaration, String currentLabel) {
+        Optional<Exp> init = declaration.init();
+        return init.isPresent() ? new Declaration(declaration.name(), Optional.of(loopLabelStatement(init.get(), currentLabel))) : declaration;
+    }
+
 
     record Entry(String name, boolean fromCurrentBlock) {
     }
@@ -22,7 +110,7 @@ public class SemanticAnalysis {
 
     private static Block resolveBlock(Block block, Map<String, Entry> variableMap) {
         Map<String, Entry> newVariableMap = copyVariableMap(variableMap);
-        List<BlockItem> blockItems = new ArrayList<>();
+        ArrayList<BlockItem> blockItems = new ArrayList<>();
         for (BlockItem i : block.blockItems()) {
             blockItems.add(resolveVarsBlockItem(i, newVariableMap));
         }
@@ -53,13 +141,37 @@ public class SemanticAnalysis {
                     new If(resolveExp(condition, variableMap), resolveStatement(ifTrue, variableMap),
                             ifFalse.map(s -> resolveStatement(s, variableMap)));
 
-            case Compound compound -> {
-
-                yield new Compound(resolveBlock(compound.block(), variableMap));
-            }
+            case Compound compound ->
+                    new Compound(resolveBlock(compound.block(), variableMap));
             case Block block -> resolveBlock(block, variableMap);
             case NullStatement nullStatement -> nullStatement;
-            default -> throw new RuntimeException("todo:" + blockItem);
+            // default -> throw new RuntimeException("todo:" + blockItem);
+            case Break _, Continue _ -> blockItem;
+            case DoWhile(Statement body, Exp condition, String label) ->
+                    new DoWhile(resolveStatement(body, variableMap),
+                            resolveExp(condition, variableMap), label);
+            case For(
+                    ForInit init, Exp condition, Exp post, Statement body,
+                    String label
+            ) -> {
+                Map<String, Entry> newVariableMap = copyVariableMap(variableMap);
+                yield new For(resolveForInit(init, newVariableMap),
+                        resolveExp(condition, newVariableMap), resolveExp(post, newVariableMap),
+                        resolveStatement(body, newVariableMap), label);
+            }
+            case While(Exp condition, Statement body, String label) ->
+                    new While(resolveExp(condition, variableMap),
+                            resolveStatement(body, variableMap), label);
+        };
+
+    }
+
+    private static ForInit resolveForInit(ForInit init, Map<String, Entry> variableMap) {
+        return switch (init) {
+            case Declaration declaration ->
+                    resolveDeclaration(declaration, variableMap);
+            case Exp exp -> resolveExp(exp, variableMap);
+            case null -> null;
         };
     }
 
@@ -73,7 +185,7 @@ public class SemanticAnalysis {
         return copy;
     }
 
-    private static BlockItem resolveDeclaration(Declaration d, Map<String, Entry> variableMap) {
+    private static Declaration resolveDeclaration(Declaration d, Map<String, Entry> variableMap) {
         if (variableMap.get(d.name()) instanceof Entry e && e.fromCurrentBlock()) {
             fail("Duplicate variable declaration");
         }
@@ -85,6 +197,7 @@ public class SemanticAnalysis {
 
     private static Exp resolveExp(Exp exp, Map<String, Entry> variableMap) {
         return switch (exp) {
+            case null -> null;
             case Assignment(Exp left, Exp right) ->
                     left instanceof Var v ? new Assignment(resolveExp(v, variableMap), resolveExp(right, variableMap)) : fail("Invalid lvalue");
             case BinaryOp(BinaryOperator op, Exp left, Exp right) ->

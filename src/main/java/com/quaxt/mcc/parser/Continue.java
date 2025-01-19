@@ -1,5 +1,5 @@
 package com.quaxt.mcc.parser;
 
-public enum Continue implements Statement {
-    CONTINUE;
+public final class Continue implements Statement {
+    public String label;
 }

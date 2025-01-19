@@ -1,5 +1,5 @@
 package com.quaxt.mcc.parser;
 
-public enum Break implements Statement {
-    BREAK;
+public final class Break implements Statement {
+    public String label;
 }

@@ -6,4 +6,3 @@ import java.util.List;
 
 public record Function(String name, Token returnType, Block block) {
 }
-
