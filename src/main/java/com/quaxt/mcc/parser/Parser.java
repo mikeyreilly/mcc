@@ -5,7 +5,6 @@ import com.quaxt.mcc.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
@@ -36,12 +35,12 @@ public class Parser {
             Exp condition = parseExp(tokens, 0);
             expect(CLOSE_PAREN, tokens);
             Statement ifTrue = parseStatement(tokens);
-            Optional<Statement> ifFalse = switch (tokens.getFirst()) {
+            Statement ifFalse = switch (tokens.getFirst()) {
                 case ELSE -> {
                     tokens.removeFirst();
-                    yield Optional.of(parseStatement(tokens));
+                    yield parseStatement(tokens);
                 }
-                default -> Optional.empty();
+                default -> null;
             };
             return new If(condition, ifTrue, ifFalse);
 
@@ -57,7 +56,7 @@ public class Parser {
             tokens.removeFirst();
             expect(SEMICOLON, tokens);
             return new Break();
-        }else if (token == TokenType.CONTINUE) {
+        } else if (token == TokenType.CONTINUE) {
             tokens.removeFirst();
             expect(SEMICOLON, tokens);
             return new Continue();
@@ -85,11 +84,11 @@ public class Parser {
         Token token = tokens.removeFirst();
         return new Declaration(name, switch (token.type()) {
             case BECOMES -> {
-                Optional<Exp> init = Optional.of(parseExp(tokens, 0));
+                Exp init = parseExp(tokens, 0);
                 expect(SEMICOLON, tokens);
                 yield init;
             }
-            case SEMICOLON -> Optional.empty();
+            case SEMICOLON -> null;
             default ->
                     throw new IllegalArgumentException("Expected ; or =, got " + token);
         });

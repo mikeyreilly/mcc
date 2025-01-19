@@ -7,7 +7,6 @@ import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.AND;
@@ -30,12 +29,12 @@ public class IrGen {
     }
 
     private static void compileDeclaration(Declaration d, List<InstructionIr> instructions) {
-        if (d instanceof Declaration(String left, Optional<Exp> init)) {
-            if (init.isPresent()) {
-                assign(left, init.get(), instructions);
+        if (d instanceof Declaration(String left, Exp init)) {
+            if (init != null) {
+                assign(left, init, instructions);
                 return;
             }
-            init.ifPresent(exp -> compileExp(exp, instructions));
+            compileExp(init, instructions);
         }
     }
 
@@ -83,10 +82,10 @@ public class IrGen {
             case Exp exp -> compileExp(exp, instructions);
 
             case If(
-                    Exp condition, Statement ifTrue, Optional<Statement> ifFalse
+                    Exp condition, Statement ifTrue, Statement ifFalse
             ) -> {
-                if (ifFalse.isPresent()) {
-                    compileIfElse(condition, ifTrue, ifFalse.get(), instructions);
+                if (ifFalse != null) {
+                    compileIfElse(condition, ifTrue, ifFalse, instructions);
                 } else {
                     compileIf(condition, ifTrue, instructions);
 

@@ -5,7 +5,9 @@ import com.quaxt.mcc.Mcc;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.parser.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class SemanticAnalysis {
 
@@ -74,8 +76,9 @@ public class SemanticAnalysis {
 
 
             }
-            case If(Exp condition, Statement ifTrue, Optional<Statement> ifFalse) ->
-                    (T) new If(condition, loopLabelStatement(ifTrue, currentLabel), ifFalse.map(s->loopLabelStatement(s, currentLabel)));
+            case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
+                    (T) new If(condition, loopLabelStatement(ifTrue, currentLabel),
+                            loopLabelStatement(ifFalse, currentLabel));
             case NullStatement nullStatement -> statement;
             case Return(Exp exp) ->
                     (T) new Return(loopLabelStatement(exp, currentLabel));
@@ -88,8 +91,8 @@ public class SemanticAnalysis {
     }
 
     private static Declaration loopLabelDeclaration(Declaration declaration, String currentLabel) {
-        Optional<Exp> init = declaration.init();
-        return init.map(exp -> new Declaration(declaration.name(), Optional.of(loopLabelStatement(exp, currentLabel)))).orElse(declaration);
+        Exp init = declaration.init();
+        return new Declaration(declaration.name(), loopLabelStatement(init, currentLabel));
     }
 
 
@@ -126,19 +129,19 @@ public class SemanticAnalysis {
 
     private static Statement resolveStatement(Statement blockItem, Map<String, Entry> variableMap) {
         return switch (blockItem) {
+            case null -> null;
             case Exp exp -> resolveExp(exp, variableMap);
             case Return(Exp exp) -> new Return(resolveExp(exp, variableMap));
             case If(
-                    Exp condition, Statement ifTrue, Optional<Statement> ifFalse
+                    Exp condition, Statement ifTrue, Statement ifFalse
             ) ->
                     new If(resolveExp(condition, variableMap), resolveStatement(ifTrue, variableMap),
-                            ifFalse.map(s -> resolveStatement(s, variableMap)));
+                             resolveStatement(ifFalse, variableMap));
 
             case Compound compound ->
                     new Compound(resolveBlock(compound.block(), variableMap));
             case Block block -> resolveBlock(block, variableMap);
             case NullStatement nullStatement -> nullStatement;
-            // default -> throw new RuntimeException("todo:" + blockItem);
             case Break _, Continue _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
                     new DoWhile(resolveStatement(body, variableMap),
@@ -184,8 +187,8 @@ public class SemanticAnalysis {
         }
         String uniqueName = Mcc.makeTemporary(d.name() + ".");
         variableMap.put(d.name(), new Entry(uniqueName, true));
-        Optional<Exp> init = d.init();
-        return init.map(exp -> new Declaration(uniqueName, Optional.of(resolveExp(exp, variableMap)))).orElseGet(() -> new Declaration(uniqueName, init));
+        Exp init = d.init();
+        return new Declaration(uniqueName, resolveExp(init, variableMap));
     }
 
     private static Exp resolveExp(Exp exp, Map<String, Entry> variableMap) {
