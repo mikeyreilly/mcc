@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 public class Mcc {
 
 
-    private static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
+    public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
 
     public static String makeTemporary(String prefix) {
         return prefix + TEMP_COUNT.getAndIncrement();

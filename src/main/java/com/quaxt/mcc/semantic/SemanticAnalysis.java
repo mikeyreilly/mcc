@@ -26,15 +26,12 @@ public class SemanticAnalysis {
             case null -> null;
             case Block block -> {//update the blockItems in-place
                 ArrayList<BlockItem> blockItems = block.blockItems();
-                for (int i = 0; i < blockItems.size(); i++) {
-                    BlockItem b = switch (blockItems.get(i)) {
-                        case Declaration declaration ->
-                                loopLabelDeclaration(declaration, currentLabel);
-                        case Statement innerStatement ->
-                                loopLabelStatement(innerStatement, currentLabel);
-                    };
-                    blockItems.set(i, b);
-                }
+                blockItems.replaceAll(blockItem -> switch (blockItem) {
+                    case Declaration declaration ->
+                            loopLabelDeclaration(declaration, currentLabel);
+                    case Statement innerStatement ->
+                            loopLabelStatement(innerStatement, currentLabel);
+                });
                 yield (T) block;
             }
             case Break aBreak -> {
@@ -54,7 +51,7 @@ public class SemanticAnalysis {
                 yield statement;
             }
             case DoWhile(Statement body, Exp condition, String _) -> {
-                String newLabel = makeLabel();
+                String newLabel = Mcc.makeTemporary("do");
                 yield (T) new DoWhile(loopLabelStatement(body, newLabel), condition, newLabel);
 
             }
@@ -63,7 +60,7 @@ public class SemanticAnalysis {
                     ForInit init, Exp condition, Exp post, Statement body,
                     String _
             ) -> {
-                String newLabel = makeLabel();
+                String newLabel = Mcc.makeTemporary("for");
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
                     case Declaration declaration ->
@@ -83,20 +80,16 @@ public class SemanticAnalysis {
             case Return(Exp exp) ->
                     (T) new Return(loopLabelStatement(exp, currentLabel));
             case While(Exp condition, Statement body, String _) -> {
-                String newLabel = makeLabel();
+                String newLabel = Mcc.makeTemporary("while");
                 yield (T) new While(condition, loopLabelStatement(body, newLabel), newLabel);
 
             }
         };
     }
 
-    private static String makeLabel() {
-        return Mcc.makeTemporary("label");
-    }
-
     private static Declaration loopLabelDeclaration(Declaration declaration, String currentLabel) {
         Optional<Exp> init = declaration.init();
-        return init.isPresent() ? new Declaration(declaration.name(), Optional.of(loopLabelStatement(init.get(), currentLabel))) : declaration;
+        return init.map(exp -> new Declaration(declaration.name(), Optional.of(loopLabelStatement(exp, currentLabel)))).orElse(declaration);
     }
 
 

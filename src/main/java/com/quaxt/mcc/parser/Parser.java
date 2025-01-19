@@ -246,7 +246,7 @@ public class Parser {
         Exp post = t == CLOSE_PAREN ? null : parseExp(tokens, 0);
         expect(CLOSE_PAREN, tokens);
         Statement body = parseStatement(tokens);
-        return new For(init, post, condition, body, null);
+        return new For(init, condition, post, body, null);
     }
 
 }

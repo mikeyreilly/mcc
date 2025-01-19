@@ -29,17 +29,21 @@ public class IrGen {
         compileBlockItems(block.blockItems(), instructions);
     }
 
+    private static void compileDeclaration(Declaration d, List<InstructionIr> instructions) {
+        if (d instanceof Declaration(String left, Optional<Exp> init)) {
+            if (init.isPresent()) {
+                assign(left, init.get(), instructions);
+                return;
+            }
+            init.ifPresent(exp -> compileExp(exp, instructions));
+        }
+    }
+
     private static void compileBlockItems(List<BlockItem> blockItems, List<InstructionIr> instructions) {
         for (BlockItem i : blockItems) {
             switch (i) {
 
-                case Declaration(String left, Optional<Exp> init) -> {
-                    if (init.isPresent()) {
-                        assign(left, init.get(), instructions);
-                        continue;
-                    }
-                    init.ifPresent(exp -> compileExp(exp, instructions));
-                }
+                case Declaration d -> compileDeclaration(d, instructions);
                 case Statement statement -> {
                     compileStatement(statement, instructions);
                 }
@@ -91,14 +95,84 @@ public class IrGen {
             case NullStatement _ -> {
             }
             case Block b -> compileBlock(b, instructions);
-            default ->
-                    throw new IllegalStateException("Unexpected value: " + i);
+
+            case Break aBreak -> {
+                instructions.add(new Jump(breakLabel(aBreak.label)));
+            }
+            case Compound compound -> {
+                throw new RuntimeException("mr-todo delete Compound");
+            }
+            case Continue aContinue -> {
+                instructions.add(new Jump(continueLabel(aContinue.label)));
+
+            }
+            case DoWhile(Statement body, Exp condition, String label) -> {
+                LabelIr start = newLabel("start");
+                instructions.add(start);
+                compileStatement(body, instructions);
+                LabelIr continueLabel = new LabelIr(continueLabel(label));
+                instructions.add(continueLabel);
+                ValIr v = compileExp(condition, instructions);
+                instructions.add(new JumpIfNotZero(v, start.label()));
+                LabelIr breakLabel = new LabelIr(breakLabel(label));
+                instructions.add(breakLabel);
+            }
+            case For(
+                    ForInit init, Exp condition, Exp post, Statement body,
+                    String label
+            ) -> {
+
+                switch (init) {
+                    case Declaration d -> compileDeclaration(d, instructions);
+                    case Exp e -> compileExp(e, instructions);
+                    case null -> {
+                    }
+                }
+
+                LabelIr start = new LabelIr(startLabel(label));
+                LabelIr continueLabel = new LabelIr(continueLabel(label));
+                LabelIr breakLabel = new LabelIr(breakLabel(label));
+                instructions.add(start);
+                if (condition != null) {
+                    ValIr v = compileExp(condition, instructions);
+                    instructions.add(new JumpIfZero(v, breakLabel.label()));
+                }
+                compileStatement(body, instructions);
+                instructions.add(continueLabel);
+                compileExp(post, instructions);
+                instructions.add(new Jump(start.label()));
+                instructions.add(breakLabel);
+            }
+            case While(Exp condition, Statement body, String label) -> {
+                LabelIr continueLabel = new LabelIr(continueLabel(label));
+                instructions.add(continueLabel);
+                ValIr v = compileExp(condition, instructions);
+                LabelIr breakLabel = new LabelIr(breakLabel(label));
+                instructions.add(new JumpIfZero(v, breakLabel.label()));
+                compileStatement(body, instructions);
+                instructions.add(new Jump(continueLabel.label()));
+                instructions.add(breakLabel);
+            }
         }
+    }
+
+    private static String startLabel(String label) {
+        return "start_" + label;
+    }
+
+    private static String continueLabel(String label) {
+        return "continue_" + label;
+    }
+
+    private static String breakLabel(String label) {
+        return "break_" + label;
     }
 
 
     private static ValIr compileExp(Exp expr, List<InstructionIr> instructions) {
         switch (expr) {
+            case null:
+                return null;
             case Int(int i): {
                 return new IntIr(i);
             }
