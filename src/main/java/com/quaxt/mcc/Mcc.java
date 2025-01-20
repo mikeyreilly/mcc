@@ -34,17 +34,23 @@ public class Mcc {
         return pb.start().waitFor();
     }
 
-
-    public static int assemble(Path asmFile, Path outputFile) throws IOException, InterruptedException {
+    private static int assembleAndLink(Path asmFile, String bareFileName, boolean doNotCompile) throws InterruptedException, IOException {
+        List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc", asmFile.toString()));
+        if (doNotCompile) {
+            gccArgs.add("-c");
+        }
+        gccArgs.addAll(Arrays.asList("-o", asmFile.resolveSibling(bareFileName + (doNotCompile ? ".o" : "")).toString()));
         ProcessBuilder pb =
-                new ProcessBuilder("gcc", asmFile.toString(), "-o", outputFile.toString()).inheritIO();
+                new ProcessBuilder(gccArgs.toArray(new String[0])).inheritIO();
         return pb.start().waitFor();
     }
+
 
     public static void main(String[] args0) throws Exception {
         ArrayList<String> args = Arrays.stream(args0)
                 .collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
+        boolean doNotCompile = false;
         for (int i = args.size() - 1; i >= 0; i--) {
             Mode newMode = switch (args.get(i)) {
                 case "--lex" -> Mode.LEX;
@@ -53,6 +59,10 @@ public class Mcc {
                 case "--codegen" -> Mode.CODEGEN;
                 case "--tacky" -> Mode.TACKY;
                 case "-S" -> Mode.COMPILE;
+                case "-c" -> {
+                    doNotCompile = true;
+                    yield null;
+                }
                 default -> null;
             };
             if (newMode != null) {
@@ -103,12 +113,13 @@ public class Mcc {
         if (mode == Mode.COMPILE) {
             return;
         }
-        int exitCode = assemble(asmFile, intermediateFile.resolveSibling(bareFileName));
+        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile);
 //        if (exitCode == 0) {
 //            Files.delete(asmFile);
 //        }
         System.exit(exitCode);
     }
+
 
 
     private static String removeEnding(String fileName) {
