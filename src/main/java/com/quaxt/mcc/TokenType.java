@@ -9,7 +9,8 @@ public enum TokenType implements Token {
             Pattern.DOTALL)), INT(), RETURN(), VOID(),ELSE(),IF(),
     BREAK(), CONTINUE(), WHILE(), DO(), FOR(),
     DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~"),
-    NOT("!"),QUESTION_MARK("\\?"),COLON(":");
+    NOT("!"),QUESTION_MARK("\\?"),COLON(":"),
+    COMMA(",");
     final Pattern regex;
 
     TokenType(String pattern) {

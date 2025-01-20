@@ -18,9 +18,8 @@ public class Lexer {
                     ADD, IMUL, DIVIDE, REMAINDER,
                     AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
                     GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
-                    BECOMES, QUESTION_MARK, COLON};
-
-
+                    BECOMES, QUESTION_MARK, COLON, COMMA};
+    
     public static List<Token> lex(String src) {
         Matcher matcher = IDENTIFIER.regex.matcher(src);
         List<Token> tokens = new ArrayList<>();
