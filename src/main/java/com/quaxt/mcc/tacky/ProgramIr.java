@@ -1,5 +1,7 @@
 package com.quaxt.mcc.tacky;
 
-public record ProgramIr(FunctionIr function) {
+import java.util.List;
+
+public record ProgramIr(List<FunctionIr> functions) {
 }
 

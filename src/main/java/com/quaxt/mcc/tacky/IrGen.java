@@ -15,13 +15,17 @@ import static com.quaxt.mcc.ArithmeticOperator.OR;
 
 public class IrGen {
     public static ProgramIr programIr(Program program) {
-        List<InstructionIr> instructions = new ArrayList<>();
-        Function function = program.function();
-        compileBlock(function.block(), instructions);
-        FunctionIr f = new FunctionIr(function.name(), function.returnType(), instructions);
-        ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
-        instructions.add(ret);
-        return new ProgramIr(f);
+        List<FunctionIr> functionIrs = new ArrayList<>();
+        for (Function function : program.functions()){
+            List<InstructionIr> instructions = new ArrayList<>();
+            compileBlock(function.block(), instructions);
+            FunctionIr f = new FunctionIr(function.name(), function.parameters(), instructions);
+            ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
+            instructions.add(ret);
+            functionIrs.add(f);
+
+        }
+        return new ProgramIr(functionIrs);
     }
 
     private static void compileBlock(Block block, List<InstructionIr> instructions) {
@@ -29,12 +33,15 @@ public class IrGen {
     }
 
     private static void compileDeclaration(Declaration d, List<InstructionIr> instructions) {
-        if (d instanceof Declaration(String left, Exp init)) {
+
+        if (d instanceof VarDecl(String left, Exp init)) {
             if (init != null) {
                 assign(left, init, instructions);
                 return;
             }
             compileExp(init, instructions);
+        } else {
+            throw new RuntimeException("todo");
         }
     }
 
@@ -244,9 +251,9 @@ public class IrGen {
                         return dstName;
                     }
                 }
-            case Assignment(Var left, Exp right):
+            case Assignment(Identifier left, Exp right):
                 return assign(left.value(), right, instructions);
-            case Var(String name):
+            case Identifier(String name):
                 return new VarIr(name);
             default:
                 throw new IllegalStateException("Unexpected value: " + expr);

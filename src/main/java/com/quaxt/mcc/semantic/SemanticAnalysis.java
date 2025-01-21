@@ -13,12 +13,13 @@ public class SemanticAnalysis {
 
 
     public static Program loopLabelProgram(Program program) {
-        return new Program(loopLabelFunction(program.function()));
+        //return new Program(loopLabelFunction(program.function()));
+        throw new RuntimeException("todo");
     }
 
     private static Function loopLabelFunction(Function function) {
         return new Function(function.name(),
-                function.returnType(),
+                function.parameters(),
                 loopLabelStatement(function.block(), null));
 
     }
@@ -29,10 +30,12 @@ public class SemanticAnalysis {
             case Block block -> {//update the blockItems in-place
                 ArrayList<BlockItem> blockItems = block.blockItems();
                 blockItems.replaceAll(blockItem -> switch (blockItem) {
-                    case Declaration declaration ->
-                            loopLabelDeclaration(declaration, currentLabel);
+                    case VarDecl declaration ->
+                            loopLabelVarDecl(declaration, currentLabel);
                     case Statement innerStatement ->
                             loopLabelStatement(innerStatement, currentLabel);
+                    default ->
+                            throw new IllegalStateException("Unexpected value: " + blockItem);
                 });
                 yield (T) block;
             }
@@ -65,8 +68,8 @@ public class SemanticAnalysis {
                 String newLabel = Mcc.makeTemporary("for");
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
-                    case Declaration declaration ->
-                            loopLabelDeclaration(declaration, newLabel);
+                    case VarDecl declaration ->
+                            loopLabelVarDecl(declaration, newLabel);
                     case Exp exp -> loopLabelStatement(exp, newLabel);
                 };
                 Exp labeledCondition = loopLabelStatement(condition, newLabel);
@@ -90,9 +93,9 @@ public class SemanticAnalysis {
         };
     }
 
-    private static Declaration loopLabelDeclaration(Declaration declaration, String currentLabel) {
+    private static VarDecl loopLabelVarDecl(VarDecl declaration, String currentLabel) {
         Exp init = declaration.init();
-        return new Declaration(declaration.name(), loopLabelStatement(init, currentLabel));
+        return new VarDecl(declaration.name(), loopLabelStatement(init, currentLabel));
     }
 
 
@@ -100,8 +103,9 @@ public class SemanticAnalysis {
     }
 
     public static Program resolveVars(Program program) {
-        Map<String, Entry> variableMap = new HashMap<>();
-        return new Program(resolveVars(program.function(), variableMap));
+        throw new RuntimeException("todo");
+//        Map<String, Entry> variableMap = new HashMap<>();
+//        return new Program(resolveVars(program.function(), variableMap));
     }
 
     private static Block resolveBlock(Block block, Map<String, Entry> variableMap) {
@@ -114,16 +118,17 @@ public class SemanticAnalysis {
     }
 
     private static Function resolveVars(Function function, Map<String, Entry> variableMap) {
-        return new Function(function.name(), function.returnType(),
+        return new Function(function.name(), function.parameters(),
                 resolveBlock(function.block(), variableMap));
     }
 
     private static BlockItem resolveVarsBlockItem(BlockItem blockItem, Map<String, Entry> variableMap) {
         return switch (blockItem) {
-            case Declaration declaration ->
-                    resolveDeclaration(declaration, variableMap);
+            case VarDecl declaration ->
+                    resolveVarDeclaration(declaration, variableMap);
             case Statement statement ->
                     resolveStatement(statement, variableMap);
+            case Function function -> throw new RuntimeException("todo");
         };
     }
 
@@ -164,8 +169,8 @@ public class SemanticAnalysis {
 
     private static ForInit resolveForInit(ForInit init, Map<String, Entry> variableMap) {
         return switch (init) {
-            case Declaration declaration ->
-                    resolveDeclaration(declaration, variableMap);
+            case VarDecl declaration ->
+                    resolveVarDeclaration(declaration, variableMap);
             case Exp exp -> resolveExp(exp, variableMap);
             case null -> null;
         };
@@ -181,30 +186,32 @@ public class SemanticAnalysis {
         return copy;
     }
 
-    private static Declaration resolveDeclaration(Declaration d, Map<String, Entry> variableMap) {
+    private static VarDecl resolveVarDeclaration(VarDecl d, Map<String, Entry> variableMap) {
         if (variableMap.get(d.name()) instanceof Entry e && e.fromCurrentBlock()) {
             fail("Duplicate variable declaration");
         }
         String uniqueName = Mcc.makeTemporary(d.name() + ".");
         variableMap.put(d.name(), new Entry(uniqueName, true));
         Exp init = d.init();
-        return new Declaration(uniqueName, resolveExp(init, variableMap));
+        return new VarDecl(uniqueName, resolveExp(init, variableMap));
     }
 
     private static Exp resolveExp(Exp exp, Map<String, Entry> variableMap) {
         return switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right) ->
-                    left instanceof Var v ? new Assignment(resolveExp(v, variableMap), resolveExp(right, variableMap)) : fail("Invalid lvalue");
+                    left instanceof Identifier v ? new Assignment(resolveExp(v, variableMap), resolveExp(right, variableMap)) : fail("Invalid lvalue");
             case BinaryOp(BinaryOperator op, Exp left, Exp right) ->
                     new BinaryOp(op, resolveExp(left, variableMap), resolveExp(right, variableMap));
             case Constant constant -> constant;
             case UnaryOp(UnaryOperator op, Exp arg) ->
                     new UnaryOp(op, resolveExp(arg, variableMap));
-            case Var(String name) ->
-                    variableMap.get(name) instanceof Entry e ? new Var(e.name()) : fail("Undeclared variable");
+            case Identifier(String name) ->
+                    variableMap.get(name) instanceof Entry e ? new Identifier(e.name()) : fail("Undeclared variable");
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse) ->
                     new Conditional(resolveExp(condition, variableMap), resolveExp(ifTrue, variableMap), resolveExp(ifFalse, variableMap));
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + exp);
         };
     }
 

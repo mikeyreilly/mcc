@@ -4,6 +4,7 @@ package com.quaxt.mcc.parser;
 import com.quaxt.mcc.*;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
@@ -12,11 +13,12 @@ import static com.quaxt.mcc.TokenType.*;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
 
 public class Parser {
-    private static void expect(Token expected, List<Token> tokens) {
+    private static Token expect(Token expected, List<Token> tokens) {
         Token token = tokens.removeFirst();
         if (expected != token.type()) {
             throw new IllegalArgumentException("Expected " + expected + ", got " + token);
         }
+        return token;
     }
 
     static Statement parseStatement(List<Token> tokens) {
@@ -78,25 +80,35 @@ public class Parser {
     }
 
     private static Declaration parseDeclaration(List<Token> tokens) {
-        // parse int i; or int i=5;
+        // parse int i; or int i=5; or int foo(void);
         expect(INT, tokens);
         String name = parseIdentifier(tokens);
         Token token = tokens.removeFirst();
-        return new Declaration(name, switch (token.type()) {
-            case BECOMES -> {
+        Exp exp;
+        switch (token.type()) {
+            case BECOMES:
                 Exp init = parseExp(tokens, 0);
                 expect(SEMICOLON, tokens);
-                yield init;
-            }
-            case SEMICOLON -> null;
-            default ->
-                    throw new IllegalArgumentException("Expected ; or =, got " + token);
-        });
+                exp = init;
+                break;
+            case SEMICOLON:
+                exp = null;
+                break;
+            case OPEN_PAREN:
+                return parseRestOfFunction(tokens, name);
+            default:
+                throw new IllegalArgumentException("Expected ; or =, got " + token);
+        }
+        return new VarDecl(name, exp);
     }
 
     public static Program parseProgram(List<Token> tokens) {
-        Function function = parseFunction(tokens);
-        return new Program(function);
+        Function function;
+        List<Function> functions = new ArrayList<>();
+        while ((function = parseFunction(tokens)) != null) {
+            functions.add(function);
+        }
+        return new Program(functions);
     }
 
     private static Token parseType(List<Token> tokens) {
@@ -118,14 +130,55 @@ public class Parser {
     }
 
     private static Function parseFunction(List<Token> tokens) {
-        Token returnType = parseType(tokens);
-        String name = parseIdentifier(tokens);
+        if (tokens.isEmpty()) {
+            return null;
+        }
+        parseType(tokens);
+        String functionName = parseIdentifier(tokens);
         expect(OPEN_PAREN, tokens);
-        expect(VOID, tokens);
-        expect(CLOSE_PAREN, tokens);
-        Block block = parseBlock(tokens);
+        return parseRestOfFunction(tokens, functionName);
+    }
 
-        return new Function(name, returnType, block);
+    private static Function parseRestOfFunction(List<Token> tokens, String functionName) {
+        Token firstParam = tokens.getFirst();
+        List<Identifier> params;
+        if (VOID == firstParam.type()) {
+            tokens.removeFirst();
+            expect(CLOSE_PAREN, tokens);
+            params = Collections.emptyList();
+        } else {
+            params = new ArrayList<>();
+            while (true) {
+                expect(INT, tokens);
+                params.add(new Identifier(expectIdentifier(tokens)));
+                Token token = tokens.removeFirst();
+                if (token == CLOSE_PAREN) break;
+                else if (token != COMMA)
+                    throw new IllegalArgumentException("Expected COMMA, got " + token);
+            }
+
+        }
+
+        Block block;
+        if (tokens.getFirst() == OPEN_BRACE) {
+            block = parseBlock(tokens);
+        }
+        else {
+            expect(SEMICOLON, tokens);
+            block = null;
+        }
+        return new Function(functionName, params, block);
+    }
+
+    private static String expectIdentifier(List<Token> tokens) {
+        Token token = tokens.removeFirst();
+
+        if (token instanceof TokenWithValue(
+                Token type, String value
+        ) && type == IDENTIFIER) {
+            return value;
+        }
+        throw new IllegalArgumentException("Expected IDENTIFIER got " + token);
     }
 
     private static Block parseBlock(List<Token> tokens) {
@@ -172,8 +225,37 @@ public class Parser {
             }
             case TokenWithValue(
                     TokenType type, String value
-            ) ->
-                    type == NUMERIC ? new Int(Integer.parseInt(value)) : new Var(value);
+            ) -> {
+                if (type == NUMERIC)
+                    yield new Int(Integer.parseInt(value));
+                Identifier id = new Identifier(value);
+                if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
+                    tokens.removeFirst();
+                    Token current = tokens.getFirst();
+                    if (current == CLOSE_PAREN) {
+                        tokens.removeFirst();
+                        yield new FunctionCall(id, Collections.emptyList());
+                    }
+                    List<Exp> args = new ArrayList<>();
+
+                    while (true) {
+                        Exp e = parseExp(tokens, 0);
+                        args.add(e);
+                        current = tokens.removeFirst();
+                        if (current == COMMA) {
+                            continue;
+                        }
+                        if (current == CLOSE_PAREN) {
+                            break;
+                        } else
+                            throw new IllegalArgumentException("unexpected token while parsing function call: " + current);
+
+                    }
+                    yield new FunctionCall(id, args);
+
+                }
+                yield id;
+            }
 
             default ->
                     throw new IllegalArgumentException("Expected exp, got " + token);
@@ -228,7 +310,7 @@ public class Parser {
 
     private static ForInit parseForInit(List<Token> tokens) {
         Token t = tokens.getFirst();
-        if (t == INT) return parseDeclaration(tokens);
+        if (t == INT) return (ForInit) parseDeclaration(tokens);
         Exp r = t == SEMICOLON ? null : parseExp(tokens, 0);
         expect(SEMICOLON, tokens);
         return r;

@@ -1,6 +1,4 @@
 package com.quaxt.mcc.parser;
 
-public record Declaration(String name,
-                          Exp init) implements BlockItem, ForInit {
+public sealed interface Declaration extends BlockItem permits Function, VarDecl {
 }
-

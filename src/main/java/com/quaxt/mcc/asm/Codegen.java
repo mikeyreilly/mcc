@@ -106,7 +106,8 @@ public class Codegen {
     }
 
     public static ProgramAsm convertToAsm(ProgramIr program) {
-        return new ProgramAsm(codeGenFunction(program.function()));
+        throw new RuntimeException("todo");
+       // return new ProgramAsm(codeGenFunction(program.function()));
     }
 
     private static FunctionAsm codeGenFunction(FunctionIr function) {

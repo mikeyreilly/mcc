@@ -1,5 +1,7 @@
 package com.quaxt.mcc.parser;
 
-public record Program(Function function) {
+import java.util.List;
+
+public record Program(List<Function> functions) {
 }
 
