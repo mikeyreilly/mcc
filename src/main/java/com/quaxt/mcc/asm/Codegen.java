@@ -161,7 +161,7 @@ public class Codegen {
 
 
                         default ->
-                                throw new IllegalStateException("Unexpected value: " + op);
+                                throw new IllegalStateException("Unexpected name: " + op);
                     }
 
                 }

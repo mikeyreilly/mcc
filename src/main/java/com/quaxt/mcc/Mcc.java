@@ -91,7 +91,7 @@ public class Mcc {
             return;
         }
 
-        program = SemanticAnalysis.resolveVars(program);
+        program = SemanticAnalysis.resolveProgram(program);
         program = SemanticAnalysis.loopLabelProgram(program);
         if (mode == Mode.VALIDATE) {
             return;

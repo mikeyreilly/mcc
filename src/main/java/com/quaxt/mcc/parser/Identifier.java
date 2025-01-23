@@ -1,4 +1,4 @@
 package com.quaxt.mcc.parser;
 
-public record Identifier(String value) implements Exp {
+public record Identifier(String name) implements Exp {
 }

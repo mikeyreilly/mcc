@@ -252,11 +252,11 @@ public class IrGen {
                     }
                 }
             case Assignment(Identifier left, Exp right):
-                return assign(left.value(), right, instructions);
+                return assign(left.name(), right, instructions);
             case Identifier(String name):
                 return new VarIr(name);
             default:
-                throw new IllegalStateException("Unexpected value: " + expr);
+                throw new IllegalStateException("Unexpected name: " + expr);
         }
     }
 

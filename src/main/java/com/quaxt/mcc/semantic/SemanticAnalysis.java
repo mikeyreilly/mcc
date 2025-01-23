@@ -7,20 +7,22 @@ import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class SemanticAnalysis {
 
 
     public static Program loopLabelProgram(Program program) {
-        //return new Program(loopLabelFunction(program.function()));
-        throw new RuntimeException("todo");
+        ArrayList<Function> functions = new ArrayList<>();
+        for (Function f : program.functions()) {
+            functions.add(loopLabelFunction(f));
+        }
+        return new Program(functions);
     }
 
     private static Function loopLabelFunction(Function function) {
-        return new Function(function.name(),
-                function.parameters(),
-                loopLabelStatement(function.block(), null));
+        return new Function(function.name(), function.parameters(), loopLabelStatement(function.block(), null));
 
     }
 
@@ -34,8 +36,7 @@ public class SemanticAnalysis {
                             loopLabelVarDecl(declaration, currentLabel);
                     case Statement innerStatement ->
                             loopLabelStatement(innerStatement, currentLabel);
-                    default ->
-                            throw new IllegalStateException("Unexpected value: " + blockItem);
+                    case Function function -> loopLabelFunction(function);
                 });
                 yield (T) block;
             }
@@ -80,8 +81,7 @@ public class SemanticAnalysis {
 
             }
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
-                    (T) new If(condition, loopLabelStatement(ifTrue, currentLabel),
-                            loopLabelStatement(ifFalse, currentLabel));
+                    (T) new If(condition, loopLabelStatement(ifTrue, currentLabel), loopLabelStatement(ifFalse, currentLabel));
             case NullStatement nullStatement -> statement;
             case Return(Exp exp) ->
                     (T) new Return(loopLabelStatement(exp, currentLabel));
@@ -99,120 +99,157 @@ public class SemanticAnalysis {
     }
 
 
-    record Entry(String name, boolean fromCurrentBlock) {
+    record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {
     }
 
-    public static Program resolveVars(Program program) {
-        throw new RuntimeException("todo");
-//        Map<String, Entry> variableMap = new HashMap<>();
-//        return new Program(resolveVars(program.function(), variableMap));
+    public static Program resolveProgram(Program program) {
+        Map<String, Entry> identifierMap = new HashMap<>();
+        List<Function> functionList = new ArrayList<>();
+        for (Function f : program.functions()) {
+            Function function = resolveFunctionDeclaration(f, identifierMap);
+            functionList.add(function);
+        }
+        return new Program(functionList);
     }
 
-    private static Block resolveBlock(Block block, Map<String, Entry> variableMap) {
-        Map<String, Entry> newVariableMap = copyVariableMap(variableMap);
+    private static Block resolveBlock(Block block, Map<String, Entry> identifierMap) {
+        Map<String, Entry> newVariableMap = copyIdentifierMap(identifierMap);
         ArrayList<BlockItem> blockItems = new ArrayList<>();
         for (BlockItem i : block.blockItems()) {
-            blockItems.add(resolveVarsBlockItem(i, newVariableMap));
+            blockItems.add(resolveIdentifiersBlockItem(i, newVariableMap));
         }
         return new Block(blockItems);
     }
 
-    private static Function resolveVars(Function function, Map<String, Entry> variableMap) {
-        return new Function(function.name(), function.parameters(),
-                resolveBlock(function.block(), variableMap));
+    private static Function resolveFunctionDeclaration(Function function, Map<String, Entry> identifierMap) {
+        String name = function.name();
+        if (identifierMap.get(name) instanceof Entry previousEntry) {
+            if (previousEntry.fromCurrentScope() && !previousEntry.hasLinkage()) {
+                throw new RuntimeException("Duplicate declaration: " + name);
+            }
+        }
+        identifierMap.put(name, new Entry(name, true, true));
+        Map<String, Entry> innerMap = copyIdentifierMap(identifierMap);
+
+        List<Identifier> newArgs = resolveParams(function.parameters(), innerMap);
+
+        Block newBody = function.block() instanceof Block block ? resolveBlock(block, innerMap) : null;
+        return new Function(function.name(), newArgs, newBody);
     }
 
-    private static BlockItem resolveVarsBlockItem(BlockItem blockItem, Map<String, Entry> variableMap) {
+    private static List<Identifier> resolveParams(List<Identifier> parameters, Map<String, Entry> identifierMap) {
+        List<Identifier> newParams = new ArrayList<>();
+        for (Identifier d : parameters) {
+            if (identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
+                fail("Duplicate variable declaration");
+            }
+            String uniqueName = Mcc.makeTemporary(d.name() + ".");
+            identifierMap.put(d.name(), new Entry(uniqueName, true, false));
+
+
+            newParams.add(new Identifier(uniqueName));
+        }
+        return newParams;
+    }
+
+    private static BlockItem resolveIdentifiersBlockItem(BlockItem blockItem, Map<String, Entry> identifierMap) {
         return switch (blockItem) {
             case VarDecl declaration ->
-                    resolveVarDeclaration(declaration, variableMap);
+                    resolveIdentifierDeclaration(declaration, identifierMap);
             case Statement statement ->
-                    resolveStatement(statement, variableMap);
-            case Function function -> throw new RuntimeException("todo");
+                    resolveStatement(statement, identifierMap);
+            case Function function -> resolveFunctionDeclaration(function,  identifierMap);
         };
     }
 
-    private static Statement resolveStatement(Statement blockItem, Map<String, Entry> variableMap) {
+    private static Statement resolveStatement(Statement blockItem, Map<String, Entry> identifierMap) {
         return switch (blockItem) {
             case null -> null;
-            case Exp exp -> resolveExp(exp, variableMap);
-            case Return(Exp exp) -> new Return(resolveExp(exp, variableMap));
+            case Exp exp -> resolveExp(exp, identifierMap);
+            case Return(Exp exp) -> new Return(resolveExp(exp, identifierMap));
             case If(
                     Exp condition, Statement ifTrue, Statement ifFalse
             ) ->
-                    new If(resolveExp(condition, variableMap), resolveStatement(ifTrue, variableMap),
-                             resolveStatement(ifFalse, variableMap));
+                    new If(resolveExp(condition, identifierMap), resolveStatement(ifTrue, identifierMap), resolveStatement(ifFalse, identifierMap));
 
             case Compound compound ->
-                    new Compound(resolveBlock(compound.block(), variableMap));
-            case Block block -> resolveBlock(block, variableMap);
+                    new Compound(resolveBlock(compound.block(), identifierMap));
+            case Block block -> resolveBlock(block, identifierMap);
             case NullStatement nullStatement -> nullStatement;
             case Break _, Continue _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
-                    new DoWhile(resolveStatement(body, variableMap),
-                            resolveExp(condition, variableMap), label);
+                    new DoWhile(resolveStatement(body, identifierMap), resolveExp(condition, identifierMap), label);
             case For(
                     ForInit init, Exp condition, Exp post, Statement body,
                     String label
             ) -> {
-                Map<String, Entry> newVariableMap = copyVariableMap(variableMap);
-                yield new For(resolveForInit(init, newVariableMap),
-                        resolveExp(condition, newVariableMap), resolveExp(post, newVariableMap),
-                        resolveStatement(body, newVariableMap), label);
+                Map<String, Entry> newVariableMap = copyIdentifierMap(identifierMap);
+                yield new For(resolveForInit(init, newVariableMap), resolveExp(condition, newVariableMap), resolveExp(post, newVariableMap), resolveStatement(body, newVariableMap), label);
             }
             case While(Exp condition, Statement body, String label) ->
-                    new While(resolveExp(condition, variableMap),
-                            resolveStatement(body, variableMap), label);
+                    new While(resolveExp(condition, identifierMap), resolveStatement(body, identifierMap), label);
         };
 
     }
 
-    private static ForInit resolveForInit(ForInit init, Map<String, Entry> variableMap) {
+    private static ForInit resolveForInit(ForInit init, Map<String, Entry> identifierMap) {
         return switch (init) {
             case VarDecl declaration ->
-                    resolveVarDeclaration(declaration, variableMap);
-            case Exp exp -> resolveExp(exp, variableMap);
+                    resolveIdentifierDeclaration(declaration, identifierMap);
+            case Exp exp -> resolveExp(exp, identifierMap);
             case null -> null;
         };
     }
 
 
-    private static Map<String, Entry> copyVariableMap(Map<String, Entry> m) {
+    private static Map<String, Entry> copyIdentifierMap(Map<String, Entry> m) {
         Map<String, Entry> copy = HashMap.newHashMap(m.size());
         for (Map.Entry<String, Entry> e : m.entrySet()) {
             Entry v = e.getValue();
-            copy.put(e.getKey(), new Entry(v.name(), false));
+            copy.put(e.getKey(), new Entry(v.name(), false, v.hasLinkage()));
         }
         return copy;
     }
 
-    private static VarDecl resolveVarDeclaration(VarDecl d, Map<String, Entry> variableMap) {
-        if (variableMap.get(d.name()) instanceof Entry e && e.fromCurrentBlock()) {
+    private static VarDecl resolveIdentifierDeclaration(VarDecl d, Map<String, Entry> identifierMap) {
+        if (identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
             fail("Duplicate variable declaration");
         }
         String uniqueName = Mcc.makeTemporary(d.name() + ".");
-        variableMap.put(d.name(), new Entry(uniqueName, true));
+        identifierMap.put(d.name(), new Entry(uniqueName, true, false));
         Exp init = d.init();
-        return new VarDecl(uniqueName, resolveExp(init, variableMap));
+        return new VarDecl(uniqueName, resolveExp(init, identifierMap));
     }
 
-    private static Exp resolveExp(Exp exp, Map<String, Entry> variableMap) {
+    private static Exp resolveExp(Exp exp, Map<String, Entry> identifierMap) {
         return switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right) ->
-                    left instanceof Identifier v ? new Assignment(resolveExp(v, variableMap), resolveExp(right, variableMap)) : fail("Invalid lvalue");
+                    left instanceof Identifier v ? new Assignment(resolveExp(v, identifierMap), resolveExp(right, identifierMap)) : fail("Invalid lvalue");
             case BinaryOp(BinaryOperator op, Exp left, Exp right) ->
-                    new BinaryOp(op, resolveExp(left, variableMap), resolveExp(right, variableMap));
+                    new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap));
             case Constant constant -> constant;
             case UnaryOp(UnaryOperator op, Exp arg) ->
-                    new UnaryOp(op, resolveExp(arg, variableMap));
+                    new UnaryOp(op, resolveExp(arg, identifierMap));
             case Identifier(String name) ->
-                    variableMap.get(name) instanceof Entry e ? new Identifier(e.name()) : fail("Undeclared variable");
+                    identifierMap.get(name) instanceof Entry e ? new Identifier(e.name()) : fail("Undeclared variable:" + exp);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse) ->
-                    new Conditional(resolveExp(condition, variableMap), resolveExp(ifTrue, variableMap), resolveExp(ifFalse, variableMap));
-            default ->
-                    throw new IllegalStateException("Unexpected value: " + exp);
+                    new Conditional(resolveExp(condition, identifierMap), resolveExp(ifTrue, identifierMap), resolveExp(ifFalse, identifierMap));
+            case FunctionCall(Identifier name, List<Exp> args) ->
+                    identifierMap.get(name.name()) instanceof Entry newFunctionName
+                            ? new FunctionCall(new Identifier(newFunctionName.name()), resolveArgs(identifierMap, args))
+                            : fail("Undeclared function:" + name);
+
+
         };
+    }
+
+    private static <T extends Exp> List<T> resolveArgs(Map<String, Entry> identifierMap, List<T> args) {
+        List<T> newArgs = new ArrayList<>();
+        for (T arg : args) {
+            newArgs.add((T) resolveExp(arg, identifierMap));
+        }
+        return newArgs;
     }
 
     private static Exp fail(String s) {

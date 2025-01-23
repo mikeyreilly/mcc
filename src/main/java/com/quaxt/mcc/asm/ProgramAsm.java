@@ -73,7 +73,7 @@ public record ProgramAsm(FunctionAsm functionAsm) {
                             yield op.toString().toLowerCase() + "l\t" + srcF + ", " + dstF;
                         }
                         default ->
-                                throw new IllegalStateException("Unexpected value: " + op);
+                                throw new IllegalStateException("Unexpected name: " + op);
                     };
 
                 }
