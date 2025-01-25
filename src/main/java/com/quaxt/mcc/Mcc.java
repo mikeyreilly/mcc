@@ -101,7 +101,7 @@ public class Mcc {
         if (mode == Mode.TACKY) {
             return;
         }
-        ProgramAsm programAsm = Codegen.generateAssembly(programIr);
+        ProgramAsm programAsm = Codegen.generateProgramAssembly(programIr);
         if (mode == Mode.CODEGEN) {
             return;
         }

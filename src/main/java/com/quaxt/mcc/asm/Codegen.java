@@ -17,29 +17,37 @@ import static com.quaxt.mcc.asm.Nullary.CDQ;
 import static com.quaxt.mcc.asm.Nullary.RET;
 
 public class Codegen {
-    public static ProgramAsm generateAssembly(ProgramIr programIr) {
-        ProgramAsm programAsm = convertToAsm(programIr);
+
+    public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
+        return new ProgramAsm(programIr.functions().stream().map(Codegen::generateAssembly).toList());
+    }
+    public static FunctionAsm generateAssembly(FunctionIr functionIr) {
+        FunctionAsm functionAsm = codeGenFunction(functionIr);
         // Replace Pseudo Registers
-        List<Instruction> instructions = programAsm.functionAsm().instructions();
+        List<Instruction> instructions = functionAsm.instructions();
         AtomicInteger offset = new AtomicInteger(-8);
         Map<String, Integer> varTable = new HashMap<>();
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
             Instruction newInst = switch (oldInst) {
-                case AllocateStack _, Nullary _, Jump _, JmpCC _, LabelIr _ ->
-                        oldInst;
+                case AllocateStack _, Nullary _, Jump _, JmpCC _,
+                     LabelIr _ -> oldInst;
                 case Mov(Operand src, Operand dst) ->
                         new Mov(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
                 case Unary(UnaryOperator op, Operand operand) ->
                         new Unary(op, dePseudo(operand, varTable, offset));
                 case Binary(ArithmeticOperator op, Operand src, Operand dst) ->
                         new Binary(op, dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
+
+
                 case Cmp(Operand subtrahend, Operand minuend) ->
-                        new Cmp(dePseudo(subtrahend, varTable, offset), dePseudo(minuend, varTable, offset));
+                        new Cmp(dePseudo(subtrahend, varTable, offset),
+                                dePseudo(minuend, varTable, offset));
                 case SetCC(
-                        CmpOperator cmpOperator, Operand operand
-                ) ->
-                        new SetCC(cmpOperator, dePseudo(operand, varTable, offset));
+                        CmpOperator cmpOperator,
+                        Operand operand
+                ) -> new SetCC(cmpOperator,
+                        dePseudo(operand, varTable, offset));
             };
             instructions.set(i, newInst);
         }
@@ -102,13 +110,11 @@ public class Codegen {
             }
 
         }
-        return programAsm;
+
+        return functionAsm;
     }
 
-    public static ProgramAsm convertToAsm(ProgramIr program) {
-        throw new RuntimeException("todo");
-       // return new ProgramAsm(codeGenFunction(program.function()));
-    }
+
 
     private static FunctionAsm codeGenFunction(FunctionIr function) {
         return new FunctionAsm(function.name(), codeGenInstructions(function.instructions()));
@@ -161,19 +167,19 @@ public class Codegen {
 
 
                         default ->
-                                throw new IllegalStateException("Unexpected name: " + op);
+                                throw new IllegalStateException("Unexpected value: " + op);
                     }
 
                 }
                 case BinaryIr(
                         CmpOperator op, ValIr v1, ValIr v2, VarIr dstName
                 ) -> {
+
                     instructionAsms.add(new Cmp(toOperand(v2), toOperand(v1)));
                     instructionAsms.add(new Mov(new Imm(0), toOperand(dstName)));
                     instructionAsms.add(new SetCC(op, toOperand(dstName)));
                 }
-                case Copy(ValIr val, VarIr dst) ->
-                        instructionAsms.add(new Mov(toOperand(val), toOperand(dst)));
+                case Copy(ValIr val, VarIr dst) -> instructionAsms.add(new Mov(toOperand(val), toOperand(dst)));
                 case Jump jump -> instructionAsms.add(jump);
                 case JumpIfNotZero(ValIr v, String label) -> {
                     instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
