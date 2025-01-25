@@ -105,9 +105,6 @@ public class IrGen {
             case Break aBreak -> {
                 instructions.add(new Jump(breakLabel(aBreak.label)));
             }
-            case Compound compound -> {
-                throw new RuntimeException("mr-todo delete Compound");
-            }
             case Continue aContinue -> {
                 instructions.add(new Jump(continueLabel(aContinue.label)));
 

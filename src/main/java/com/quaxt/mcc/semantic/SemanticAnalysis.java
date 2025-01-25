@@ -49,8 +49,6 @@ public class SemanticAnalysis {
                 aBreak.label = currentLabel;
                 yield statement;
             }
-            case Compound compound ->
-                    throw new RuntimeException("todo: get rid of compound");
             case Continue aContinue -> {
                 if (currentLabel == null) {
                     fail("continue statement outside of loop");
@@ -161,8 +159,6 @@ public class SemanticAnalysis {
                 else typeCheckFunctionDeclaration(function);
             }
             case Block block -> typeCheckBlock(block);
-            case Compound _ ->
-                    throw new RuntimeException("mr-todo delete Compound");
             case DoWhile(Statement whileBody, Exp condition, String _) -> {
                 typeCheckBlockItem(whileBody);
                 typeCheckExpression(condition);
@@ -341,9 +337,6 @@ public class SemanticAnalysis {
                     Exp condition, Statement ifTrue, Statement ifFalse
             ) ->
                     new If(resolveExp(condition, identifierMap), resolveStatement(ifTrue, identifierMap), resolveStatement(ifFalse, identifierMap));
-
-            case Compound compound ->
-                    new Compound(resolveBlock(compound.block(), copyIdentifierMap(identifierMap)));
             case Block block -> resolveBlock(block, copyIdentifierMap(identifierMap));
             case NullStatement nullStatement -> nullStatement;
             case Break _, Continue _ -> blockItem;
