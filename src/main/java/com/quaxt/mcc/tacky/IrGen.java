@@ -18,7 +18,7 @@ public class IrGen {
         List<FunctionIr> functionIrs = new ArrayList<>();
         for (Function function : program.functions()){
             List<InstructionIr> instructions = new ArrayList<>();
-            compileBlock(function.block(), instructions);
+            compileBlock(function.body(), instructions);
             FunctionIr f = new FunctionIr(function.name(), function.parameters(), instructions);
             ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
             instructions.add(ret);

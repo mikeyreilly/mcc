@@ -4,5 +4,5 @@ import java.util.List;
 
 public record Function(String name,
                        List<Identifier> parameters,
-                       Block block) implements Declaration {
+                       Block body) implements Declaration {
 }
