@@ -63,6 +63,7 @@ public class Mcc {
                 case "-S" -> Mode.COMPILE;
                 case "-c" -> {
                     doNotCompile = true;
+                    args.remove(i);
                     yield null;
                 }
                 default -> null;

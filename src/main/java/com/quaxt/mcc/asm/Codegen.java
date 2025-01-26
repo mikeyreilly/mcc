@@ -3,6 +3,7 @@ package com.quaxt.mcc.asm;
 import com.quaxt.mcc.ArithmeticOperator;
 import com.quaxt.mcc.CmpOperator;
 import com.quaxt.mcc.UnaryOperator;
+import com.quaxt.mcc.parser.Identifier;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.ArrayList;
@@ -24,7 +25,92 @@ public class Codegen {
     }
 
     public static FunctionAsm generateAssembly(FunctionIr functionIr) {
-        FunctionAsm functionAsm = codeGenFunction(functionIr);
+        List<Instruction> instructionAsms = new ArrayList<>();
+        List<Identifier> type = functionIr.type();
+        for (int i = 0; i < type.size() && i < 6; i++) {
+            Identifier param = type.get(i);
+            instructionAsms.add(new Mov(registers[i], new Pseudo(param.name())));
+        }
+        for (int i = 6; i < type.size(); i++) {
+            Identifier param = type.get(i);
+            instructionAsms.add(new Mov(new Stack(16 + (i - 6) * 8), new Pseudo(param.name())));
+        }
+
+        for (InstructionIr inst : functionIr.instructions()) {
+            switch (inst) {
+                case ReturnInstructionIr(ValIr val) -> {
+                    Operand src1 = toOperand(val);
+                    instructionAsms.add(new Mov(src1, AX));
+                    instructionAsms.add(RET);
+                }
+                case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
+                    Operand dst1 = toOperand(dstIr);
+                    Operand src1 = toOperand(srcIr);
+                    if (op1 == UnaryOperator.NOT) {
+                        instructionAsms.add(new Cmp(new Imm(0), src1));
+                        instructionAsms.add(new Mov(new Imm(0), dst1));
+                        instructionAsms.add(new SetCC(EQUALS, dst1));
+
+                    } else {
+
+                        instructionAsms.add(new Mov(src1, dst1));
+                        instructionAsms.add(new Unary(op1, dst1));
+                    }
+                }
+                case BinaryIr(
+                        ArithmeticOperator op1, ValIr v1, ValIr v2, VarIr dstName
+                ) -> {
+                    switch (op1) {
+                        case ADD, SUB, IMUL -> {
+                            instructionAsms.add(new Mov(toOperand(v1), toOperand(dstName)));
+                            instructionAsms.add(new Binary(op1, toOperand(v2), toOperand(dstName)));
+                        }
+                        case DIVIDE -> {
+                            instructionAsms.add(new Mov(toOperand(v1), AX));
+                            instructionAsms.add(CDQ);
+                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
+                            instructionAsms.add(new Mov(AX, toOperand(dstName)));
+
+                        }
+                        case REMAINDER -> {
+                            instructionAsms.add(new Mov(toOperand(v1), AX));
+                            instructionAsms.add(CDQ);
+                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
+                            instructionAsms.add(new Mov(DX, toOperand(dstName)));
+                        }
+
+
+                        default ->
+                                throw new IllegalStateException("Unexpected value: " + op1);
+                    }
+
+                }
+                case BinaryIr(
+                        CmpOperator op1, ValIr v1, ValIr v2, VarIr dstName
+                ) -> {
+
+                    instructionAsms.add(new Cmp(toOperand(v2), toOperand(v1)));
+                    instructionAsms.add(new Mov(new Imm(0), toOperand(dstName)));
+                    instructionAsms.add(new SetCC(op1, toOperand(dstName)));
+                }
+                case Copy(ValIr val, VarIr dst1) ->
+                        instructionAsms.add(new Mov(toOperand(val), toOperand(dst1)));
+                case Jump jump -> instructionAsms.add(jump);
+                case JumpIfNotZero(ValIr v, String label) -> {
+                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
+                    instructionAsms.add(new JmpCC(NOT_EQUALS, label));
+                }
+                case JumpIfZero(ValIr v, String label) -> {
+                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
+                    instructionAsms.add(new JmpCC(EQUALS, label));
+                }
+                case LabelIr labelIr -> instructionAsms.add(labelIr);
+                case FunCall funCall -> {
+                    codegenFunCall(funCall, instructionAsms);
+                }
+            }
+        }
+        FunctionAsm functionAsm = new FunctionAsm(functionIr.name(), instructionAsms);
         // Replace Pseudo Registers
         List<Instruction> instructions = functionAsm.instructions();
         AtomicInteger offset = new AtomicInteger(-8);
@@ -125,92 +211,9 @@ public class Codegen {
         return functionAsm;
     }
 
-
-    private static FunctionAsm codeGenFunction(FunctionIr function) {
-        return new FunctionAsm(function.name(), codeGenInstructions(function.instructions()));
-    }
-
-    private static List<Instruction> codeGenInstructions(List<InstructionIr> instructions) {
-        List<Instruction> instructionAsms = new ArrayList<>();
-        for (InstructionIr inst : instructions) {
-            switch (inst) {
-                case ReturnInstructionIr(ValIr val) -> {
-                    Operand src = toOperand(val);
-                    instructionAsms.add(new Mov(src, AX));
-                    instructionAsms.add(RET);
-                }
-                case UnaryIr(UnaryOperator op, ValIr srcIr, ValIr dstIr) -> {
-                    Operand dst = toOperand(dstIr);
-                    Operand src = toOperand(srcIr);
-                    if (op == UnaryOperator.NOT) {
-                        instructionAsms.add(new Cmp(new Imm(0), src));
-                        instructionAsms.add(new Mov(new Imm(0), dst));
-                        instructionAsms.add(new SetCC(EQUALS, dst));
-
-                    } else {
-
-                        instructionAsms.add(new Mov(src, dst));
-                        instructionAsms.add(new Unary(op, dst));
-                    }
-                }
-                case BinaryIr(
-                        ArithmeticOperator op, ValIr v1, ValIr v2, VarIr dstName
-                ) -> {
-                    switch (op) {
-                        case ADD, SUB, IMUL -> {
-                            instructionAsms.add(new Mov(toOperand(v1), toOperand(dstName)));
-                            instructionAsms.add(new Binary(op, toOperand(v2), toOperand(dstName)));
-                        }
-                        case DIVIDE -> {
-                            instructionAsms.add(new Mov(toOperand(v1), AX));
-                            instructionAsms.add(CDQ);
-                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(AX, toOperand(dstName)));
-
-                        }
-                        case REMAINDER -> {
-                            instructionAsms.add(new Mov(toOperand(v1), AX));
-                            instructionAsms.add(CDQ);
-                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(DX, toOperand(dstName)));
-                        }
-
-
-                        default ->
-                                throw new IllegalStateException("Unexpected value: " + op);
-                    }
-
-                }
-                case BinaryIr(
-                        CmpOperator op, ValIr v1, ValIr v2, VarIr dstName
-                ) -> {
-
-                    instructionAsms.add(new Cmp(toOperand(v2), toOperand(v1)));
-                    instructionAsms.add(new Mov(new Imm(0), toOperand(dstName)));
-                    instructionAsms.add(new SetCC(op, toOperand(dstName)));
-                }
-                case Copy(ValIr val, VarIr dst) ->
-                        instructionAsms.add(new Mov(toOperand(val), toOperand(dst)));
-                case Jump jump -> instructionAsms.add(jump);
-                case JumpIfNotZero(ValIr v, String label) -> {
-                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(NOT_EQUALS, label));
-                }
-                case JumpIfZero(ValIr v, String label) -> {
-                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(EQUALS, label));
-                }
-                case LabelIr labelIr -> instructionAsms.add(labelIr);
-                case FunCall funCall -> {
-                    codegenFunCall(funCall, instructionAsms);
-                }
-            }
-        }
-        return instructionAsms;
-    }
+    private static Reg[] registers = new Reg[]{DI, SI, DX, CX, R8, R9};
 
     private static void codegenFunCall(FunCall funCall, List<Instruction> instructionAsms) {
-        Reg[] registers = new Reg[]{DI, SI, DX, CX, R8, R9};
 
         if (funCall instanceof FunCall(
                 String name, ArrayList<ValIr> args, ValIr dst
@@ -259,7 +262,11 @@ public class Codegen {
         return switch (in) {
             case Imm _, Reg _, Stack _ -> in;
             case Pseudo(String identifier) -> {
-                Integer varOffset = varTable.computeIfAbsent(identifier, _ -> offset.getAndAdd(-8));
+                Integer varOffset = varTable.computeIfAbsent(identifier, _ -> {
+                    var r = offset.getAndAdd(-8);
+                    //System.out.println(identifier + "->" + r);
+                    return r;
+                });
                 yield new Stack(varOffset);
             }
         };

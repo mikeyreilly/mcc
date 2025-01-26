@@ -212,8 +212,8 @@ public class IrGen {
                     case AND -> {
                         VarIr result = makeTemporary("tmp.");
 
-                        LabelIr falseLabel = newLabel("false");
-                        LabelIr endLabel = newLabel("end");
+                        LabelIr falseLabel = newLabel("andFalse");
+                        LabelIr endLabel = newLabel("andEnd");
                         ValIr v1 = compileExp(left, instructions);
                         instructions.add(new JumpIfZero(v1, falseLabel.label()));
 

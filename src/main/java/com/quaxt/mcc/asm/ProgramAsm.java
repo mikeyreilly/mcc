@@ -101,7 +101,7 @@ public record ProgramAsm(List<FunctionAsm> functionAsms) {
                             String label
                     ) -> "j" + cmpOperator.code + "\t" + label;
                     case Call(String functionName) ->
-                            "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName + "@PLT" : functionName);
+                            "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
 
 
                 };
