@@ -15,12 +15,14 @@ import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
 import static com.quaxt.mcc.asm.Nullary.CDQ;
 import static com.quaxt.mcc.asm.Nullary.RET;
+import static com.quaxt.mcc.asm.Reg.*;
 
 public class Codegen {
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
         return new ProgramAsm(programIr.functions().stream().map(Codegen::generateAssembly).toList());
     }
+
     public static FunctionAsm generateAssembly(FunctionIr functionIr) {
         FunctionAsm functionAsm = codeGenFunction(functionIr);
         // Replace Pseudo Registers
@@ -30,8 +32,9 @@ public class Codegen {
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
             Instruction newInst = switch (oldInst) {
-                case AllocateStack _, Nullary _, Jump _, JmpCC _,
-                     LabelIr _ -> oldInst;
+                case AllocateStack _, DeallocateStack _, Nullary _, Jump _,
+                     JmpCC _,
+                     LabelIr _, Call _ -> oldInst;
                 case Mov(Operand src, Operand dst) ->
                         new Mov(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
                 case Unary(UnaryOperator op, Operand operand) ->
@@ -48,12 +51,20 @@ public class Codegen {
                         Operand operand
                 ) -> new SetCC(cmpOperator,
                         dePseudo(operand, varTable, offset));
+                case Push(Operand operand) ->
+                        new Push(dePseudo(operand, varTable, offset));
             };
             instructions.set(i, newInst);
         }
         // Fix up instructions
-
-        instructions.addFirst(new AllocateStack(-offset.get()));
+        int stackSize = -offset.get();
+        // round up to next multiple of 16 (makes it easier to maintain
+        // alignment during function calls
+        int remainder = stackSize % 16;
+        if (remainder != 0) {
+            stackSize += (16 - remainder);
+        }
+        instructions.addFirst(new AllocateStack(stackSize));
         // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
         for (int i = instructions.size() - 1; i >= 0; i--) {
             Instruction oldInst = instructions.get(i);
@@ -61,14 +72,14 @@ public class Codegen {
             switch (oldInst) {
                 case Unary(UnaryOperator op, Operand operand) -> {
                     if (op == UnaryOperator.IDIV && operand instanceof Imm) {
-                        instructions.set(i, new Mov(operand, Reg.R10));
-                        instructions.add(i + 1, new Unary(op, Reg.R10));
+                        instructions.set(i, new Mov(operand, R10));
+                        instructions.add(i + 1, new Unary(op, R10));
                     }
                 }
                 case Mov(Operand src, Operand dst) -> {
                     if (src instanceof Stack && dst instanceof Stack) {
-                        instructions.set(i, new Mov(src, Reg.R10));
-                        instructions.add(i + 1, new Mov(Reg.R10, dst));
+                        instructions.set(i, new Mov(src, R10));
+                        instructions.add(i + 1, new Mov(R10, dst));
                     }
                 }
                 case Binary(
@@ -77,15 +88,15 @@ public class Codegen {
                     switch (op) {
                         case ADD, SUB -> {
                             if (src instanceof Stack && dst instanceof Stack) {
-                                instructions.set(i, new Mov(src, Reg.R10));
-                                instructions.add(i + 1, new Binary(op, Reg.R10, dst));
+                                instructions.set(i, new Mov(src, R10));
+                                instructions.add(i + 1, new Binary(op, R10, dst));
                             }
                         }
                         case IMUL -> {
                             if (dst instanceof Stack) {
-                                instructions.set(i, new Mov(dst, Reg.R11));
-                                instructions.add(i + 1, new Binary(op, src, Reg.R11));
-                                instructions.add(i + 2, new Mov(Reg.R11, dst));
+                                instructions.set(i, new Mov(dst, R11));
+                                instructions.add(i + 1, new Binary(op, src, R11));
+                                instructions.add(i + 2, new Mov(R11, dst));
                             }
                         }
 
@@ -95,12 +106,12 @@ public class Codegen {
 
                 case Cmp(Operand src, Operand dst) -> {
                     if (src instanceof Stack && dst instanceof Stack) {
-                        instructions.set(i, new Mov(src, Reg.R10));
-                        instructions.add(i + 1, new Cmp(Reg.R10, dst));
+                        instructions.set(i, new Mov(src, R10));
+                        instructions.add(i + 1, new Cmp(R10, dst));
                     } else {
                         if (dst instanceof Imm) {
-                            instructions.set(i, new Mov(dst, Reg.R11));
-                            instructions.add(i + 1, new Cmp(src, Reg.R11));
+                            instructions.set(i, new Mov(dst, R11));
+                            instructions.add(i + 1, new Cmp(src, R11));
                         }
                     }
 
@@ -115,7 +126,6 @@ public class Codegen {
     }
 
 
-
     private static FunctionAsm codeGenFunction(FunctionIr function) {
         return new FunctionAsm(function.name(), codeGenInstructions(function.instructions()));
     }
@@ -126,7 +136,7 @@ public class Codegen {
             switch (inst) {
                 case ReturnInstructionIr(ValIr val) -> {
                     Operand src = toOperand(val);
-                    instructionAsms.add(new Mov(src, Reg.AX));
+                    instructionAsms.add(new Mov(src, AX));
                     instructionAsms.add(RET);
                 }
                 case UnaryIr(UnaryOperator op, ValIr srcIr, ValIr dstIr) -> {
@@ -152,17 +162,17 @@ public class Codegen {
                             instructionAsms.add(new Binary(op, toOperand(v2), toOperand(dstName)));
                         }
                         case DIVIDE -> {
-                            instructionAsms.add(new Mov(toOperand(v1), Reg.AX));
+                            instructionAsms.add(new Mov(toOperand(v1), AX));
                             instructionAsms.add(CDQ);
                             instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(Reg.AX, toOperand(dstName)));
+                            instructionAsms.add(new Mov(AX, toOperand(dstName)));
 
                         }
                         case REMAINDER -> {
-                            instructionAsms.add(new Mov(toOperand(v1), Reg.AX));
+                            instructionAsms.add(new Mov(toOperand(v1), AX));
                             instructionAsms.add(CDQ);
                             instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(Reg.DX, toOperand(dstName)));
+                            instructionAsms.add(new Mov(DX, toOperand(dstName)));
                         }
 
 
@@ -179,7 +189,8 @@ public class Codegen {
                     instructionAsms.add(new Mov(new Imm(0), toOperand(dstName)));
                     instructionAsms.add(new SetCC(op, toOperand(dstName)));
                 }
-                case Copy(ValIr val, VarIr dst) -> instructionAsms.add(new Mov(toOperand(val), toOperand(dst)));
+                case Copy(ValIr val, VarIr dst) ->
+                        instructionAsms.add(new Mov(toOperand(val), toOperand(dst)));
                 case Jump jump -> instructionAsms.add(jump);
                 case JumpIfNotZero(ValIr v, String label) -> {
                     instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
@@ -191,11 +202,49 @@ public class Codegen {
                 }
                 case LabelIr labelIr -> instructionAsms.add(labelIr);
                 case FunCall funCall -> {
-                    throw new RuntimeException("todo");
+                    codegenFunCall(funCall, instructionAsms);
                 }
             }
         }
         return instructionAsms;
+    }
+
+    private static void codegenFunCall(FunCall funCall, List<Instruction> instructionAsms) {
+        Reg[] registers = new Reg[]{DI, SI, DX, CX, R8, R9};
+
+        if (funCall instanceof FunCall(
+                String name, ArrayList<ValIr> args, ValIr dst
+        )) {
+            int argc = args.size();
+            int stackArgCount = argc > 6 ? (argc - 6) : 0;
+            int stackPadding = stackArgCount % 2 == 1 ? 8 : 0;
+            if (stackPadding != 0) {
+                instructionAsms.add(new AllocateStack(stackPadding));
+            }
+            for (int i = 0; i < 6 && i < argc; i++) {
+                Reg r = registers[i];
+                ValIr arg = args.get(i);
+                Operand operand = toOperand(arg);
+                instructionAsms.add(new Mov(operand, r));
+            }
+            for (int i = argc - 1; i > 5; i--) {
+                ValIr arg = args.get(i);
+                Operand operand = toOperand(arg);
+                if (operand instanceof Imm || operand instanceof Reg) {
+                    instructionAsms.add(new Push(operand));
+                } else {
+                    instructionAsms.add(new Mov(operand, AX));
+                    instructionAsms.add(new Push(operand));
+                }
+
+            }
+            instructionAsms.add(new Call(name));
+            int bytesToRemove = 8 * stackArgCount + stackPadding;
+            if (bytesToRemove != 0) {
+                instructionAsms.add(new DeallocateStack(bytesToRemove));
+            }
+            instructionAsms.add(new Mov(AX, toOperand(dst)));
+        }
     }
 
     private static Operand toOperand(ValIr val) {

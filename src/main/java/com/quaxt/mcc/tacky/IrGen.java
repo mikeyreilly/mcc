@@ -17,13 +17,13 @@ public class IrGen {
     public static ProgramIr programIr(Program program) {
         List<FunctionIr> functionIrs = new ArrayList<>();
         for (Function function : program.functions()) {
-            functionIrs.add(compileFunction(function));
+            if (function.body() != null)
+                functionIrs.add(compileFunction(function));
         }
         return new ProgramIr(functionIrs);
     }
 
     private static FunctionIr compileFunction(Function function) {
-        if (function.body() == null) return null;
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
         FunctionIr f = new FunctionIr(function.name(), function.parameters(), instructions);
@@ -39,7 +39,8 @@ public class IrGen {
     private static void compileDeclaration(Declaration d, List<InstructionIr> instructions) {
         switch (d) {
             case Function function -> {
-                compileFunction(function);
+                if (function.body() != null)
+                    compileFunction(function);
             }
             case VarDecl(String name, Exp init) -> {
                 if (init != null) {
@@ -260,7 +261,7 @@ public class IrGen {
                 return new VarIr(name);
             case FunctionCall(Identifier name, List<Exp> args): {
                 VarIr result = makeTemporary("tmp.");
-                List<ValIr> argVals = new ArrayList<>();
+                ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {
                     argVals.add(compileExp(e, instructions));
                 }

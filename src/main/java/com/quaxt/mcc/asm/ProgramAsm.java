@@ -93,6 +93,8 @@ public record ProgramAsm(List<FunctionAsm> functionAsms) {
                             CmpOperator cmpOperator,
                             String label
                     ) -> "j" + cmpOperator.code + "\t" + label;
+                    default ->
+                            throw new IllegalStateException("Unexpected value: " + instruction);
                 };
                 if (instruction instanceof LabelIr) {
                     out.println(s);
