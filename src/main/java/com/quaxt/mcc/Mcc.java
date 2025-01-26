@@ -13,12 +13,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class Mcc {
 
+    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>();
 
     public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
 

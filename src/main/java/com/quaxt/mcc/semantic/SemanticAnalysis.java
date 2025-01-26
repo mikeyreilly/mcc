@@ -2,6 +2,7 @@ package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.BinaryOperator;
 import com.quaxt.mcc.Mcc;
+import com.quaxt.mcc.SymbolTableEntry;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.parser.*;
 
@@ -10,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.semantic.Int.INT;
 
 public class SemanticAnalysis {
@@ -106,10 +108,6 @@ public class SemanticAnalysis {
 
     }
 
-    record SymbolTableEntry(Type type, boolean alreadyDefined) {
-    }
-
-    static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>();
 
     private static void typeCheckFunctionDeclaration(Function decl) {
         boolean defined = decl.body() != null;

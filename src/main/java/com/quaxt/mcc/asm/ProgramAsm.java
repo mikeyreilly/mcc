@@ -2,6 +2,7 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.ArithmeticOperator;
 import com.quaxt.mcc.CmpOperator;
+import com.quaxt.mcc.Mcc;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.tacky.Jump;
 import com.quaxt.mcc.tacky.LabelIr;
@@ -20,6 +21,7 @@ public record ProgramAsm(List<FunctionAsm> functionAsms) {
             case Pseudo _ ->
                     throw new IllegalArgumentException("broken compiler error: pseudo instructions should not occur here");
             case Reg reg -> "%" + switch (s) {
+                case Push _ -> reg.q;
                 case SetCC _ -> reg.b;
                 default -> reg.d;
             };
@@ -39,8 +41,13 @@ public record ProgramAsm(List<FunctionAsm> functionAsms) {
             for (Instruction instruction : instructions) {
                 String s = switch (instruction) {
                     case AllocateStack(int i) -> "subq\t$" + i + ", %rsp";
+                    case DeallocateStack(int i) -> "addq\t$" + i + ", %rsp";
                     case Mov(Operand src, Operand dst) ->
                             "movl" + "\t" + formatOperand(instruction, src) + ", " + formatOperand(instruction, dst);
+
+                    case Push(Operand arg) ->
+                            "pushq\t" + formatOperand(instruction, arg);
+
                     case Nullary.RET -> {
                         printIndent(out, "movq\t%rbp, %rsp");
                         printIndent(out, "popq\t%rbp");
@@ -93,8 +100,10 @@ public record ProgramAsm(List<FunctionAsm> functionAsms) {
                             CmpOperator cmpOperator,
                             String label
                     ) -> "j" + cmpOperator.code + "\t" + label;
-                    default ->
-                            throw new IllegalStateException("Unexpected value: " + instruction);
+                    case Call(String functionName) ->
+                            "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName + "@PLT" : functionName);
+
+
                 };
                 if (instruction instanceof LabelIr) {
                     out.println(s);
