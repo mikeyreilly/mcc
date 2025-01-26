@@ -1,7 +1,0 @@
-Right now we need to fix
-
-/home/mreilly/wa/mcc/src/main/java/com/quaxt/mcc/tacky/IrGen.java:89:55
-java: incompatible types: com.quaxt.mcc.BinaryOperator cannot be converted to com.quaxt.mcc.ArithmeticOperator
-
-and the way to do it is on page 86 (generation of tacky ir for
-comparison operations)
