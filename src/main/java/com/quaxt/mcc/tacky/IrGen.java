@@ -16,16 +16,20 @@ import static com.quaxt.mcc.ArithmeticOperator.OR;
 public class IrGen {
     public static ProgramIr programIr(Program program) {
         List<FunctionIr> functionIrs = new ArrayList<>();
-        for (Function function : program.functions()){
-            List<InstructionIr> instructions = new ArrayList<>();
-            compileBlock(function.body(), instructions);
-            FunctionIr f = new FunctionIr(function.name(), function.parameters(), instructions);
-            ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
-            instructions.add(ret);
-            functionIrs.add(f);
-
+        for (Function function : program.functions()) {
+            functionIrs.add(compileFunction(function));
         }
         return new ProgramIr(functionIrs);
+    }
+
+    private static FunctionIr compileFunction(Function function) {
+        if (function.body() == null) return null;
+        List<InstructionIr> instructions = new ArrayList<>();
+        compileBlock(function.body(), instructions);
+        FunctionIr f = new FunctionIr(function.name(), function.parameters(), instructions);
+        ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
+        instructions.add(ret);
+        return f;
     }
 
     private static void compileBlock(Block block, List<InstructionIr> instructions) {
@@ -33,15 +37,17 @@ public class IrGen {
     }
 
     private static void compileDeclaration(Declaration d, List<InstructionIr> instructions) {
-
-        if (d instanceof VarDecl(String left, Exp init)) {
-            if (init != null) {
-                assign(left, init, instructions);
-                return;
+        switch (d) {
+            case Function function -> {
+                compileFunction(function);
             }
-            compileExp(init, instructions);
-        } else {
-            throw new RuntimeException("todo");
+            case VarDecl(String name, Exp init) -> {
+                if (init != null) {
+                    assign(name, init, instructions);
+                    return;
+                }
+                compileExp(init, instructions);
+            }
         }
     }
 
@@ -252,6 +258,15 @@ public class IrGen {
                 return assign(left.name(), right, instructions);
             case Identifier(String name):
                 return new VarIr(name);
+            case FunctionCall(Identifier name, List<Exp> args): {
+                VarIr result = makeTemporary("tmp.");
+                List<ValIr> argVals = new ArrayList<>();
+                for (Exp e : args) {
+                    argVals.add(compileExp(e, instructions));
+                }
+                instructions.add(new FunCall(name.name(), argVals, result));
+                return result;
+            }
             default:
                 throw new IllegalStateException("Unexpected name: " + expr);
         }

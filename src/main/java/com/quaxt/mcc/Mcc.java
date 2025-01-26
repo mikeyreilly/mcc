@@ -71,6 +71,10 @@ public class Mcc {
             }
         }
         Path srcFile = Path.of(args.getFirst());
+        if (args.size() > 1) {
+            System.err.println("unrecognized argument: " + args.get(1));
+            System.exit(-1);
+        }
         String bareFileName = removeEnding(srcFile.getFileName().toString());
         Path intermediateFile = srcFile.resolveSibling(bareFileName + ".i");
 
@@ -120,7 +124,6 @@ public class Mcc {
 //        }
         System.exit(exitCode);
     }
-
 
 
     private static String removeEnding(String fileName) {

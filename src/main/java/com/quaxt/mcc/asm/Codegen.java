@@ -190,6 +190,9 @@ public class Codegen {
                     instructionAsms.add(new JmpCC(EQUALS, label));
                 }
                 case LabelIr labelIr -> instructionAsms.add(labelIr);
+                case FunCall funCall -> {
+                    throw new RuntimeException("todo");
+                }
             }
         }
         return instructionAsms;
