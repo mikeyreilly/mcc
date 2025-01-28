@@ -54,11 +54,11 @@ public class Parser {
             return parseDoWhile(tokens);
         } else if (token == FOR) {
             return parseFor(tokens);
-        } else if (token == TokenType.BREAK) {
+        } else if (token == BREAK) {
             tokens.removeFirst();
             expect(SEMICOLON, tokens);
             return new Break();
-        } else if (token == TokenType.CONTINUE) {
+        } else if (token == CONTINUE) {
             tokens.removeFirst();
             expect(SEMICOLON, tokens);
             return new Continue();
@@ -81,8 +81,31 @@ public class Parser {
 
     private static Declaration parseDeclaration(List<Token> tokens) {
         // parse int i; or int i=5; or int foo(void);
-        expect(INT, tokens);
-        String name = parseIdentifier(tokens);
+        if (tokens.isEmpty()) return null;
+        List<Token> types = new ArrayList<>();
+        List<StorageClass> storageClasses = new ArrayList<>();
+        Token t;
+
+        while (true) {
+            t = tokens.removeFirst();
+            if (isType(t)) {
+                types.add(t);
+            } else if (STATIC == t) {
+                storageClasses.add(StorageClass.STATIC);
+            } else if (EXTERN == t) {
+                storageClasses.add(StorageClass.EXTERN);
+            } else {
+                break;
+            }
+        }
+        if (types.size() != 1) {
+            fail("invalid type specifier");
+        }
+        if (storageClasses.size() > 1) {
+            fail("invalid storage class");
+        }
+        StorageClass storageClass = storageClasses.isEmpty() ? null : storageClasses.getFirst();
+        String name = parseIdentifier(t);
         Token token = tokens.removeFirst();
         Exp exp;
         switch (token.type()) {
@@ -95,32 +118,30 @@ public class Parser {
                 exp = null;
                 break;
             case OPEN_PAREN:
-                return parseRestOfFunction(tokens, name);
+                return parseRestOfFunction(tokens, name, storageClass);
             default:
                 throw new IllegalArgumentException("Expected ; or =, got " + token);
         }
-        return new VarDecl(name, exp);
+
+        return new VarDecl(name, exp, storageClass);
     }
+
 
     public static Program parseProgram(List<Token> tokens) {
-        Function function;
-        List<Function> functions = new ArrayList<>();
-        while ((function = parseFunction(tokens)) != null) {
-            functions.add(function);
+        Declaration declaration;
+        ArrayList<Declaration> declarations = new ArrayList<>();
+        while ((declaration = parseDeclaration(tokens)) != null) {
+            declarations.add(declaration);
         }
-        return new Program(functions);
-    }
-
-    private static Token parseType(List<Token> tokens) {
-        Token type = tokens.removeFirst();
-        if (IDENTIFIER == type.type() || INT == type || VOID == type) {
-            return type;
-        }
-        throw new IllegalArgumentException("Expected type, got " + type);
+        return new Program(declarations);
     }
 
     private static String parseIdentifier(List<Token> tokens) {
         Token identifier = tokens.removeFirst();
+        return parseIdentifier(identifier);
+    }
+
+    private static String parseIdentifier(Token identifier) {
         if (identifier instanceof TokenWithValue(
                 TokenType type, String value
         ) && type == IDENTIFIER) {
@@ -129,17 +150,11 @@ public class Parser {
         throw new IllegalArgumentException("Expected identifier, got " + identifier);
     }
 
-    private static Function parseFunction(List<Token> tokens) {
-        if (tokens.isEmpty()) {
-            return null;
-        }
-        parseType(tokens);
-        String functionName = parseIdentifier(tokens);
-        expect(OPEN_PAREN, tokens);
-        return parseRestOfFunction(tokens, functionName);
+    private static boolean isType(Token type) {
+        return INT == type;
     }
 
-    private static Function parseRestOfFunction(List<Token> tokens, String functionName) {
+    private static Function parseRestOfFunction(List<Token> tokens, String functionName, StorageClass storageClass) {
         Token firstParam = tokens.getFirst();
         List<Identifier> params;
         if (VOID == firstParam.type()) {
@@ -162,12 +177,11 @@ public class Parser {
         Block block;
         if (tokens.getFirst() == OPEN_BRACE) {
             block = parseBlock(tokens);
-        }
-        else {
+        } else {
             expect(SEMICOLON, tokens);
             block = null;
         }
-        return new Function(functionName, params, block);
+        return new Function(functionName, params, block, storageClass);
     }
 
     private static String expectIdentifier(List<Token> tokens) {
@@ -203,10 +217,10 @@ public class Parser {
 
 
     private static BlockItem parseBlockItem(List<Token> tokens) {
-        if (tokens.getFirst() == INT) {
-            return parseDeclaration(tokens);
-        }
-        return parseStatement(tokens);
+        return switch (tokens.getFirst()) {
+            case INT, STATIC, EXTERN -> parseDeclaration(tokens);
+            default -> parseStatement(tokens);
+        };
     }
 
 
@@ -330,4 +344,7 @@ public class Parser {
         return new For(init, condition, post, body, null);
     }
 
+    private static Exp fail(String s) {
+        throw new RuntimeException(s);
+    }
 }

@@ -3,6 +3,7 @@ package com.quaxt.mcc.tacky;
 import com.quaxt.mcc.BinaryOperator;
 import com.quaxt.mcc.Mcc;
 import com.quaxt.mcc.UnaryOperator;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
@@ -42,7 +43,7 @@ public class IrGen {
                 if (function.body() != null)
                     compileFunction(function);
             }
-            case VarDecl(String name, Exp init) -> {
+            case VarDecl(String name, Exp init, StorageClass storageClass) -> {
                 if (init != null) {
                     assign(name, init, instructions);
                     return;

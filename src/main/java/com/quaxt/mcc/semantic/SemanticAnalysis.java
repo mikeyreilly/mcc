@@ -19,14 +19,19 @@ public class SemanticAnalysis {
 
     public static Program loopLabelProgram(Program program) {
         ArrayList<Function> functions = new ArrayList<>();
-        for (Function f : program.functions()) {
-            functions.add(loopLabelFunction(f));
+        ArrayList<Declaration> decls = program.declarations();
+        for (int i = 0; i < decls.size(); i++) {
+            switch (decls.get(i)) {
+                case Function f -> decls.set(i, loopLabelFunction(f));
+                default -> {
+                }
+            }
         }
-        return new Program(functions);
+        return program;
     }
 
     private static Function loopLabelFunction(Function function) {
-        return new Function(function.name(), function.parameters(), loopLabelStatement(function.body(), null));
+        return new Function(function.name(), function.parameters(), loopLabelStatement(function.body(), null), function.storageClass());
 
     }
 
@@ -97,7 +102,7 @@ public class SemanticAnalysis {
 
     private static VarDecl loopLabelVarDecl(VarDecl declaration, String currentLabel) {
         Exp init = declaration.init();
-        return new VarDecl(declaration.name(), loopLabelStatement(init, currentLabel));
+        return new VarDecl(declaration.name(), loopLabelStatement(init, currentLabel), declaration.storageClass());
     }
 
     public static void typeCheckProgram(Program program) {
@@ -268,12 +273,15 @@ public class SemanticAnalysis {
 
     public static Program resolveProgram(Program program) {
         Map<String, Entry> identifierMap = new HashMap<>();
-        List<Function> functionList = new ArrayList<>();
-        for (Function f : program.functions()) {
-            Function function = resolveFunctionDeclaration(f, identifierMap);
-            functionList.add(function);
+        ArrayList<Declaration> decls = program.declarations();
+        for (int i = 0; i < decls.size(); i++) {
+            switch (decls.get(i)) {
+                case Function f -> decls.set(i, resolveFunctionDeclaration(f, identifierMap));
+                default -> {
+                }
+            }
         }
-        return new Program(functionList);
+        return program;
     }
 
     private static Block resolveBlock(Block block, Map<String, Entry> identifierMap) {
@@ -297,7 +305,7 @@ public class SemanticAnalysis {
         List<Identifier> newArgs = resolveParams(function.parameters(), innerMap);
 
         Block newBody = function.body() instanceof Block block ? resolveBlock(block, innerMap) : null;
-        return new Function(function.name(), newArgs, newBody);
+        return new Function(function.name(), newArgs, newBody, function.storageClass());
     }
 
     private static List<Identifier> resolveParams(List<Identifier> parameters, Map<String, Entry> identifierMap) {
@@ -335,7 +343,8 @@ public class SemanticAnalysis {
                     Exp condition, Statement ifTrue, Statement ifFalse
             ) ->
                     new If(resolveExp(condition, identifierMap), resolveStatement(ifTrue, identifierMap), resolveStatement(ifFalse, identifierMap));
-            case Block block -> resolveBlock(block, copyIdentifierMap(identifierMap));
+            case Block block ->
+                    resolveBlock(block, copyIdentifierMap(identifierMap));
             case NullStatement nullStatement -> nullStatement;
             case Break _, Continue _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
@@ -379,7 +388,7 @@ public class SemanticAnalysis {
         String uniqueName = Mcc.makeTemporary(d.name() + ".");
         identifierMap.put(d.name(), new Entry(uniqueName, true, false));
         Exp init = d.init();
-        return new VarDecl(uniqueName, resolveExp(init, identifierMap));
+        return new VarDecl(uniqueName, resolveExp(init, identifierMap), d.storageClass());
     }
 
     private static Exp resolveExp(Exp exp, Map<String, Entry> identifierMap) {

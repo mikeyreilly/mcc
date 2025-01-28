@@ -4,5 +4,6 @@ import java.util.List;
 
 public record Function(String name,
                        List<Identifier> parameters,
-                       Block body) implements Declaration {
+                       Block body,
+                       StorageClass storageClass) implements Declaration {
 }
