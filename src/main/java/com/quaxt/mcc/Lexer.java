@@ -19,7 +19,7 @@ public class Lexer {
                     AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
                     GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
                     BECOMES, QUESTION_MARK, COLON, COMMA};
-    
+
     public static List<Token> lex(String src) {
         Matcher matcher = IDENTIFIER.regex.matcher(src);
         List<Token> tokens = new ArrayList<>();
@@ -54,6 +54,8 @@ public class Lexer {
                                 case "while" -> TokenType.WHILE;
                                 case "do" -> TokenType.DO;
                                 case "for" -> TokenType.FOR;
+                                case "static" -> TokenType.STATIC;
+                                case "extern" -> TokenType.EXTERN;
                                 default -> new TokenWithValue(tokenType, value);
                             };
                             tokens.add(token);
