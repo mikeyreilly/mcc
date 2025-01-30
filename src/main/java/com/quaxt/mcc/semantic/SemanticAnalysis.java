@@ -1,9 +1,6 @@
 package com.quaxt.mcc.semantic;
 
-import com.quaxt.mcc.BinaryOperator;
-import com.quaxt.mcc.Mcc;
-import com.quaxt.mcc.SymbolTableEntry;
-import com.quaxt.mcc.UnaryOperator;
+import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
@@ -11,7 +8,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
+import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
+import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.parser.StorageClass.EXTERN;
+import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Int.INT;
 
 public class SemanticAnalysis {
@@ -107,26 +109,81 @@ public class SemanticAnalysis {
 
     public static void typeCheckProgram(Program program) {
         for (Function f : program.functions()) {
-            typeCheckFunctionDeclaration(f);
 
         }
-
+        for (Declaration d : program.declarations()) {
+            switch (d) {
+                case Function function -> {
+                    typeCheckFunctionDeclaration(function, false);
+                }
+                case VarDecl varDecl -> {
+                    typeCheckFileScopeVariableDeclaration(varDecl);
+                }
+            }
+        }
     }
 
+    private static void typeCheckFileScopeVariableDeclaration(VarDecl decl) {
+        InitialValue initialValue
+                = switch (decl.init()) {
+            case com.quaxt.mcc.parser.Int(int i) -> new InitialConstant(i);
+            case null ->
+                    decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
+            default -> throw new RuntimeException("Non constant initializer");
+        };
+        boolean global = decl.storageClass() != STATIC;
+        if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry oldDecl) {
+            if (oldDecl.type() != INT) {
+                fail("function redeclared as variable");
+            }
+            if (decl.storageClass() == EXTERN) {
+                global = oldDecl.attrs().global();
+            } else if (oldDecl.attrs().global() != global) {
+                fail("conflicting variable linkage");
+            }
 
-    private static void typeCheckFunctionDeclaration(Function decl) {
+            if (oldDecl.attrs() instanceof StaticAttributes(
+                    InitialValue oldInit, boolean _
+            )) {
+                if (oldInit instanceof InitialConstant oldInitialConstant) {
+                    if (initialValue instanceof InitialConstant) {
+                        fail("Conflicting file scope variable definitions");
+                    } else {
+                        initialValue = oldInitialConstant;
+                    }
+
+                } else if (!(initialValue instanceof InitialConstant) && oldInit == TENTATIVE) {
+                    initialValue = TENTATIVE;
+                }
+
+            }
+
+
+        }
+        StaticAttributes attrs = new StaticAttributes(initialValue, global);
+        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, attrs));
+    }
+
+    private static void typeCheckFunctionDeclaration(Function decl, boolean blockScope) {
+        if (blockScope && decl.storageClass() == STATIC) {
+            fail("invalid storage class for block scope function declaration ‘" + decl.name() + "’");
+        }
         boolean defined = decl.body() != null;
-        if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(
-                Type oldType, boolean alreadyDefined
+        boolean global = decl.storageClass() != STATIC;
+        SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
+        if (oldEntry instanceof SymbolTableEntry(
+                Type oldType, IdentifierAttributes attrs
         )) {
             if (oldType instanceof FunType(int paramCount)) {
+                boolean alreadyDefined = oldEntry.attrs().defined();
                 if (alreadyDefined && defined) {
                     fail("already defined: " + decl.name());
                 }
-                // so not both true
-                if (defined == alreadyDefined) return;
-                // and not both same. i.e. one is true
-                defined = true;
+
+                if (oldEntry.attrs().global() && decl.storageClass() == STATIC) {
+                    fail("Static function declaration follows non-static");
+                }
+                global = oldEntry.attrs().global();
                 if (decl.parameters().size() != paramCount) {
                     fail("Incompatible function declarations for " + decl.name());
                 }
@@ -134,12 +191,13 @@ public class SemanticAnalysis {
                 fail("Incompatible function declarations for " + decl.name());
             }
         }
+        FunAttributes attrs = new FunAttributes(defined || decl.body() != null, global);
         FunType funType = new FunType(decl.parameters().size());
-        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, defined));
+        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
 
         if (decl.body() != null) {
             for (Identifier param : decl.parameters()) {
-                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(INT, false));
+                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
             }
             typeCheckBlock(decl.body());
         }
@@ -154,12 +212,13 @@ public class SemanticAnalysis {
 
     private static void typeCheckBlockItem(BlockItem blockItem) {
         switch (blockItem) {
-            case VarDecl declaration -> typeCheckDeclaration(declaration);
+            case VarDecl declaration ->
+                    typeCheckLocalVariableDeclaration(declaration);
             case Exp exp -> typeCheckExpression(exp);
             case Function function -> {
                 if (function.body() != null)
                     fail("nested function definition not allowed");
-                else typeCheckFunctionDeclaration(function);
+                else typeCheckFunctionDeclaration(function, true);
             }
             case Block block -> typeCheckBlock(block);
             case DoWhile(Statement whileBody, Exp condition, String _) -> {
@@ -180,7 +239,7 @@ public class SemanticAnalysis {
                         typeCheckExpression(exp);
                     }
                     case VarDecl varDecl -> {
-                        typeCheckDeclaration(varDecl);
+                        typeCheckLocalVariableDeclaration(varDecl);
                     }
                 }
             }
@@ -207,13 +266,36 @@ public class SemanticAnalysis {
         }
     }
 
-    private static void typeCheckDeclaration(VarDecl declaration) {
-        if (SYMBOL_TABLE.containsKey(declaration.name())) {
-            fail("should not be");
-        }
-        SYMBOL_TABLE.put(declaration.name(), new SymbolTableEntry(INT, false));
-        if (declaration.init() != null) {
-            typeCheckExpression(declaration.init());
+    private static void typeCheckLocalVariableDeclaration(VarDecl decl) {
+        if (decl.storageClass() == EXTERN) {
+            if (decl.init() != null) {
+                fail("Initializer on local extern variable declaration");
+            }
+            if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(
+                    Type oldType, IdentifierAttributes oldAttrs
+            )) {
+                if (oldType != INT) {
+                    fail("function redeclared as variable");
+                }
+
+            } else {
+                SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(NO_INITIALIZER, true)));
+            }
+        } else if (decl.storageClass() == STATIC) {
+            InitialValue initialValue;
+            if (decl.init() instanceof com.quaxt.mcc.parser.Int(int i)) {
+                initialValue = new InitialConstant(i);
+            } else if (decl.init() == null) {
+                initialValue = new InitialConstant(0);
+            } else {
+                throw new RuntimeException("Non-constant initializer on local static variable");
+            }
+            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(initialValue, false)));
+        } else {
+            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
+            if (decl.init() != null) {
+                typeCheckExpression(decl.init());
+            }
         }
     }
 
@@ -238,8 +320,9 @@ public class SemanticAnalysis {
             case Constant constant -> {
             }
             case FunctionCall(Identifier name, List<Exp> args) -> {
+
                 if (SYMBOL_TABLE.get(name.name()) instanceof SymbolTableEntry(
-                        Type type, boolean _
+                        Type type, IdentifierAttributes _
                 )) {
                     if (type instanceof FunType(int paramCount)) {
                         if (paramCount != args.size()) {
@@ -255,8 +338,9 @@ public class SemanticAnalysis {
 
             }
             case Identifier identifier -> {
+
                 if (SYMBOL_TABLE.get(identifier.name()) instanceof SymbolTableEntry(
-                        Type type, boolean _
+                        Type type, IdentifierAttributes _
                 ) && type instanceof FunType) {
                     fail("Function " + identifier.name() + " used as varaible");
                 }
@@ -276,12 +360,27 @@ public class SemanticAnalysis {
         ArrayList<Declaration> decls = program.declarations();
         for (int i = 0; i < decls.size(); i++) {
             switch (decls.get(i)) {
-                case Function f -> decls.set(i, resolveFunctionDeclaration(f, identifierMap));
-                default -> {
-                }
+                case Function f ->
+                        decls.set(i, resolveFunctionDeclaration(f, identifierMap));
+
+                case VarDecl varDecl ->
+                        decls.set(i, resolveFileScopeVariableDeclaration(varDecl, identifierMap));
+
             }
         }
         return program;
+    }
+
+    private static Declaration resolveFileScopeVariableDeclaration(VarDecl varDecl, Map<String, Entry> identifierMap) {
+        return switch (varDecl) {
+            case VarDecl(
+                    String name,
+                    Exp init, StorageClass storageClass
+            ) -> {
+                identifierMap.put(name, new Entry(name, true, true));
+                yield varDecl;
+            }
+        };
     }
 
     private static Block resolveBlock(Block block, Map<String, Entry> identifierMap) {
@@ -326,7 +425,7 @@ public class SemanticAnalysis {
     private static BlockItem resolveIdentifiersBlockItem(BlockItem blockItem, Map<String, Entry> identifierMap) {
         return switch (blockItem) {
             case VarDecl declaration ->
-                    resolveIdentifierDeclaration(declaration, identifierMap);
+                    resolveLocalIdentifierDeclaration(declaration, identifierMap);
             case Statement statement ->
                     resolveStatement(statement, identifierMap);
             case Function function ->
@@ -365,7 +464,7 @@ public class SemanticAnalysis {
     private static ForInit resolveForInit(ForInit init, Map<String, Entry> identifierMap) {
         return switch (init) {
             case VarDecl declaration ->
-                    resolveIdentifierDeclaration(declaration, identifierMap);
+                    resolveLocalIdentifierDeclaration(declaration, identifierMap);
             case Exp exp -> resolveExp(exp, identifierMap);
             case null -> null;
         };
@@ -381,14 +480,22 @@ public class SemanticAnalysis {
         return copy;
     }
 
-    private static VarDecl resolveIdentifierDeclaration(VarDecl d, Map<String, Entry> identifierMap) {
-        if (identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
-            fail("Duplicate variable declaration");
+    private static VarDecl resolveLocalIdentifierDeclaration(VarDecl decl, Map<String, Entry> identifierMap) {
+        if (identifierMap.get(decl.name()) instanceof Entry prevEntry) {
+            if (prevEntry.fromCurrentScope()) {
+                if (!(prevEntry.hasLinkage() && decl.storageClass() == EXTERN)) {
+                    fail("Conflicting local declaration");
+                }
+            }
+            if (decl.storageClass() == EXTERN) {
+                identifierMap.put(decl.name(), new Entry(decl.name(), true, true));
+                return decl;
+            }
         }
-        String uniqueName = Mcc.makeTemporary(d.name() + ".");
-        identifierMap.put(d.name(), new Entry(uniqueName, true, false));
-        Exp init = d.init();
-        return new VarDecl(uniqueName, resolveExp(init, identifierMap), d.storageClass());
+        String uniqueName = Mcc.makeTemporary(decl.name() + ".");
+        identifierMap.put(decl.name(), new Entry(uniqueName, true, false));
+        Exp init = decl.init();
+        return new VarDecl(uniqueName, resolveExp(init, identifierMap), decl.storageClass());
     }
 
     private static Exp resolveExp(Exp exp, Map<String, Entry> identifierMap) {

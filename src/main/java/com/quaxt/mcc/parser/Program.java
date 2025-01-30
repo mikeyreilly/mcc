@@ -2,7 +2,6 @@ package com.quaxt.mcc.parser;
 
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.NoSuchElementException;
 
 public record Program(ArrayList<Declaration> declarations) {
@@ -42,6 +41,7 @@ public record Program(ArrayList<Declaration> declarations) {
                 if (i >= declarations.size()) {
                     throw new NoSuchElementException();
                 }
+                cursor++;
                 skipNonFunctions();
                 return (Function) declarations.get(i);
             }
