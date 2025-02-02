@@ -133,32 +133,22 @@ public class SemanticAnalysis {
         };
         boolean global = decl.storageClass() != STATIC;
         if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry oldDecl) {
-            if (oldDecl.type() != INT) {
-                fail("function redeclared as variable");
-            }
-            if (decl.storageClass() == EXTERN) {
+            if (oldDecl.type() != INT) fail("function redeclared as variable");
+            if (decl.storageClass() == EXTERN)
                 global = oldDecl.attrs().global();
-            } else if (oldDecl.attrs().global() != global) {
+            else if (oldDecl.attrs().global() != global)
                 fail("conflicting variable linkage");
-            }
 
             if (oldDecl.attrs() instanceof StaticAttributes(
                     InitialValue oldInit, boolean _
             )) {
                 if (oldInit instanceof InitialConstant oldInitialConstant) {
-                    if (initialValue instanceof InitialConstant) {
+                    if (initialValue instanceof InitialConstant)
                         fail("Conflicting file scope variable definitions");
-                    } else {
-                        initialValue = oldInitialConstant;
-                    }
-
-                } else if (!(initialValue instanceof InitialConstant) && oldInit == TENTATIVE) {
+                    else initialValue = oldInitialConstant;
+                } else if (!(initialValue instanceof InitialConstant) && oldInit == TENTATIVE)
                     initialValue = TENTATIVE;
-                }
-
             }
-
-
         }
         StaticAttributes attrs = new StaticAttributes(initialValue, global);
         SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, attrs));
@@ -176,17 +166,14 @@ public class SemanticAnalysis {
         )) {
             if (oldType instanceof FunType(int paramCount)) {
                 boolean alreadyDefined = oldEntry.attrs().defined();
-                if (alreadyDefined && defined) {
+                if (alreadyDefined && defined)
                     fail("already defined: " + decl.name());
-                }
 
-                if (oldEntry.attrs().global() && decl.storageClass() == STATIC) {
+                if (oldEntry.attrs().global() && decl.storageClass() == STATIC)
                     fail("Static function declaration follows non-static");
-                }
                 global = oldEntry.attrs().global();
-                if (decl.parameters().size() != paramCount) {
+                if (decl.parameters().size() != paramCount)
                     fail("Incompatible function declarations for " + decl.name());
-                }
             } else {
                 fail("Incompatible function declarations for " + decl.name());
             }
@@ -268,34 +255,28 @@ public class SemanticAnalysis {
 
     private static void typeCheckLocalVariableDeclaration(VarDecl decl) {
         if (decl.storageClass() == EXTERN) {
-            if (decl.init() != null) {
+            if (decl.init() != null)
                 fail("Initializer on local extern variable declaration");
-            }
             if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(
                     Type oldType, IdentifierAttributes oldAttrs
             )) {
-                if (oldType != INT) {
-                    fail("function redeclared as variable");
-                }
+                if (oldType != INT) fail("function redeclared as variable");
 
             } else {
                 SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(NO_INITIALIZER, true)));
             }
         } else if (decl.storageClass() == STATIC) {
             InitialValue initialValue;
-            if (decl.init() instanceof com.quaxt.mcc.parser.Int(int i)) {
+            if (decl.init() instanceof com.quaxt.mcc.parser.Int(int i))
                 initialValue = new InitialConstant(i);
-            } else if (decl.init() == null) {
+            else if (decl.init() == null)
                 initialValue = new InitialConstant(0);
-            } else {
+            else
                 throw new RuntimeException("Non-constant initializer on local static variable");
-            }
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(initialValue, false)));
         } else {
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
-            if (decl.init() != null) {
-                typeCheckExpression(decl.init());
-            }
+            if (decl.init() != null) typeCheckExpression(decl.init());
         }
     }
 
@@ -415,8 +396,6 @@ public class SemanticAnalysis {
             }
             String uniqueName = Mcc.makeTemporary(d.name() + ".");
             identifierMap.put(d.name(), new Entry(uniqueName, true, false));
-
-
             newParams.add(new Identifier(uniqueName));
         }
         return newParams;
@@ -516,8 +495,6 @@ public class SemanticAnalysis {
                     identifierMap.get(name.name()) instanceof Entry newFunctionName
                             ? new FunctionCall(new Identifier(newFunctionName.name()), resolveArgs(identifierMap, args))
                             : fail("Undeclared function:" + name);
-
-
         };
     }
 
