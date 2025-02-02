@@ -251,7 +251,7 @@ public class Codegen {
                     instructionAsms.add(new Push(operand));
                 } else {
                     instructionAsms.add(new Mov(operand, AX));
-                    instructionAsms.add(new Push(operand));
+                    instructionAsms.add(new Push(AX));
                 }
 
             }

@@ -466,10 +466,11 @@ public class SemanticAnalysis {
                     fail("Conflicting local declaration");
                 }
             }
-            if (decl.storageClass() == EXTERN) {
-                identifierMap.put(decl.name(), new Entry(decl.name(), true, true));
-                return decl;
-            }
+
+        }
+        if (decl.storageClass() == EXTERN) {
+            identifierMap.put(decl.name(), new Entry(decl.name(), true, true));
+            return decl;
         }
         String uniqueName = Mcc.makeTemporary(decl.name() + ".");
         identifierMap.put(decl.name(), new Entry(uniqueName, true, false));

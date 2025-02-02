@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.quaxt.mcc.ArithmeticOperator.AND;
 import static com.quaxt.mcc.ArithmeticOperator.OR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.parser.StorageClass.EXTERN;
+import static com.quaxt.mcc.parser.StorageClass.STATIC;
 
 
 public class IrGen {
@@ -60,6 +62,7 @@ public class IrGen {
                 if (function.body() != null) compileFunction(function);
             }
             case VarDecl(String name, Exp init, StorageClass storageClass) -> {
+                if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
                     assign(name, init, instructions);
                     return;
