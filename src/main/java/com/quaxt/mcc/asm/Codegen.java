@@ -21,7 +21,14 @@ import static com.quaxt.mcc.asm.Reg.*;
 public class Codegen {
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
-        return new ProgramAsm(programIr.functions().stream().map(Codegen::generateAssembly).toList());
+        ArrayList<TopLevelAsm> l = new ArrayList<>();
+        for (TopLevel t : programIr.topLevels()){
+            if (t instanceof FunctionIr f){
+                l.add(generateAssembly(f));
+            }
+        }
+
+        return new ProgramAsm(l);
     }
 
     public static FunctionAsm generateAssembly(FunctionIr functionIr) {

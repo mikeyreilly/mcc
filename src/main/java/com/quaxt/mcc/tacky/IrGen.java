@@ -1,33 +1,50 @@
 package com.quaxt.mcc.tacky;
 
-import com.quaxt.mcc.BinaryOperator;
-import com.quaxt.mcc.Mcc;
-import com.quaxt.mcc.UnaryOperator;
+import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.AND;
 import static com.quaxt.mcc.ArithmeticOperator.OR;
+import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 
 
 public class IrGen {
     public static ProgramIr programIr(Program program) {
-        List<FunctionIr> functionIrs = new ArrayList<>();
+        List<TopLevel> tackyDefs = new ArrayList<>();
         for (Function function : program.functions()) {
             if (function.body() != null)
-                functionIrs.add(compileFunction(function));
+                tackyDefs.add(compileFunction(function));
         }
-        return new ProgramIr(functionIrs);
+        convertSymbolsToTacky(tackyDefs);
+        return new ProgramIr(tackyDefs);
+    }
+
+    private static void convertSymbolsToTacky(List<TopLevel> tackyDefs) {
+        for (Map.Entry<String, SymbolTableEntry> e : SYMBOL_TABLE.entrySet()) {
+            String name = e.getKey();
+            SymbolTableEntry value = e.getValue();
+            if (value.attrs() instanceof StaticAttributes(InitialValue init,
+                                                          boolean global)) {
+                if (init instanceof InitialConstant(int i)) {
+                    tackyDefs.add(new StaticVariable(name, global, i));
+                } else if (init instanceof InitialValue.Tentative) {
+                    tackyDefs.add(new StaticVariable(name, global, 0));
+                }
+            }
+        }
     }
 
     private static FunctionIr compileFunction(Function function) {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
-        FunctionIr f = new FunctionIr(function.name(), function.parameters(), instructions);
+        FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions);
         ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
         instructions.add(ret);
         return f;
@@ -40,8 +57,7 @@ public class IrGen {
     private static void compileDeclaration(Declaration d, List<InstructionIr> instructions) {
         switch (d) {
             case Function function -> {
-                if (function.body() != null)
-                    compileFunction(function);
+                if (function.body() != null) compileFunction(function);
             }
             case VarDecl(String name, Exp init, StorageClass storageClass) -> {
                 if (init != null) {
@@ -96,9 +112,7 @@ public class IrGen {
 
             case Exp exp -> compileExp(exp, instructions);
 
-            case If(
-                    Exp condition, Statement ifTrue, Statement ifFalse
-            ) -> {
+            case If(Exp condition, Statement ifTrue, Statement ifFalse) -> {
                 if (ifFalse != null) {
                     compileIfElse(condition, ifTrue, ifFalse, instructions);
                 } else {
@@ -128,10 +142,8 @@ public class IrGen {
                 LabelIr breakLabel = new LabelIr(breakLabel(label));
                 instructions.add(breakLabel);
             }
-            case For(
-                    ForInit init, Exp condition, Exp post, Statement body,
-                    String label
-            ) -> {
+            case For(ForInit init, Exp condition, Exp post, Statement body,
+                     String label) -> {
 
                 switch (init) {
                     case Declaration d -> compileDeclaration(d, instructions);
