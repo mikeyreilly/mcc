@@ -26,6 +26,7 @@ public record ProgramAsm(List<TopLevelAsm> functionAsms) {
                 default -> reg.d;
             };
             case Stack(int offset) -> offset + "(%rbp)";
+            case Data data -> throw new Todo();
         };
     }
 

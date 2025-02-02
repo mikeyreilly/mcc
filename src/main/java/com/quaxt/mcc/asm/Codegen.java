@@ -1,8 +1,6 @@
 package com.quaxt.mcc.asm;
 
-import com.quaxt.mcc.ArithmeticOperator;
-import com.quaxt.mcc.CmpOperator;
-import com.quaxt.mcc.UnaryOperator;
+import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.Identifier;
 import com.quaxt.mcc.tacky.*;
 
@@ -14,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
+import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.Nullary.CDQ;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.Reg.*;
@@ -22,9 +21,12 @@ public class Codegen {
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
         ArrayList<TopLevelAsm> l = new ArrayList<>();
-        for (TopLevel t : programIr.topLevels()){
-            if (t instanceof FunctionIr f){
-                l.add(generateAssembly(f));
+        for (TopLevel t : programIr.topLevels()) {
+            switch (t) {
+                case FunctionIr f -> l.add(generateAssembly(f));
+                case StaticVariable(String name, boolean global, int init) -> {
+                    l.add(new StaticVariableAsm(name, global, init));
+                }
             }
         }
 
@@ -65,7 +67,8 @@ public class Codegen {
                     }
                 }
                 case BinaryIr(
-                        ArithmeticOperator op1, ValIr v1, ValIr v2, VarIr dstName
+                        ArithmeticOperator op1, ValIr v1, ValIr v2,
+                        VarIr dstName
                 ) -> {
                     switch (op1) {
                         case ADD, SUB, IMUL -> {
@@ -117,7 +120,7 @@ public class Codegen {
                 }
             }
         }
-        FunctionAsm functionAsm = new FunctionAsm(functionIr.name(), instructionAsms);
+        FunctionAsm functionAsm = new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);
         // Replace Pseudo Registers
         List<Instruction> instructions = functionAsm.instructions();
         AtomicInteger offset = new AtomicInteger(-8);
@@ -170,7 +173,7 @@ public class Codegen {
                     }
                 }
                 case Mov(Operand src, Operand dst) -> {
-                    if (src instanceof Stack && dst instanceof Stack) {
+                    if (isRam(src) && isRam(dst)) {
                         instructions.set(i, new Mov(src, R10));
                         instructions.add(i + 1, new Mov(R10, dst));
                     }
@@ -180,13 +183,13 @@ public class Codegen {
                 ) -> {
                     switch (op) {
                         case ADD, SUB -> {
-                            if (src instanceof Stack && dst instanceof Stack) {
+                            if (isRam(src) && isRam(dst)) {
                                 instructions.set(i, new Mov(src, R10));
                                 instructions.add(i + 1, new Binary(op, R10, dst));
                             }
                         }
                         case IMUL -> {
-                            if (dst instanceof Stack) {
+                            if (isRam(dst)) {
                                 instructions.set(i, new Mov(dst, R11));
                                 instructions.add(i + 1, new Binary(op, src, R11));
                                 instructions.add(i + 2, new Mov(R11, dst));
@@ -198,7 +201,7 @@ public class Codegen {
                 }
 
                 case Cmp(Operand src, Operand dst) -> {
-                    if (src instanceof Stack && dst instanceof Stack) {
+                    if (isRam(src) && isRam(dst)) {
                         instructions.set(i, new Mov(src, R10));
                         instructions.add(i + 1, new Cmp(R10, dst));
                     } else {
@@ -216,6 +219,10 @@ public class Codegen {
         }
 
         return functionAsm;
+    }
+
+    private static boolean isRam(Operand src) {
+        return src instanceof Stack || src instanceof Data;
     }
 
     private static Reg[] registers = new Reg[]{DI, SI, DX, CX, R8, R9};
@@ -269,12 +276,22 @@ public class Codegen {
         return switch (in) {
             case Imm _, Reg _, Stack _ -> in;
             case Pseudo(String identifier) -> {
-                Integer varOffset = varTable.computeIfAbsent(identifier, _ -> {
-                    var r = offset.getAndAdd(-8);
-                    //System.out.println(identifier + "->" + r);
-                    return r;
-                });
-                yield new Stack(varOffset);
+                if (SYMBOL_TABLE.get(identifier) instanceof
+                        SymbolTableEntry entry &&
+                        entry.attrs() instanceof StaticAttributes(InitialValue init,
+                                                              boolean global))
+                    yield new Data(identifier);
+                else {
+                    Integer varOffset = varTable.computeIfAbsent(identifier, _ -> {
+                        var r = offset.getAndAdd(-8);
+                        //System.out.println(identifier + "->" + r);
+                        return r;
+                    });
+                    yield new Stack(varOffset);
+                }
+            }
+            case Data data -> {
+                throw new Todo();
             }
         };
     }
