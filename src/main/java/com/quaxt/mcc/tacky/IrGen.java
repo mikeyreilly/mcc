@@ -1,13 +1,11 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.AND;
@@ -15,7 +13,7 @@ import static com.quaxt.mcc.ArithmeticOperator.OR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
-
+import com.quaxt.mcc.semantic.Type;
 
 public class IrGen {
     public static ProgramIr programIr(Program program) {
@@ -61,7 +59,7 @@ public class IrGen {
             case Function function -> {
                 if (function.body() != null) compileFunction(function);
             }
-            case VarDecl(String name, Exp init, StorageClass storageClass) -> {
+            case VarDecl(String name, Exp init, Type varType, StorageClass storageClass) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
                     assign(name, init, instructions);
@@ -199,7 +197,7 @@ public class IrGen {
         switch (expr) {
             case null:
                 return null;
-            case Int(int i): {
+            case ConstInt(int i): {
                 return new IntIr(i);
             }
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse): {

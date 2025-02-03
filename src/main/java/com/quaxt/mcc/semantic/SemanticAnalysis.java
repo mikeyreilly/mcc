@@ -1,6 +1,7 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
@@ -14,7 +15,7 @@ import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
-import static com.quaxt.mcc.semantic.Int.INT;
+import static com.quaxt.mcc.semantic.Primitive.INT;
 
 public class SemanticAnalysis {
 
@@ -33,7 +34,7 @@ public class SemanticAnalysis {
     }
 
     private static Function loopLabelFunction(Function function) {
-        return new Function(function.name(), function.parameters(), loopLabelStatement(function.body(), null), function.storageClass());
+        return new Function(function.name(), function.parameters(), loopLabelStatement(function.body(), null), function.funType(), function.storageClass());
 
     }
 
@@ -104,7 +105,7 @@ public class SemanticAnalysis {
 
     private static VarDecl loopLabelVarDecl(VarDecl declaration, String currentLabel) {
         Exp init = declaration.init();
-        return new VarDecl(declaration.name(), loopLabelStatement(init, currentLabel), declaration.storageClass());
+        return new VarDecl(declaration.name(), loopLabelStatement(init, currentLabel), declaration.varType(), declaration.storageClass());
     }
 
     public static void typeCheckProgram(Program program) {
@@ -126,7 +127,7 @@ public class SemanticAnalysis {
     private static void typeCheckFileScopeVariableDeclaration(VarDecl decl) {
         InitialValue initialValue
                 = switch (decl.init()) {
-            case com.quaxt.mcc.parser.Int(int i) -> new InitialConstant(i);
+            case ConstInt(int i) -> new InitialConstant(i);
             case null ->
                     decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
             default -> throw new RuntimeException("Non constant initializer");
@@ -155,39 +156,40 @@ public class SemanticAnalysis {
     }
 
     private static void typeCheckFunctionDeclaration(Function decl, boolean blockScope) {
-        if (blockScope && decl.storageClass() == STATIC) {
-            fail("invalid storage class for block scope function declaration ‘" + decl.name() + "’");
-        }
-        boolean defined = decl.body() != null;
-        boolean global = decl.storageClass() != STATIC;
-        SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
-        if (oldEntry instanceof SymbolTableEntry(
-                Type oldType, IdentifierAttributes attrs
-        )) {
-            if (oldType instanceof FunType(int paramCount)) {
-                boolean alreadyDefined = oldEntry.attrs().defined();
-                if (alreadyDefined && defined)
-                    fail("already defined: " + decl.name());
-
-                if (oldEntry.attrs().global() && decl.storageClass() == STATIC)
-                    fail("Static function declaration follows non-static");
-                global = oldEntry.attrs().global();
-                if (decl.parameters().size() != paramCount)
-                    fail("Incompatible function declarations for " + decl.name());
-            } else {
-                fail("Incompatible function declarations for " + decl.name());
-            }
-        }
-        FunAttributes attrs = new FunAttributes(defined || decl.body() != null, global);
-        FunType funType = new FunType(decl.parameters().size());
-        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
-
-        if (decl.body() != null) {
-            for (Identifier param : decl.parameters()) {
-                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
-            }
-            typeCheckBlock(decl.body());
-        }
+        throw new Todo();
+//        if (blockScope && decl.storageClass() == STATIC) {
+//            fail("invalid storage class for block scope function declaration ‘" + decl.name() + "’");
+//        }
+//        boolean defined = decl.body() != null;
+//        boolean global = decl.storageClass() != STATIC;
+//        SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
+//        if (oldEntry instanceof SymbolTableEntry(
+//                Type oldType, IdentifierAttributes attrs
+//        )) {
+//            if (oldType instanceof FunType(ArrayList<Type> params, Type ret)) {
+//                boolean alreadyDefined = oldEntry.attrs().defined();
+//                if (alreadyDefined && defined)
+//                    fail("already defined: " + decl.name());
+//
+//                if (oldEntry.attrs().global() && decl.storageClass() == STATIC)
+//                    fail("Static function declaration follows non-static");
+//                global = oldEntry.attrs().global();
+//                if (decl.parameters().size() != params.size())
+//                    fail("Incompatible function declarations for " + decl.name());
+//            } else {
+//                fail("Incompatible function declarations for " + decl.name());
+//            }
+//        }
+//        FunAttributes attrs = new FunAttributes(defined || decl.body() != null, global);
+//        FunType funType = new FunType(decl.parameters().size());
+//        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
+//
+//        if (decl.body() != null) {
+//            for (Identifier param : decl.parameters()) {
+//                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
+//            }
+//            typeCheckBlock(decl.body());
+//        }
 
     }
 
@@ -267,7 +269,7 @@ public class SemanticAnalysis {
             }
         } else if (decl.storageClass() == STATIC) {
             InitialValue initialValue;
-            if (decl.init() instanceof com.quaxt.mcc.parser.Int(int i))
+            if (decl.init() instanceof ConstInt(int i))
                 initialValue = new InitialConstant(i);
             else if (decl.init() == null)
                 initialValue = new InitialConstant(0);
@@ -305,9 +307,9 @@ public class SemanticAnalysis {
                 if (SYMBOL_TABLE.get(name.name()) instanceof SymbolTableEntry(
                         Type type, IdentifierAttributes _
                 )) {
-                    if (type instanceof FunType(int paramCount)) {
-                        if (paramCount != args.size()) {
-                            fail("Attempt to call " + paramCount + "-arity function " + name.name() + " with " + args.size() + " args");
+                    if (type instanceof FunType(ArrayList<Type> params, Type ret)) {
+                        if (params.size() != args.size()) {
+                            fail("Attempt to call " + params.size() + "-arity function " + name.name() + " with " + args.size() + " args");
                         }
                     } else {
                         fail("Attempt to call " + name + " which is of type " + type + ", not function");
@@ -329,6 +331,8 @@ public class SemanticAnalysis {
             case UnaryOp(UnaryOperator _op, Exp e) -> {
                 typeCheckExpression(e);
             }
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + exp);
         }
     }
 
@@ -356,7 +360,7 @@ public class SemanticAnalysis {
         return switch (varDecl) {
             case VarDecl(
                     String name,
-                    Exp init, StorageClass storageClass
+                    Exp init, Type varType, StorageClass storageClass
             ) -> {
                 identifierMap.put(name, new Entry(name, true, true));
                 yield varDecl;
@@ -385,7 +389,7 @@ public class SemanticAnalysis {
         List<Identifier> newArgs = resolveParams(function.parameters(), innerMap);
 
         Block newBody = function.body() instanceof Block block ? resolveBlock(block, innerMap) : null;
-        return new Function(function.name(), newArgs, newBody, function.storageClass());
+        return new Function(function.name(), newArgs, newBody, function.funType(), function.storageClass());
     }
 
     private static List<Identifier> resolveParams(List<Identifier> parameters, Map<String, Entry> identifierMap) {
@@ -475,7 +479,7 @@ public class SemanticAnalysis {
         String uniqueName = Mcc.makeTemporary(decl.name() + ".");
         identifierMap.put(decl.name(), new Entry(uniqueName, true, false));
         Exp init = decl.init();
-        return new VarDecl(uniqueName, resolveExp(init, identifierMap), decl.storageClass());
+        return new VarDecl(uniqueName, resolveExp(init, identifierMap), decl.varType(), decl.storageClass());
     }
 
     private static Exp resolveExp(Exp exp, Map<String, Entry> identifierMap) {
@@ -496,6 +500,8 @@ public class SemanticAnalysis {
                     identifierMap.get(name.name()) instanceof Entry newFunctionName
                             ? new FunctionCall(new Identifier(newFunctionName.name()), resolveArgs(identifierMap, args))
                             : fail("Undeclared function:" + name);
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + exp);
         };
     }
 
