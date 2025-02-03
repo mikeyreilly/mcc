@@ -123,7 +123,7 @@ public class Mcc {
         }
         int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile);
 //        if (exitCode == 0) {
-//            Files.delete(asmFile);
+        Files.delete(asmFile);
 //        }
         System.exit(exitCode);
     }

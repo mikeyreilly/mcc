@@ -4,9 +4,9 @@ import java.util.regex.Pattern;
 
 public enum TokenType implements Token {
     IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
-    OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), NUMERIC("[0-9]+\\b"), SEMICOLON(";"),
+    OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), LONG_LITERAL("[0-9]+[lL]\\b"), NUMERIC("[0-9]+\\b"), SEMICOLON(";"),
     SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
-            Pattern.DOTALL)), INT(), RETURN(), VOID(), ELSE(), IF(),
+            Pattern.DOTALL)), LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
             BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
     DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~"),
     NOT("!"),QUESTION_MARK("\\?"),COLON(":"),

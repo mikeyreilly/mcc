@@ -13,7 +13,7 @@ public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
     static final Token[] TOKEN_TYPES_TO_MATCH =
             new Token[]{IDENTIFIER, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
-                    CLOSE_BRACE, NUMERIC, SEMICOLON, SINGLE_LINE_COMMENT,
+                    CLOSE_BRACE, LONG_LITERAL, NUMERIC, SEMICOLON, SINGLE_LINE_COMMENT,
                     MULTILINE_COMMENT, DECREMENT, INCREMENT, COMPLIMENT, SUB,
                     ADD, IMUL, DIVIDE, REMAINDER,
                     AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
@@ -45,6 +45,7 @@ public class Lexer {
                             String value = src.substring(start, end);
                             Token token = switch (value) {
                                 case "int" -> TokenType.INT;
+                                case "long" -> TokenType.LONG;
                                 case "void" -> TokenType.VOID;
                                 case "return" -> TokenType.RETURN;
                                 case "if" -> TokenType.IF;
