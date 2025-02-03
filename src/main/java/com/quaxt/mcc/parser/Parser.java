@@ -215,7 +215,7 @@ public class Parser {
                 String identifierName = expectIdentifier(tokens);
                 if (typeAndStorageClass.storageClass() != null)
                     fail("error: storage class specified for parameter " + identifierName);
-                params.add(new Identifier(identifierName));
+                params.add(new Identifier(identifierName, null));
 
                 Token token = tokens.removeFirst();
                 if (token == CLOSE_PAREN) break;
@@ -285,15 +285,19 @@ public class Parser {
         Token token = tokens.removeFirst();
         return switch (token) {
             case SUB ->
-                    new UnaryOp(UnaryOperator.COMPLEMENT, parseFactor(tokens));
+                    new UnaryOp(UnaryOperator.COMPLEMENT, parseFactor(tokens), null);
             case COMPLIMENT ->
-                    new UnaryOp(UnaryOperator.NEGATE, parseFactor(tokens));
-            case NOT -> new UnaryOp(UnaryOperator.NOT, parseFactor(tokens));
+                    new UnaryOp(UnaryOperator.NEGATE, parseFactor(tokens), null);
+            case NOT -> new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
             case OPEN_PAREN -> {
                 if (tokens.size() > 1 && isType(tokens.get(0)) && CLOSE_PAREN == tokens.get(1)) {
                     Type type = tokenToType(tokens.removeFirst());
                     tokens.removeFirst();//close_paren
-                    yield new Cast(type, parseExp(tokens, 0));
+                    Exp inner = parseExp(tokens, 0);
+                    if (inner instanceof Assignment){
+                        fail("lvalue required as left operand of assignment");
+                    }
+                    yield new Cast(type, inner);
 
                 } else {
                     Exp r = parseExp(tokens, 0);
@@ -309,13 +313,13 @@ public class Parser {
                 if (type == LONG_LITERAL) {
                     yield parseConst(value.substring(0, value.length() - 1), true);
                 }
-                Identifier id = new Identifier(value);
+                Identifier id = new Identifier(value, null);
                 if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
                     tokens.removeFirst();
                     Token current = tokens.getFirst();
                     if (current == CLOSE_PAREN) {
                         tokens.removeFirst();
-                        yield new FunctionCall(id, Collections.emptyList());
+                        yield new FunctionCall(id, Collections.emptyList(), null);
                     }
                     List<Exp> args = new ArrayList<>();
 
@@ -332,7 +336,7 @@ public class Parser {
                             throw new IllegalArgumentException("unexpected token while parsing function call: " + current);
 
                     }
-                    yield new FunctionCall(id, args);
+                    yield new FunctionCall(id, args, null);
 
                 }
                 yield id;
@@ -356,15 +360,15 @@ public class Parser {
                 tokens.removeFirst();
                 if (token == BECOMES) {
                     Exp right = parseExp(tokens, precedence);
-                    left = new Assignment(left, right);
+                    left = new Assignment(left, right, null);
                 } else if (token instanceof BinaryOperator binop) {
                     Exp right = parseExp(tokens, precedence + 1);
-                    left = new BinaryOp(binop, left, right);
+                    left = new BinaryOp(binop, left, right, null);
                 } else { // QUESTION_MARK
                     Exp middle = parseExp(tokens, 0);
                     expect(COLON, tokens);
                     Exp right = parseExp(tokens, precedence);
-                    left = new Conditional(left, middle, right);
+                    left = new Conditional(left, middle, right, null);
                 }
             } else {
                 break;

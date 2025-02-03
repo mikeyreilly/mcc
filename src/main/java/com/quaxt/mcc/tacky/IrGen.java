@@ -32,7 +32,7 @@ public class IrGen {
             SymbolTableEntry value = e.getValue();
             if (value.attrs() instanceof StaticAttributes(InitialValue init,
                                                           boolean global)) {
-                if (init instanceof InitialConstant(int i)) {
+                if (init instanceof IntInit(int i)) {
                     tackyDefs.add(new StaticVariable(name, global, i));
                 } else if (init instanceof InitialValue.Tentative) {
                     tackyDefs.add(new StaticVariable(name, global, 0));
@@ -200,7 +200,7 @@ public class IrGen {
             case ConstInt(int i): {
                 return new IntIr(i);
             }
-            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse): {
+            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse, Type type): {
                 ValIr c = compileExp(condition, instructions);
                 LabelIr e2Label = newLabel("e2");
                 instructions.add(new JumpIfZero(c, e2Label.label()));
@@ -215,13 +215,13 @@ public class IrGen {
                 instructions.add(endLabel);
                 return result;
             }
-            case UnaryOp(UnaryOperator op, Exp exp): {
+            case UnaryOp(UnaryOperator op, Exp exp, Type type): {
                 ValIr src = compileExp(exp, instructions);
                 VarIr dst = makeTemporary("tmp.");
                 instructions.add(new UnaryIr(op, src, dst));
                 return dst;
             }
-            case BinaryOp(BinaryOperator op, Exp left, Exp right):
+            case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type):
                 switch (op) {
                     case AND -> {
                         VarIr result = makeTemporary("tmp.");
@@ -269,11 +269,11 @@ public class IrGen {
                         return dstName;
                     }
                 }
-            case Assignment(Identifier left, Exp right):
+            case Assignment(Identifier left, Exp right, Type type):
                 return assign(left.name(), right, instructions);
-            case Identifier(String name):
+            case Identifier(String name, Type type):
                 return new VarIr(name);
-            case FunctionCall(Identifier name, List<Exp> args): {
+            case FunctionCall(Identifier name, List<Exp> args, Type type): {
                 VarIr result = makeTemporary("tmp.");
                 ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {

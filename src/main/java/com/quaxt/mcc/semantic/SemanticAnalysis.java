@@ -1,7 +1,6 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
@@ -9,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
@@ -16,12 +16,12 @@ import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.INT;
+import static com.quaxt.mcc.semantic.Primitive.LONG;
 
 public class SemanticAnalysis {
 
 
     public static Program loopLabelProgram(Program program) {
-        ArrayList<Function> functions = new ArrayList<>();
         ArrayList<Declaration> decls = program.declarations();
         for (int i = 0; i < decls.size(); i++) {
             switch (decls.get(i)) {
@@ -109,32 +109,32 @@ public class SemanticAnalysis {
     }
 
     public static void typeCheckProgram(Program program) {
-        for (Function f : program.functions()) {
+        for (int i = 0; i < program.declarations().size(); i++) {
+            Declaration d = program.declarations().get(i);
 
-        }
-        for (Declaration d : program.declarations()) {
-            switch (d) {
-                case Function function -> {
-                    typeCheckFunctionDeclaration(function, false);
-                }
-                case VarDecl varDecl -> {
-                    typeCheckFileScopeVariableDeclaration(varDecl);
-                }
-            }
+            program.declarations().set(i, switch (d) {
+                case Function function ->
+                        typeCheckFunctionDeclaration(function, false);
+                case VarDecl varDecl ->
+                        typeCheckFileScopeVariableDeclaration(varDecl);
+            });
         }
     }
 
-    private static void typeCheckFileScopeVariableDeclaration(VarDecl decl) {
+    private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
         InitialValue initialValue
                 = switch (decl.init()) {
-            case ConstInt(int i) -> new InitialConstant(i);
+            case ConstInt(int i) ->
+                    convertConst(new IntInit(i), decl.varType());
+            case ConstLong(long l) -> new LongInit(l);
             case null ->
                     decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
             default -> throw new RuntimeException("Non constant initializer");
         };
         boolean global = decl.storageClass() != STATIC;
         if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry oldDecl) {
-            if (oldDecl.type() != INT) fail("function redeclared as variable");
+            if (oldDecl.type() != decl.varType())
+                fail("variable declared with inconsistent type");
             if (decl.storageClass() == EXTERN)
                 global = oldDecl.attrs().global();
             else if (oldDecl.attrs().global() != global)
@@ -143,197 +143,259 @@ public class SemanticAnalysis {
             if (oldDecl.attrs() instanceof StaticAttributes(
                     InitialValue oldInit, boolean _
             )) {
-                if (oldInit instanceof InitialConstant oldInitialConstant) {
-                    if (initialValue instanceof InitialConstant)
+                if (oldInit instanceof IntInit oldInitialConstant) {
+                    if (initialValue instanceof IntInit)
                         fail("Conflicting file scope variable definitions");
                     else initialValue = oldInitialConstant;
-                } else if (!(initialValue instanceof InitialConstant) && oldInit == TENTATIVE)
+                } else if (!(initialValue instanceof IntInit) && oldInit == TENTATIVE)
                     initialValue = TENTATIVE;
             }
         }
         StaticAttributes attrs = new StaticAttributes(initialValue, global);
-        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, attrs));
+        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), attrs));
+        return decl;
     }
 
-    private static void typeCheckFunctionDeclaration(Function decl, boolean blockScope) {
-        throw new Todo();
-//        if (blockScope && decl.storageClass() == STATIC) {
-//            fail("invalid storage class for block scope function declaration ‘" + decl.name() + "’");
-//        }
-//        boolean defined = decl.body() != null;
-//        boolean global = decl.storageClass() != STATIC;
-//        SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
-//        if (oldEntry instanceof SymbolTableEntry(
-//                Type oldType, IdentifierAttributes attrs
-//        )) {
-//            if (oldType instanceof FunType(ArrayList<Type> params, Type ret)) {
-//                boolean alreadyDefined = oldEntry.attrs().defined();
-//                if (alreadyDefined && defined)
-//                    fail("already defined: " + decl.name());
-//
-//                if (oldEntry.attrs().global() && decl.storageClass() == STATIC)
-//                    fail("Static function declaration follows non-static");
-//                global = oldEntry.attrs().global();
-//                if (decl.parameters().size() != params.size())
-//                    fail("Incompatible function declarations for " + decl.name());
-//            } else {
-//                fail("Incompatible function declarations for " + decl.name());
-//            }
-//        }
-//        FunAttributes attrs = new FunAttributes(defined || decl.body() != null, global);
-//        FunType funType = new FunType(decl.parameters().size());
-//        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
-//
-//        if (decl.body() != null) {
-//            for (Identifier param : decl.parameters()) {
-//                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
-//            }
-//            typeCheckBlock(decl.body());
-//        }
-
+    private static InitialValue convertConst(InitialValue init, Type type) {
+        return switch (init) {
+            case InitialValue.NoInitializer _,
+                 InitialValue.Tentative _ -> init;
+            case IntInit(int i) -> switch (type) {
+                case LONG -> new LongInit(i);
+                default -> init;
+            };
+            case LongInit(long l) -> switch (type) {
+                case INT -> new IntInit((int) l);
+                default -> init;
+            };
+        };
     }
 
-    private static void typeCheckBlock(Block body) {
-        for (BlockItem blockItem : body.blockItems()) {
-            typeCheckBlockItem(blockItem);
+    private static Function typeCheckFunctionDeclaration(Function decl, boolean blockScope) {
+        if (blockScope && decl.storageClass() == STATIC) {
+            fail("invalid storage class for block scope function declaration ‘" + decl.name() + "’");
         }
+        boolean defined = decl.body() != null;
+        boolean global = decl.storageClass() != STATIC;
+        SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
+        if (oldEntry instanceof SymbolTableEntry(
+                Type oldType, IdentifierAttributes attrs
+        )) {
+            if (oldType instanceof FunType(ArrayList<Type> params, Type ret)) {
+                boolean alreadyDefined = oldEntry.attrs().defined();
+                if (alreadyDefined && defined)
+                    fail("already defined: " + decl.name());
+
+                if (oldEntry.attrs().global() && decl.storageClass() == STATIC)
+                    fail("Static function declaration follows non-static");
+                global = oldEntry.attrs().global();
+                if (!decl.funType().equals(oldType))
+                    fail("Incompatible function declarations for " + decl.name());
+            } else {
+                fail("Incompatible function declarations for " + decl.name());
+            }
+        }
+        FunAttributes attrs = new FunAttributes(defined || decl.body() != null, global);
+        FunType funType = decl.funType();
+        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
+
+        Block typeCheckedBody;
+        if (decl.body() != null) {
+            for (Identifier param : decl.parameters()) {
+                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
+            }
+            typeCheckedBody = typeCheckBlock(decl.body(), decl);
+        } else typeCheckedBody = null;
+        return new Function(decl.name(),
+                decl.parameters(),
+                typeCheckedBody,
+                decl.funType(),
+                decl.storageClass());
     }
 
-    private static void typeCheckBlockItem(BlockItem blockItem) {
-        switch (blockItem) {
+    private static Block typeCheckBlock(Block body, Function enclosingFunction) {
+        for (int i = 0; i < body.blockItems().size(); i++) {
+            BlockItem blockItem = body.blockItems().get(i);
+            body.blockItems().set(i, typeCheckBlockItem(blockItem, enclosingFunction));
+        }
+        return body;
+    }
+
+    private static BlockItem typeCheckBlockItem(BlockItem blockItem, Function enclosingFunction) {
+        return switch (blockItem) {
             case VarDecl declaration ->
                     typeCheckLocalVariableDeclaration(declaration);
             case Exp exp -> typeCheckExpression(exp);
             case Function function -> {
                 if (function.body() != null)
-                    fail("nested function definition not allowed");
-                else typeCheckFunctionDeclaration(function, true);
+                    throw new RuntimeException("nested function definition not allowed");
+                else yield typeCheckFunctionDeclaration(function, true);
             }
-            case Block block -> typeCheckBlock(block);
-            case DoWhile(Statement whileBody, Exp condition, String _) -> {
-                typeCheckBlockItem(whileBody);
-                typeCheckExpression(condition);
-            }
+            case Block block -> typeCheckBlock(block, enclosingFunction);
+            case DoWhile(Statement whileBody, Exp condition, String label) ->
+                    new DoWhile((Statement) typeCheckBlockItem(whileBody, enclosingFunction),
+                            typeCheckExpression(condition), label);
             case For(
                     ForInit init, Exp condition, Exp post, Statement body,
-                    String _label
-            ) -> {
-                typeCheckExpression(condition);
-                typeCheckExpression(post);
-                typeCheckBlockItem(body);
-                switch (init) {
-                    case null -> {
-                    }
-                    case Exp exp -> {
-                        typeCheckExpression(exp);
-                    }
-                    case VarDecl varDecl -> {
+                    String label
+            ) -> new For(switch (init) {
+                case null -> null;
+                case Exp exp -> typeCheckExpression(exp);
+                case VarDecl varDecl ->
                         typeCheckLocalVariableDeclaration(varDecl);
-                    }
-                }
-            }
+            }, typeCheckExpression(condition),
+                    typeCheckExpression(post),
+                    (Statement) typeCheckBlockItem(body, enclosingFunction),
+                    label);
             case If(
                     Exp condition, Statement ifTrue,
                     Statement ifFalse
-            ) -> {
-                typeCheckExpression(condition);
-                typeCheckBlockItem(ifTrue);
-                typeCheckBlockItem(ifFalse);
-            }
+            ) -> new If(typeCheckExpression(condition),
+                    (Statement) typeCheckBlockItem(ifTrue, enclosingFunction),
+                    (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
 
             case Return(Exp exp) -> {
-                typeCheckExpression(exp);
+                Type returnType = enclosingFunction.funType().ret();
+                yield convertTo(typeCheckExpression(exp), returnType);
+
             }
             case While(Exp condition, Statement whileBody, String _) -> {
-                typeCheckBlockItem(whileBody);
-                typeCheckExpression(condition);
+                typeCheckBlockItem(whileBody, enclosingFunction);
+                yield typeCheckExpression(condition);
             }
-            case NullStatement _, Continue _, Break _ -> {
-            }
-            case null -> {
-            }
-        }
+            case NullStatement _, Continue _, Break _ -> blockItem;
+            case null -> null;
+
+        };
     }
 
-    private static void typeCheckLocalVariableDeclaration(VarDecl decl) {
+    private static VarDecl typeCheckLocalVariableDeclaration(VarDecl decl) {
         if (decl.storageClass() == EXTERN) {
             if (decl.init() != null)
                 fail("Initializer on local extern variable declaration");
             if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(
                     Type oldType, IdentifierAttributes oldAttrs
             )) {
-                if (oldType != INT) fail("function redeclared as variable");
+                if (oldType != decl.varType())
+                    fail("inconsistent variable redefenition");
 
             } else {
                 SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(NO_INITIALIZER, true)));
             }
+            return decl;
         } else if (decl.storageClass() == STATIC) {
             InitialValue initialValue;
             if (decl.init() instanceof ConstInt(int i))
-                initialValue = new InitialConstant(i);
+                initialValue = new IntInit(i);
             else if (decl.init() == null)
-                initialValue = new InitialConstant(0);
+                initialValue = new IntInit(0);
             else
                 throw new RuntimeException("Non-constant initializer on local static variable");
+            initialValue = convertConst(initialValue, decl.varType());
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(initialValue, false)));
+            return new VarDecl(decl.name(),
+                    switch (initialValue) {
+                        case IntInit(int i) -> new ConstInt(i);
+                        case LongInit(long l) -> new ConstLong(l);
+                        default -> null;
+                    }, decl.varType(), decl.storageClass());
         } else {
-            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
-            if (decl.init() != null) typeCheckExpression(decl.init());
+            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
+
+            return new VarDecl(decl.name(),
+                    (decl.init() != null) ? typeCheckExpression(decl.init()) : null, decl.varType(), decl.storageClass());
         }
     }
 
-    private static void typeCheckExpression(Exp exp) {
-        switch (exp) {
-            case null -> {
+    private static Exp convertTo(Exp e, Type t) {
+        if (e.type() == t) return e;
+        return new Cast(t, e);
+    }
+
+    private static Exp typeCheckExpression(Exp exp) {
+        return switch (exp) {
+            case Assignment(Exp left, Exp right, Type type) -> {
+                Exp typedLeft = typeCheckExpression(left);
+                Exp typedRight = typeCheckExpression(right);
+                Type leftType = typedLeft.type();
+                Exp convertedRight = convertTo(typedRight, leftType);
+                yield new Assignment(typedLeft, convertedRight, leftType);
             }
-            case Assignment(Exp left, Exp right) -> {
-                typeCheckExpression(left);
-                typeCheckExpression(right);
-            }
-            case BinaryOp(BinaryOperator _, Exp left, Exp right) -> {
-                typeCheckExpression(left);
-                typeCheckExpression(right);
-            }
-            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse) -> {
-                typeCheckExpression(condition);
-                typeCheckExpression(ifTrue);
-                typeCheckExpression(ifFalse);
+            case BinaryOp(BinaryOperator op, Exp e1, Exp e2, Type type) -> {
+                Exp typedE1 = typeCheckExpression(e1);
+                Exp typedE2 = typeCheckExpression(e2);
+                if (op == AND || op == OR) {
+                    yield new BinaryOp(op, typedE1, typedE2, INT);
+                }
+                Type t1 = typedE1.type();
+                Type t2 = typedE2.type();
+                Type commonType = getCommonType(t1, t2);
+                Exp convertedE1 = convertTo(typedE1, commonType);
+                Exp convertedE2 = convertTo(typedE2, commonType);
+
+                yield new BinaryOp(op, convertedE1, convertedE2, switch (op) {
+                    case SUB, ADD, IMUL, DIVIDE, REMAINDER -> commonType;
+                    default -> INT;
+                });
 
             }
-            case Constant constant -> {
+            case Cast(Type type, Exp inner) -> {
+                Exp typedInner = typeCheckExpression(inner);
+                yield new Cast(type, typedInner);
             }
-            case FunctionCall(Identifier name, List<Exp> args) -> {
-
-                if (SYMBOL_TABLE.get(name.name()) instanceof SymbolTableEntry(
-                        Type type, IdentifierAttributes _
-                )) {
-                    if (type instanceof FunType(ArrayList<Type> params, Type ret)) {
-                        if (params.size() != args.size()) {
-                            fail("Attempt to call " + params.size() + "-arity function " + name.name() + " with " + args.size() + " args");
+            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
+                             Type type) -> {
+                Exp typedCondition = typeCheckExpression(condition);
+                Exp typedIfTrue = typeCheckExpression(ifTrue);
+                Exp typedIfFalse = typeCheckExpression(ifFalse);
+                Type t1 = typedIfTrue.type();
+                Type t2 = typedIfTrue.type();
+                Type commonType = getCommonType(t1, t2);
+                yield new Conditional(typedCondition,
+                        convertTo(typedIfTrue, commonType),
+                        convertTo(typedIfFalse, commonType),
+                        commonType);
+            }
+            case Constant constant -> constant;
+            case FunctionCall(Identifier name, List<Exp> args, Type type) -> {
+                Type fType = SYMBOL_TABLE.get(name.name()).type();
+                yield switch (fType) {
+                    case FunType(List<Type> params, Type ret) -> {
+                        if (params.size() != args.size())
+                            fail("Function called with wrong number of arguments");
+                        ArrayList<Exp> convertedArgs = new ArrayList<>();
+                        for (int i = 0; i < params.size(); i++) {
+                            Exp arg = args.get(i);
+                            Type paramType = params.get(i);
+                            Exp typedArg = typeCheckExpression(arg);
+                            convertedArgs.add(convertTo(typedArg, paramType));
                         }
-                    } else {
-                        fail("Attempt to call " + name + " which is of type " + type + ", not function");
+                        yield new FunctionCall(name, convertedArgs, ret);
                     }
-                }
-                for (Exp a : args) {
-                    typeCheckExpression(a);
-                }
+                    default ->
+                            fail("variable " + name.name() + " used as function");
+                };
 
             }
-            case Identifier identifier -> {
+            case Identifier(String name, Type type) -> {
+                Type t = SYMBOL_TABLE.get(name).type();
+                if (t instanceof FunType)
+                    fail("Function " + name + " used as a variable");
+                yield new Identifier(name, t);
+            }
+            case UnaryOp(UnaryOperator op, Exp inner, Type type) -> {
+                Exp typedInner = typeCheckExpression(inner);
+                yield switch (op) {
+                    case NOT -> new UnaryOp(op, typedInner, INT);
+                    default -> new UnaryOp(op, typedInner, typedInner.type());
+                };
 
-                if (SYMBOL_TABLE.get(identifier.name()) instanceof SymbolTableEntry(
-                        Type type, IdentifierAttributes _
-                ) && type instanceof FunType) {
-                    fail("Function " + identifier.name() + " used as varaible");
-                }
             }
-            case UnaryOp(UnaryOperator _op, Exp e) -> {
-                typeCheckExpression(e);
-            }
-            default ->
-                    throw new IllegalStateException("Unexpected value: " + exp);
-        }
+        };
+    }
+
+    private static Type getCommonType(Type t1, Type t2) {
+        return t1 == t2 ? t1 : LONG;
     }
 
 
@@ -400,7 +462,7 @@ public class SemanticAnalysis {
             }
             String uniqueName = Mcc.makeTemporary(d.name() + ".");
             identifierMap.put(d.name(), new Entry(uniqueName, true, false));
-            newParams.add(new Identifier(uniqueName));
+            newParams.add(new Identifier(uniqueName, d.type()));
         }
         return newParams;
     }
@@ -485,21 +547,24 @@ public class SemanticAnalysis {
     private static Exp resolveExp(Exp exp, Map<String, Entry> identifierMap) {
         return switch (exp) {
             case null -> null;
-            case Assignment(Exp left, Exp right) ->
-                    left instanceof Identifier v ? new Assignment(resolveExp(v, identifierMap), resolveExp(right, identifierMap)) : fail("Invalid lvalue");
-            case BinaryOp(BinaryOperator op, Exp left, Exp right) ->
-                    new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap));
+            case Assignment(Exp left, Exp right, Type type) ->
+                    left instanceof Identifier v ? new Assignment(resolveExp(v, identifierMap), resolveExp(right, identifierMap), type) : fail("Invalid lvalue");
+            case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
+                    new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap), type);
             case Constant constant -> constant;
-            case UnaryOp(UnaryOperator op, Exp arg) ->
-                    new UnaryOp(op, resolveExp(arg, identifierMap));
-            case Identifier(String name) ->
-                    identifierMap.get(name) instanceof Entry e ? new Identifier(e.name()) : fail("Undeclared variable:" + exp);
-            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse) ->
-                    new Conditional(resolveExp(condition, identifierMap), resolveExp(ifTrue, identifierMap), resolveExp(ifFalse, identifierMap));
-            case FunctionCall(Identifier name, List<Exp> args) ->
+            case UnaryOp(UnaryOperator op, Exp arg, Type type) ->
+                    new UnaryOp(op, resolveExp(arg, identifierMap), type);
+            case Identifier(String name, Type type) ->
+                    identifierMap.get(name) instanceof Entry e ? new Identifier(e.name(), type) : fail("Undeclared variable:" + exp);
+            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
+                             Type type) ->
+                    new Conditional(resolveExp(condition, identifierMap), resolveExp(ifTrue, identifierMap), resolveExp(ifFalse, identifierMap), type);
+            case FunctionCall(Identifier name, List<Exp> args, Type type) ->
                     identifierMap.get(name.name()) instanceof Entry newFunctionName
-                            ? new FunctionCall(new Identifier(newFunctionName.name()), resolveArgs(identifierMap, args))
+                            ? new FunctionCall(new Identifier(newFunctionName.name(), type), resolveArgs(identifierMap, args), type)
                             : fail("Undeclared function:" + name);
+            case Cast(Type type, Exp e) ->
+                    new Cast(type, resolveExp(e, identifierMap));
             default ->
                     throw new IllegalStateException("Unexpected value: " + exp);
         };

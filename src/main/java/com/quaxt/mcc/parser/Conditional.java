@@ -1,4 +1,6 @@
 package com.quaxt.mcc.parser;
 
-public record Conditional(Exp condition, Exp ifTrue, Exp ifFalse) implements Exp {
+import com.quaxt.mcc.semantic.Type;
+
+public record Conditional(Exp condition, Exp ifTrue, Exp ifFalse, Type type) implements Exp {
 }

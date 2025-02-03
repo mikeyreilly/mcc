@@ -1,4 +1,6 @@
 package com.quaxt.mcc.parser;
 
-public record Identifier(String name) implements Exp {
+import com.quaxt.mcc.semantic.Type;
+
+public record Identifier(String name, Type type) implements Exp {
 }
