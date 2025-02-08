@@ -10,9 +10,13 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.AND;
 import static com.quaxt.mcc.ArithmeticOperator.OR;
+import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
+import static com.quaxt.mcc.semantic.Primitive.INT;
+import static com.quaxt.mcc.semantic.Primitive.LONG;
+
 import com.quaxt.mcc.semantic.Type;
 
 public class IrGen {
@@ -32,10 +36,10 @@ public class IrGen {
             SymbolTableEntry value = e.getValue();
             if (value.attrs() instanceof StaticAttributes(InitialValue init,
                                                           boolean global)) {
-                if (init instanceof IntInit(int i)) {
-                    tackyDefs.add(new StaticVariable(name, global, i));
+                if (init instanceof StaticInit staticInit) {
+                    tackyDefs.add(new StaticVariable(name, global, value.type(), staticInit));
                 } else if (init instanceof InitialValue.Tentative) {
-                    tackyDefs.add(new StaticVariable(name, global, 0));
+                    tackyDefs.add(new StaticVariable(name, global, value.type(), value.type().zero()));
                 }
             }
         }
@@ -45,7 +49,7 @@ public class IrGen {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
         FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions);
-        ReturnInstructionIr ret = new ReturnInstructionIr(new IntIr(0));
+        ReturnInstructionIr ret = new ReturnInstructionIr(new ConstInt(0));
         instructions.add(ret);
         return f;
     }
@@ -59,7 +63,8 @@ public class IrGen {
             case Function function -> {
                 if (function.body() != null) compileFunction(function);
             }
-            case VarDecl(String name, Exp init, Type varType, StorageClass storageClass) -> {
+            case VarDecl(String name, Exp init, Type varType,
+                         StorageClass storageClass) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
                     assign(name, init, instructions);
@@ -197,15 +202,17 @@ public class IrGen {
         switch (expr) {
             case null:
                 return null;
-            case ConstInt(int i): {
-                return new IntIr(i);
-            }
-            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse, Type type): {
+            case ConstInt c:
+                return c;
+            case ConstLong c:
+                return c;
+            case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
+                             Type type): {
                 ValIr c = compileExp(condition, instructions);
                 LabelIr e2Label = newLabel("e2");
                 instructions.add(new JumpIfZero(c, e2Label.label()));
                 ValIr e1 = compileExp(ifTrue, instructions);
-                VarIr result = makeTemporary("result");
+                VarIr result = makeTemporary("result", type);
                 instructions.add(new Copy(e1, result));
                 LabelIr endLabel = newLabel("end");
                 instructions.add(new Jump(endLabel.label()));
@@ -217,14 +224,14 @@ public class IrGen {
             }
             case UnaryOp(UnaryOperator op, Exp exp, Type type): {
                 ValIr src = compileExp(exp, instructions);
-                VarIr dst = makeTemporary("tmp.");
+                VarIr dst = makeTemporary("tmp.", type);
                 instructions.add(new UnaryIr(op, src, dst));
                 return dst;
             }
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type):
                 switch (op) {
                     case AND -> {
-                        VarIr result = makeTemporary("tmp.");
+                        VarIr result = makeTemporary("tmp.", INT);
 
                         LabelIr falseLabel = newLabel("andFalse");
                         LabelIr endLabel = newLabel("andEnd");
@@ -233,17 +240,17 @@ public class IrGen {
 
                         ValIr v2 = compileExp(right, instructions);
                         instructions.add(new JumpIfZero(v2, falseLabel.label()));
-                        instructions.add(new Copy(new IntIr(1), result));
+                        instructions.add(new Copy(new ConstInt(1), result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(falseLabel);
-                        instructions.add(new Copy(new IntIr(0), result));
+                        instructions.add(new Copy(new ConstInt(0), result));
                         instructions.add(endLabel);
 
                         return result;
                     }
                     case OR -> {
-                        VarIr result = makeTemporary("tmp.");
+                        VarIr result = makeTemporary("tmp.", INT);
 
                         LabelIr trueLabel = newLabel("true");
                         LabelIr endLabel = newLabel("end");
@@ -252,11 +259,11 @@ public class IrGen {
 
                         ValIr v2 = compileExp(right, instructions);
                         instructions.add(new JumpIfNotZero(v2, trueLabel.label()));
-                        instructions.add(new Copy(new IntIr(0), result));
+                        instructions.add(new Copy(new ConstInt(0), result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(trueLabel);
-                        instructions.add(new Copy(new IntIr(1), result));
+                        instructions.add(new Copy(new ConstInt(1), result));
                         instructions.add(endLabel);
 
                         return result;
@@ -264,7 +271,7 @@ public class IrGen {
                     default -> {
                         ValIr v1 = compileExp(left, instructions);
                         ValIr v2 = compileExp(right, instructions);
-                        VarIr dstName = makeTemporary("tmp.");
+                        VarIr dstName = makeTemporary("tmp.", expr.type());
                         instructions.add(new BinaryIr(op, v1, v2, dstName));
                         return dstName;
                     }
@@ -274,7 +281,7 @@ public class IrGen {
             case Identifier(String name, Type type):
                 return new VarIr(name);
             case FunctionCall(Identifier name, List<Exp> args, Type type): {
-                VarIr result = makeTemporary("tmp.");
+                VarIr result = makeTemporary("tmp.", type);
                 ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {
                     argVals.add(compileExp(e, instructions));
@@ -282,8 +289,20 @@ public class IrGen {
                 instructions.add(new FunCall(name.name(), argVals, result));
                 return result;
             }
+            case Cast(Type t, Exp inner): {
+                ValIr result = compileExp(inner, instructions);
+                if (t == inner.type()) {
+                    return result;
+                }
+                VarIr dst = makeTemporary("dst", t);
+                if (t == LONG) instructions.add(new SignExtendIr(result, dst));
+                else instructions.add(new TruncateIr(result, dst));
+                return result;
+            }
+
             default:
-                throw new IllegalStateException("Unexpected name: " + expr);
+                throw new IllegalStateException("Unexpected exp: " + expr);
+
         }
     }
 
@@ -302,8 +321,10 @@ public class IrGen {
         return new LabelIr(".L" + prefix + labelCount.getAndIncrement());
     }
 
-    private static VarIr makeTemporary(String prefix) {
-        return new VarIr(Mcc.makeTemporary(prefix));
+    private static VarIr makeTemporary(String prefix, Type t) {
+        String name = Mcc.makeTemporary(prefix);
+        SYMBOL_TABLE.put(name, new SymbolTableEntry(t, LOCAL_ATTR));
+        return new VarIr(name);
     }
 
 }

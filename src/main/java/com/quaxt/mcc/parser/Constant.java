@@ -1,6 +1,6 @@
 package com.quaxt.mcc.parser;
-
-sealed public interface Constant extends Exp permits ConstInt, ConstLong {
+import com.quaxt.mcc.tacky.ValIr;
+sealed public interface Constant extends Exp, ValIr permits ConstInt, ConstLong {
 }
 
 

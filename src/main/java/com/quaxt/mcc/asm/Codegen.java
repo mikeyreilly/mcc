@@ -1,6 +1,9 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.parser.ConstInt;
+import com.quaxt.mcc.parser.ConstLong;
+import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Identifier;
 import com.quaxt.mcc.tacky.*;
 
@@ -20,205 +23,207 @@ import static com.quaxt.mcc.asm.Reg.*;
 public class Codegen {
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
-        ArrayList<TopLevelAsm> l = new ArrayList<>();
-        for (TopLevel t : programIr.topLevels()) {
-            switch (t) {
-                case FunctionIr f -> l.add(generateAssembly(f));
-                case StaticVariable(String name, boolean global, int init) -> {
-                    l.add(new StaticVariableAsm(name, global, init));
-                }
-            }
-        }
-
-        return new ProgramAsm(l);
+        throw new Todo();
+//        ArrayList<TopLevelAsm> l = new ArrayList<>();
+//        for (TopLevel t : programIr.topLevels()) {
+//            switch (t) {
+//                case FunctionIr f -> l.add(generateAssembly(f));
+//                case StaticVariable(String name, boolean global, int init) -> {
+//                    l.add(new StaticVariableAsm(name, global, init));
+//                }
+//            }
+//        }
+//
+//        return new ProgramAsm(l);
     }
 
     public static FunctionAsm generateAssembly(FunctionIr functionIr) {
-        List<Instruction> instructionAsms = new ArrayList<>();
-        List<Identifier> type = functionIr.type();
-        for (int i = 0; i < type.size() && i < 6; i++) {
-            Identifier param = type.get(i);
-            instructionAsms.add(new Mov(registers[i], new Pseudo(param.name())));
-        }
-        for (int i = 6; i < type.size(); i++) {
-            Identifier param = type.get(i);
-            instructionAsms.add(new Mov(new Stack(16 + (i - 6) * 8), new Pseudo(param.name())));
-        }
-
-        for (InstructionIr inst : functionIr.instructions()) {
-            switch (inst) {
-                case ReturnInstructionIr(ValIr val) -> {
-                    Operand src1 = toOperand(val);
-                    instructionAsms.add(new Mov(src1, AX));
-                    instructionAsms.add(RET);
-                }
-                case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
-                    Operand dst1 = toOperand(dstIr);
-                    Operand src1 = toOperand(srcIr);
-                    if (op1 == UnaryOperator.NOT) {
-                        instructionAsms.add(new Cmp(new Imm(0), src1));
-                        instructionAsms.add(new Mov(new Imm(0), dst1));
-                        instructionAsms.add(new SetCC(EQUALS, dst1));
-
-                    } else {
-
-                        instructionAsms.add(new Mov(src1, dst1));
-                        instructionAsms.add(new Unary(op1, dst1));
-                    }
-                }
-                case BinaryIr(
-                        ArithmeticOperator op1, ValIr v1, ValIr v2,
-                        VarIr dstName
-                ) -> {
-                    switch (op1) {
-                        case ADD, SUB, IMUL -> {
-                            instructionAsms.add(new Mov(toOperand(v1), toOperand(dstName)));
-                            instructionAsms.add(new Binary(op1, toOperand(v2), toOperand(dstName)));
-                        }
-                        case DIVIDE -> {
-                            instructionAsms.add(new Mov(toOperand(v1), AX));
-                            instructionAsms.add(CDQ);
-                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(AX, toOperand(dstName)));
-
-                        }
-                        case REMAINDER -> {
-                            instructionAsms.add(new Mov(toOperand(v1), AX));
-                            instructionAsms.add(CDQ);
-                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
-                            instructionAsms.add(new Mov(DX, toOperand(dstName)));
-                        }
-
-
-                        default ->
-                                throw new IllegalStateException("Unexpected value: " + op1);
-                    }
-
-                }
-                case BinaryIr(
-                        CmpOperator op1, ValIr v1, ValIr v2, VarIr dstName
-                ) -> {
-
-                    instructionAsms.add(new Cmp(toOperand(v2), toOperand(v1)));
-                    instructionAsms.add(new Mov(new Imm(0), toOperand(dstName)));
-                    instructionAsms.add(new SetCC(op1, toOperand(dstName)));
-                }
-                case Copy(ValIr val, VarIr dst1) ->
-                        instructionAsms.add(new Mov(toOperand(val), toOperand(dst1)));
-                case Jump jump -> instructionAsms.add(jump);
-                case JumpIfNotZero(ValIr v, String label) -> {
-                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(NOT_EQUALS, label));
-                }
-                case JumpIfZero(ValIr v, String label) -> {
-                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(EQUALS, label));
-                }
-                case LabelIr labelIr -> instructionAsms.add(labelIr);
-                case FunCall funCall -> {
-                    codegenFunCall(funCall, instructionAsms);
-                }
-            }
-        }
-        FunctionAsm functionAsm = new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);
-        // Replace Pseudo Registers
-        List<Instruction> instructions = functionAsm.instructions();
-        AtomicInteger offset = new AtomicInteger(-8);
-        Map<String, Integer> varTable = new HashMap<>();
-        for (int i = 0; i < instructions.size(); i++) {
-            Instruction oldInst = instructions.get(i);
-            Instruction newInst = switch (oldInst) {
-                case AllocateStack _, DeallocateStack _, Nullary _, Jump _,
-                     JmpCC _,
-                     LabelIr _, Call _ -> oldInst;
-                case Mov(Operand src, Operand dst) ->
-                        new Mov(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
-                case Unary(UnaryOperator op, Operand operand) ->
-                        new Unary(op, dePseudo(operand, varTable, offset));
-                case Binary(ArithmeticOperator op, Operand src, Operand dst) ->
-                        new Binary(op, dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
-
-
-                case Cmp(Operand subtrahend, Operand minuend) ->
-                        new Cmp(dePseudo(subtrahend, varTable, offset),
-                                dePseudo(minuend, varTable, offset));
-                case SetCC(
-                        CmpOperator cmpOperator,
-                        Operand operand
-                ) -> new SetCC(cmpOperator,
-                        dePseudo(operand, varTable, offset));
-                case Push(Operand operand) ->
-                        new Push(dePseudo(operand, varTable, offset));
-            };
-            instructions.set(i, newInst);
-        }
-        // Fix up instructions
-        int stackSize = -offset.get();
-        // round up to next multiple of 16 (makes it easier to maintain
-        // alignment during function calls
-        int remainder = stackSize % 16;
-        if (remainder != 0) {
-            stackSize += (16 - remainder);
-        }
-        instructions.addFirst(new AllocateStack(stackSize));
-        // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
-        for (int i = instructions.size() - 1; i >= 0; i--) {
-            Instruction oldInst = instructions.get(i);
-
-            switch (oldInst) {
-                case Unary(UnaryOperator op, Operand operand) -> {
-                    if (op == UnaryOperator.IDIV && operand instanceof Imm) {
-                        instructions.set(i, new Mov(operand, R10));
-                        instructions.add(i + 1, new Unary(op, R10));
-                    }
-                }
-                case Mov(Operand src, Operand dst) -> {
-                    if (isRam(src) && isRam(dst)) {
-                        instructions.set(i, new Mov(src, R10));
-                        instructions.add(i + 1, new Mov(R10, dst));
-                    }
-                }
-                case Binary(
-                        ArithmeticOperator op, Operand src, Operand dst
-                ) -> {
-                    switch (op) {
-                        case ADD, SUB -> {
-                            if (isRam(src) && isRam(dst)) {
-                                instructions.set(i, new Mov(src, R10));
-                                instructions.add(i + 1, new Binary(op, R10, dst));
-                            }
-                        }
-                        case IMUL -> {
-                            if (isRam(dst)) {
-                                instructions.set(i, new Mov(dst, R11));
-                                instructions.add(i + 1, new Binary(op, src, R11));
-                                instructions.add(i + 2, new Mov(R11, dst));
-                            }
-                        }
-
-                    }
-
-                }
-
-                case Cmp(Operand src, Operand dst) -> {
-                    if (isRam(src) && isRam(dst)) {
-                        instructions.set(i, new Mov(src, R10));
-                        instructions.add(i + 1, new Cmp(R10, dst));
-                    } else {
-                        if (dst instanceof Imm) {
-                            instructions.set(i, new Mov(dst, R11));
-                            instructions.add(i + 1, new Cmp(src, R11));
-                        }
-                    }
-
-                }
-                default -> {
-                }
-            }
-
-        }
-
-        return functionAsm;
+        throw new Todo();
+//        List<Instruction> instructionAsms = new ArrayList<>();
+//        List<Identifier> type = functionIr.type();
+//        for (int i = 0; i < type.size() && i < 6; i++) {
+//            Identifier param = type.get(i);
+//            instructionAsms.add(new Mov(registers[i], new Pseudo(param.name())));
+//        }
+//        for (int i = 6; i < type.size(); i++) {
+//            Identifier param = type.get(i);
+//            instructionAsms.add(new Mov(new Stack(16 + (i - 6) * 8), new Pseudo(param.name())));
+//        }
+//
+//        for (InstructionIr inst : functionIr.instructions()) {
+//            switch (inst) {
+//                case ReturnInstructionIr(ValIr val) -> {
+//                    Operand src1 = toOperand(val);
+//                    instructionAsms.add(new Mov(src1, AX));
+//                    instructionAsms.add(RET);
+//                }
+//                case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
+//                    Operand dst1 = toOperand(dstIr);
+//                    Operand src1 = toOperand(srcIr);
+//                    if (op1 == UnaryOperator.NOT) {
+//                        instructionAsms.add(new Cmp(new Imm(0), src1));
+//                        instructionAsms.add(new Mov(new Imm(0), dst1));
+//                        instructionAsms.add(new SetCC(EQUALS, dst1));
+//
+//                    } else {
+//
+//                        instructionAsms.add(new Mov(src1, dst1));
+//                        instructionAsms.add(new Unary(op1, dst1));
+//                    }
+//                }
+//                case BinaryIr(
+//                        ArithmeticOperator op1, ValIr v1, ValIr v2,
+//                        VarIr dstName
+//                ) -> {
+//                    switch (op1) {
+//                        case ADD, SUB, IMUL -> {
+//                            instructionAsms.add(new Mov(toOperand(v1), toOperand(dstName)));
+//                            instructionAsms.add(new Binary(op1, toOperand(v2), toOperand(dstName)));
+//                        }
+//                        case DIVIDE -> {
+//                            instructionAsms.add(new Mov(toOperand(v1), AX));
+//                            instructionAsms.add(CDQ);
+//                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
+//                            instructionAsms.add(new Mov(AX, toOperand(dstName)));
+//
+//                        }
+//                        case REMAINDER -> {
+//                            instructionAsms.add(new Mov(toOperand(v1), AX));
+//                            instructionAsms.add(CDQ);
+//                            instructionAsms.add(new Unary(UnaryOperator.IDIV, toOperand(v2)));
+//                            instructionAsms.add(new Mov(DX, toOperand(dstName)));
+//                        }
+//
+//
+//                        default ->
+//                                throw new IllegalStateException("Unexpected value: " + op1);
+//                    }
+//
+//                }
+//                case BinaryIr(
+//                        CmpOperator op1, ValIr v1, ValIr v2, VarIr dstName
+//                ) -> {
+//
+//                    instructionAsms.add(new Cmp(toOperand(v2), toOperand(v1)));
+//                    instructionAsms.add(new Mov(new Imm(0), toOperand(dstName)));
+//                    instructionAsms.add(new SetCC(op1, toOperand(dstName)));
+//                }
+//                case Copy(ValIr val, VarIr dst1) ->
+//                        instructionAsms.add(new Mov(toOperand(val), toOperand(dst1)));
+//                case Jump jump -> instructionAsms.add(jump);
+//                case JumpIfNotZero(ValIr v, String label) -> {
+//                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
+//                    instructionAsms.add(new JmpCC(NOT_EQUALS, label));
+//                }
+//                case JumpIfZero(ValIr v, String label) -> {
+//                    instructionAsms.add(new Cmp(new Imm(0), toOperand(v)));
+//                    instructionAsms.add(new JmpCC(EQUALS, label));
+//                }
+//                case LabelIr labelIr -> instructionAsms.add(labelIr);
+//                case FunCall funCall -> {
+//                    codegenFunCall(funCall, instructionAsms);
+//                }
+//            }
+//        }
+//        FunctionAsm functionAsm = new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);
+//        // Replace Pseudo Registers
+//        List<Instruction> instructions = functionAsm.instructions();
+//        AtomicInteger offset = new AtomicInteger(-8);
+//        Map<String, Integer> varTable = new HashMap<>();
+//        for (int i = 0; i < instructions.size(); i++) {
+//            Instruction oldInst = instructions.get(i);
+//            Instruction newInst = switch (oldInst) {
+//                case AllocateStack _, DeallocateStack _, Nullary _, Jump _,
+//                     JmpCC _,
+//                     LabelIr _, Call _ -> oldInst;
+//                case Mov(Operand src, Operand dst) ->
+//                        new Mov(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
+//                case Unary(UnaryOperator op, Operand operand) ->
+//                        new Unary(op, dePseudo(operand, varTable, offset));
+//                case Binary(ArithmeticOperator op, Operand src, Operand dst) ->
+//                        new Binary(op, dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
+//
+//
+//                case Cmp(Operand subtrahend, Operand minuend) ->
+//                        new Cmp(dePseudo(subtrahend, varTable, offset),
+//                                dePseudo(minuend, varTable, offset));
+//                case SetCC(
+//                        CmpOperator cmpOperator,
+//                        Operand operand
+//                ) -> new SetCC(cmpOperator,
+//                        dePseudo(operand, varTable, offset));
+//                case Push(Operand operand) ->
+//                        new Push(dePseudo(operand, varTable, offset));
+//            };
+//            instructions.set(i, newInst);
+//        }
+//        // Fix up instructions
+//        int stackSize = -offset.get();
+//        // round up to next multiple of 16 (makes it easier to maintain
+//        // alignment during function calls
+//        int remainder = stackSize % 16;
+//        if (remainder != 0) {
+//            stackSize += (16 - remainder);
+//        }
+//        instructions.addFirst(new AllocateStack(stackSize));
+//        // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
+//        for (int i = instructions.size() - 1; i >= 0; i--) {
+//            Instruction oldInst = instructions.get(i);
+//
+//            switch (oldInst) {
+//                case Unary(UnaryOperator op, Operand operand) -> {
+//                    if (op == UnaryOperator.IDIV && operand instanceof Imm) {
+//                        instructions.set(i, new Mov(operand, R10));
+//                        instructions.add(i + 1, new Unary(op, R10));
+//                    }
+//                }
+//                case Mov(Operand src, Operand dst) -> {
+//                    if (isRam(src) && isRam(dst)) {
+//                        instructions.set(i, new Mov(src, R10));
+//                        instructions.add(i + 1, new Mov(R10, dst));
+//                    }
+//                }
+//                case Binary(
+//                        ArithmeticOperator op, Operand src, Operand dst
+//                ) -> {
+//                    switch (op) {
+//                        case ADD, SUB -> {
+//                            if (isRam(src) && isRam(dst)) {
+//                                instructions.set(i, new Mov(src, R10));
+//                                instructions.add(i + 1, new Binary(op, R10, dst));
+//                            }
+//                        }
+//                        case IMUL -> {
+//                            if (isRam(dst)) {
+//                                instructions.set(i, new Mov(dst, R11));
+//                                instructions.add(i + 1, new Binary(op, src, R11));
+//                                instructions.add(i + 2, new Mov(R11, dst));
+//                            }
+//                        }
+//
+//                    }
+//
+//                }
+//
+//                case Cmp(Operand src, Operand dst) -> {
+//                    if (isRam(src) && isRam(dst)) {
+//                        instructions.set(i, new Mov(src, R10));
+//                        instructions.add(i + 1, new Cmp(R10, dst));
+//                    } else {
+//                        if (dst instanceof Imm) {
+//                            instructions.set(i, new Mov(dst, R11));
+//                            instructions.add(i + 1, new Cmp(src, R11));
+//                        }
+//                    }
+//
+//                }
+//                default -> {
+//                }
+//            }
+//
+//        }
+//
+//        return functionAsm;
     }
 
     private static boolean isRam(Operand src) {
@@ -266,8 +271,9 @@ public class Codegen {
 
     private static Operand toOperand(ValIr val) {
         return switch (val) {
-            case IntIr(int i) -> new Imm(i);
+            case ConstInt(int i) -> new Imm(i);
             case VarIr(String identifier) -> new Pseudo(identifier);
+            case ConstLong constLong -> throw new Todo();
         };
     }
 
