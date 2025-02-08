@@ -178,11 +178,12 @@ public class SemanticAnalysis {
         boolean defined = decl.body() != null;
         boolean global = decl.storageClass() != STATIC;
         SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
+        boolean alreadyDefined = false;
         if (oldEntry instanceof SymbolTableEntry(
                 Type oldType, IdentifierAttributes attrs
         )) {
-            if (oldType instanceof FunType(ArrayList<Type> params, Type ret)) {
-                boolean alreadyDefined = oldEntry.attrs().defined();
+            if (oldType instanceof FunType(List<Type> params, Type ret)) {
+                alreadyDefined = oldEntry.attrs().defined();
                 if (alreadyDefined && defined)
                     fail("already defined: " + decl.name());
 
@@ -195,7 +196,7 @@ public class SemanticAnalysis {
                 fail("Incompatible function declarations for " + decl.name());
             }
         }
-        FunAttributes attrs = new FunAttributes(defined || decl.body() != null, global);
+        FunAttributes attrs = new FunAttributes(alreadyDefined || decl.body() != null, global);
         FunType funType = decl.funType();
         SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
 
@@ -314,6 +315,7 @@ public class SemanticAnalysis {
 
     private static Exp typeCheckExpression(Exp exp) {
         return switch (exp) {
+            case null -> null;
             case Assignment(Exp left, Exp right, Type type) -> {
                 Exp typedLeft = typeCheckExpression(left);
                 Exp typedRight = typeCheckExpression(right);
