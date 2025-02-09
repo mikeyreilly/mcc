@@ -207,6 +207,11 @@ public class SemanticAnalysis {
             }
             typeCheckedBody = typeCheckBlock(decl.body(), decl);
         } else typeCheckedBody = null;
+        List<Identifier> declParams = decl.parameters();
+        for (int i = 0; i < declParams.size(); i++) {
+            Identifier oldParam = declParams.get(i);
+            declParams.set(i, new Identifier(oldParam.name(), decl.funType().params().get(i)));
+        }
         return new Function(decl.name(),
                 decl.parameters(),
                 typeCheckedBody,

@@ -5,7 +5,7 @@ import com.quaxt.mcc.tacky.JumpIfNotZero;
 import com.quaxt.mcc.tacky.JumpIfZero;
 import com.quaxt.mcc.tacky.LabelIr;
 
-public sealed interface Instruction permits AllocateStack, Binary, Call, Cmp, DeallocateStack, JmpCC, Mov, Nullary, Push, SetCC, Unary, Jump, LabelIr {
+public sealed interface Instruction permits  Binary, Call, Cdq, Cmp, JmpCC, Mov, Movsx, Nullary, Push, SetCC, Unary, Jump, LabelIr {
 
 
 }

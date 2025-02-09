@@ -3,7 +3,7 @@ package com.quaxt.mcc.asm;
 import java.util.Locale;
 
 public enum Nullary implements Instruction {
-    CDQ,RET;
+    RET;
 
     final String code;
 

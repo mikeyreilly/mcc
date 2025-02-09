@@ -1,4 +1,6 @@
 package com.quaxt.mcc.asm;
 
-public record StaticVariableAsm(String name, boolean global, int init) implements TopLevelAsm {
+import com.quaxt.mcc.StaticInit;
+
+public record StaticVariableAsm(String name, boolean global, int alignment, StaticInit init) implements TopLevelAsm {
 }
