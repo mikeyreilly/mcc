@@ -139,8 +139,8 @@ public class Parser {
 
     private static Type tokenToType(Token t) {
         return switch (t) {
-            case INT -> com.quaxt.mcc.semantic.Primitive.LONG;
-            case LONG -> com.quaxt.mcc.semantic.Primitive.INT;
+            case INT -> com.quaxt.mcc.semantic.Primitive.INT;
+            case LONG -> com.quaxt.mcc.semantic.Primitive.LONG;
             default -> throw new RuntimeException("invalid type specifier");
         };
     }
@@ -311,7 +311,7 @@ public class Parser {
                 if (type == NUMERIC)
                     yield parseConst(value, true);
                 if (type == LONG_LITERAL) {
-                    yield parseConst(value.substring(0, value.length() - 1), true);
+                    yield parseConst(value.substring(0, value.length() - 1), false);
                 }
                 Identifier id = new Identifier(value, null);
                 if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {

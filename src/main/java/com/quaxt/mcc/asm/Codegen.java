@@ -112,6 +112,7 @@ public class Codegen {
                         VarIr dstName
                 ) -> {
                     TypeAsm typeAsm = valToAsmType(v1);
+                    assert (typeAsm == valToAsmType(v2));
                     switch (op1) {
                         case ADD, SUB, IMUL -> {
                             instructionAsms.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
@@ -141,12 +142,14 @@ public class Codegen {
                         CmpOperator op1, ValIr v1, ValIr v2, VarIr dstName
                 ) -> {
                     TypeAsm typeAsm = valToAsmType(v1);
+                    assert (typeAsm == valToAsmType(v2));
                     instructionAsms.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
-                    instructionAsms.add(new Mov(typeAsm, new Imm(0), toOperand(dstName)));
+                    instructionAsms.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
                     instructionAsms.add(new SetCC(op1, toOperand(dstName)));
                 }
                 case Copy(ValIr val, VarIr dst1) -> {
                     TypeAsm typeAsm = valToAsmType(val);
+                    assert (typeAsm == valToAsmType(dst1));
                     instructionAsms.add(new Mov(typeAsm, toOperand(val), toOperand(dst1)));
                 }
                 case Jump jump -> instructionAsms.add(jump);
@@ -243,6 +246,12 @@ public class Codegen {
                         instructions.add(i + 1, new Mov(typeAsm, R10, dst));
                     }
                 }
+                case Push(Operand operand) -> {
+                    if (operand instanceof Imm imm && imm.isAwkward()) {
+                        instructions.set(i, new Mov(QUADWORD, operand, R10));
+                        instructions.add(i + 1, new Push(R10));
+                    }
+                }
                 case Binary(
                         ArithmeticOperator op, TypeAsm typeAsm, Operand src,
                         Operand dst
@@ -250,6 +259,7 @@ public class Codegen {
                     if (src instanceof Imm imm && imm.isAwkward()) {
                         instructions.set(i, new Mov(typeAsm, src, R10));
                         instructions.add(i + 1, new Binary(op, typeAsm, R10, dst));
+                        i = i + 2; // will be i+1 at start of next iteration -> want to catch conditions below
                     } else {
                         switch (op) {
                             case ADD, SUB -> {
@@ -257,6 +267,7 @@ public class Codegen {
                                     instructions.set(i, new Mov(typeAsm, src, R10));
                                     instructions.add(i + 1, new Binary(op, typeAsm, R10, dst));
                                 }
+
                             }
                             case IMUL -> {
                                 if (isRam(dst)) {
@@ -275,13 +286,19 @@ public class Codegen {
                     if (isRam(src) && isRam(dst)) {
                         instructions.set(i, new Mov(typeAsm, src, R10));
                         instructions.add(i + 1, new Cmp(typeAsm, R10, dst));
-                    } else {
-                        if (dst instanceof Imm) {
+                    } else if (dst instanceof Imm) {
+                        if (src instanceof Imm imm && imm.isAwkward()) {
+                            instructions.set(i, new Mov(typeAsm, src, R10));
+                            instructions.add(i + 1, new Mov(typeAsm, dst, R11));
+                            instructions.add(i + 2, new Cmp(typeAsm, R10, R11));
+                        } else {
                             instructions.set(i, new Mov(typeAsm, dst, R11));
                             instructions.add(i + 1, new Cmp(typeAsm, src, R11));
                         }
+                    } else if (src instanceof Imm imm && imm.isAwkward()) {
+                        instructions.set(i, new Mov(typeAsm, src, R10));
+                        instructions.add(i + 1, new Cmp(typeAsm, R10, dst));
                     }
-
                 }
                 case Movsx(Operand src, Operand dst) -> {
                     if (src instanceof Imm) {
@@ -301,6 +318,7 @@ public class Codegen {
                 }
                 default -> {
                 }
+
             }
 
         }
@@ -350,11 +368,10 @@ public class Codegen {
             for (int i = argc - 1; i > 5; i--) {
                 ValIr arg = args.get(i);
                 Operand operand = toOperand(arg);
-                if (operand instanceof Imm || operand instanceof Reg) {
+                if (operand instanceof Imm || operand instanceof Reg || valToAsmType(arg) == QUADWORD) {
                     instructionAsms.add(new Push(operand));
                 } else {
-                    TypeAsm typeAsm = valToAsmType(arg);
-                    instructionAsms.add(new Mov(typeAsm, operand, AX));
+                    instructionAsms.add(new Mov(LONGWORD, operand, AX));
                     instructionAsms.add(new Push(AX));
                 }
 
@@ -382,17 +399,25 @@ public class Codegen {
         return switch (in) {
             case Imm _, Reg _, Stack _ -> in;
             case Pseudo(String identifier) -> {
-                SymTabEntryAsm entry = BACKEND_SYMBOL_TABLE.get(identifier);
                 if (BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry(
                         TypeAsm type, boolean isStatic)) {
                     if (isStatic) yield new Data(identifier);
-                    int varOffset = offset.updateAndGet(o -> {
+
+                    Integer varOffset = varTable.get(identifier);
+                    if (varOffset == null) {
+                        // it starts ar -8 - we can use this for the first var
+                        // when that var is written it will update bytes stack-8 to stack-1
                         int size = type.size();
-                        int remainder = o % size;
-                        // suppose offset is -4 and size is 8
-                        // this will return -4 - -(-4) - 8 - 8 => -16 (correct alignment)
-                        return remainder == 0 ? o - size : o - remainder - size - size;
-                    });
+                        varOffset = offset.get();
+                        varOffset -= size;
+                        int remainder = varOffset % size;
+                        if (remainder != 0) {
+                            varOffset -= (size + remainder);
+                        }
+                        varTable.put(identifier, varOffset);
+                        //System.out.println(identifier+"\t"+size+"\t"+varOffset+"\t"+remainder);
+                        offset.set(varOffset);
+                    }
                     yield new Stack(varOffset);
                 } else throw new IllegalArgumentException(identifier);
 

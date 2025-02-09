@@ -1,7 +1,0 @@
-* chapter 11
-
-** codegen
-- remove AllocateStack and DeallocateStack
-- promote cdq from nullary instant to record Cdq(TypeAsm t)
-- new pass at the bottom of p266
-

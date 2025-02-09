@@ -297,7 +297,7 @@ public class IrGen {
                 VarIr dst = makeTemporary("dst", t);
                 if (t == LONG) instructions.add(new SignExtendIr(result, dst));
                 else instructions.add(new TruncateIr(result, dst));
-                return result;
+                return dst;
             }
 
             default:

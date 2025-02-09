@@ -72,10 +72,8 @@ public class SemanticAnalysis {
 
             }
             case Exp exp -> statement;
-            case For(
-                    ForInit init, Exp condition, Exp post, Statement body,
-                    String _
-            ) -> {
+            case For(ForInit init, Exp condition, Exp post, Statement body,
+                     String _) -> {
                 String newLabel = Mcc.makeTemporary("for");
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
@@ -122,8 +120,7 @@ public class SemanticAnalysis {
     }
 
     private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
-        InitialValue initialValue
-                = switch (decl.init()) {
+        InitialValue initialValue = switch (decl.init()) {
             case ConstInt(int i) ->
                     convertConst(new IntInit(i), decl.varType());
             case ConstLong(long l) -> new LongInit(l);
@@ -141,8 +138,7 @@ public class SemanticAnalysis {
                 fail("conflicting variable linkage");
 
             if (oldDecl.attrs() instanceof StaticAttributes(
-                    InitialValue oldInit, boolean _
-            )) {
+                    InitialValue oldInit, boolean _)) {
                 if (oldInit instanceof IntInit oldInitialConstant) {
                     if (initialValue instanceof IntInit)
                         fail("Conflicting file scope variable definitions");
@@ -158,8 +154,7 @@ public class SemanticAnalysis {
 
     private static InitialValue convertConst(InitialValue init, Type type) {
         return switch (init) {
-            case InitialValue.NoInitializer _,
-                 InitialValue.Tentative _ -> init;
+            case InitialValue.NoInitializer _, InitialValue.Tentative _ -> init;
             case IntInit(int i) -> switch (type) {
                 case LONG -> new LongInit(i);
                 default -> init;
@@ -179,9 +174,8 @@ public class SemanticAnalysis {
         boolean global = decl.storageClass() != STATIC;
         SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
         boolean alreadyDefined = false;
-        if (oldEntry instanceof SymbolTableEntry(
-                Type oldType, IdentifierAttributes attrs
-        )) {
+        if (oldEntry instanceof SymbolTableEntry(Type oldType,
+                                                 IdentifierAttributes attrs)) {
             if (oldType instanceof FunType(List<Type> params, Type ret)) {
                 alreadyDefined = oldEntry.attrs().defined();
                 if (alreadyDefined && defined)
@@ -202,8 +196,9 @@ public class SemanticAnalysis {
 
         Block typeCheckedBody;
         if (decl.body() != null) {
-            for (Identifier param : decl.parameters()) {
-                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(INT, LOCAL_ATTR));
+            for (int i = 0; i < decl.parameters().size(); i++) {
+                Identifier param = decl.parameters().get(i);
+                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(decl.funType().params().get(i), LOCAL_ATTR));
             }
             typeCheckedBody = typeCheckBlock(decl.body(), decl);
         } else typeCheckedBody = null;
@@ -212,11 +207,7 @@ public class SemanticAnalysis {
             Identifier oldParam = declParams.get(i);
             declParams.set(i, new Identifier(oldParam.name(), decl.funType().params().get(i)));
         }
-        return new Function(decl.name(),
-                decl.parameters(),
-                typeCheckedBody,
-                decl.funType(),
-                decl.storageClass());
+        return new Function(decl.name(), decl.parameters(), typeCheckedBody, decl.funType(), decl.storageClass());
     }
 
     private static Block typeCheckBlock(Block body, Function enclosingFunction) {
@@ -239,36 +230,24 @@ public class SemanticAnalysis {
             }
             case Block block -> typeCheckBlock(block, enclosingFunction);
             case DoWhile(Statement whileBody, Exp condition, String label) ->
-                    new DoWhile((Statement) typeCheckBlockItem(whileBody, enclosingFunction),
-                            typeCheckExpression(condition), label);
-            case For(
-                    ForInit init, Exp condition, Exp post, Statement body,
-                    String label
-            ) -> new For(switch (init) {
+                    new DoWhile((Statement) typeCheckBlockItem(whileBody, enclosingFunction), typeCheckExpression(condition), label);
+            case For(ForInit init, Exp condition, Exp post, Statement body,
+                     String label) -> new For(switch (init) {
                 case null -> null;
                 case Exp exp -> typeCheckExpression(exp);
                 case VarDecl varDecl ->
                         typeCheckLocalVariableDeclaration(varDecl);
-            }, typeCheckExpression(condition),
-                    typeCheckExpression(post),
-                    (Statement) typeCheckBlockItem(body, enclosingFunction),
-                    label);
-            case If(
-                    Exp condition, Statement ifTrue,
-                    Statement ifFalse
-            ) -> new If(typeCheckExpression(condition),
-                    (Statement) typeCheckBlockItem(ifTrue, enclosingFunction),
-                    (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
+            }, typeCheckExpression(condition), typeCheckExpression(post), (Statement) typeCheckBlockItem(body, enclosingFunction), label);
+            case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
+                    new If(typeCheckExpression(condition), (Statement) typeCheckBlockItem(ifTrue, enclosingFunction), (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
 
             case Return(Exp exp) -> {
                 Type returnType = enclosingFunction.funType().ret();
-                yield convertTo(typeCheckExpression(exp), returnType);
+                yield new Return(convertTo(typeCheckExpression(exp), returnType));
 
             }
-            case While(Exp condition, Statement whileBody, String _) -> {
-                typeCheckBlockItem(whileBody, enclosingFunction);
-                yield typeCheckExpression(condition);
-            }
+            case While(Exp condition, Statement whileBody, String label) ->
+                    new While(typeCheckExpression(condition), (Statement) typeCheckBlockItem(whileBody, enclosingFunction), label);
             case NullStatement _, Continue _, Break _ -> blockItem;
             case null -> null;
 
@@ -280,8 +259,7 @@ public class SemanticAnalysis {
             if (decl.init() != null)
                 fail("Initializer on local extern variable declaration");
             if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(
-                    Type oldType, IdentifierAttributes oldAttrs
-            )) {
+                    Type oldType, IdentifierAttributes oldAttrs)) {
                 if (oldType != decl.varType())
                     fail("inconsistent variable redefenition");
 
@@ -293,28 +271,27 @@ public class SemanticAnalysis {
             InitialValue initialValue;
             if (decl.init() instanceof ConstInt(int i))
                 initialValue = new IntInit(i);
-            else if (decl.init() == null)
-                initialValue = new IntInit(0);
+            else if (decl.init() == null) initialValue = new IntInit(0);
             else
                 throw new RuntimeException("Non-constant initializer on local static variable");
             initialValue = convertConst(initialValue, decl.varType());
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(initialValue, false)));
-            return new VarDecl(decl.name(),
-                    switch (initialValue) {
-                        case IntInit(int i) -> new ConstInt(i);
-                        case LongInit(long l) -> new ConstLong(l);
-                        default -> null;
-                    }, decl.varType(), decl.storageClass());
+            return new VarDecl(decl.name(), switch (initialValue) {
+                case IntInit(int i) -> new ConstInt(i);
+                case LongInit(long l) -> new ConstLong(l);
+                default -> null;
+            }, decl.varType(), decl.storageClass());
         } else {
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
-
+            Exp typeCheckedInit = (decl.init() != null) ? typeCheckExpression(decl.init()) : null;
             return new VarDecl(decl.name(),
-                    (decl.init() != null) ? typeCheckExpression(decl.init()) : null, decl.varType(), decl.storageClass());
+                    convertTo(typeCheckedInit, decl.varType()),
+                    decl.varType(), decl.storageClass());
         }
     }
 
     private static Exp convertTo(Exp e, Type t) {
-        if (e.type() == t) return e;
+        if (e == null || e.type() == t) return e;
         return new Cast(t, e);
     }
 
@@ -358,10 +335,7 @@ public class SemanticAnalysis {
                 Type t1 = typedIfTrue.type();
                 Type t2 = typedIfTrue.type();
                 Type commonType = getCommonType(t1, t2);
-                yield new Conditional(typedCondition,
-                        convertTo(typedIfTrue, commonType),
-                        convertTo(typedIfFalse, commonType),
-                        commonType);
+                yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
             case Constant constant -> constant;
             case FunctionCall(Identifier name, List<Exp> args, Type type) -> {
@@ -427,10 +401,8 @@ public class SemanticAnalysis {
 
     private static Declaration resolveFileScopeVariableDeclaration(VarDecl varDecl, Map<String, Entry> identifierMap) {
         return switch (varDecl) {
-            case VarDecl(
-                    String name,
-                    Exp init, Type varType, StorageClass storageClass
-            ) -> {
+            case VarDecl(String name, Exp init, Type varType,
+                         StorageClass storageClass) -> {
                 identifierMap.put(name, new Entry(name, true, true));
                 yield varDecl;
             }
@@ -490,9 +462,7 @@ public class SemanticAnalysis {
             case null -> null;
             case Exp exp -> resolveExp(exp, identifierMap);
             case Return(Exp exp) -> new Return(resolveExp(exp, identifierMap));
-            case If(
-                    Exp condition, Statement ifTrue, Statement ifFalse
-            ) ->
+            case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
                     new If(resolveExp(condition, identifierMap), resolveStatement(ifTrue, identifierMap), resolveStatement(ifFalse, identifierMap));
             case Block block ->
                     resolveBlock(block, copyIdentifierMap(identifierMap));
@@ -500,10 +470,8 @@ public class SemanticAnalysis {
             case Break _, Continue _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
                     new DoWhile(resolveStatement(body, identifierMap), resolveExp(condition, identifierMap), label);
-            case For(
-                    ForInit init, Exp condition, Exp post, Statement body,
-                    String label
-            ) -> {
+            case For(ForInit init, Exp condition, Exp post, Statement body,
+                     String label) -> {
                 Map<String, Entry> newVariableMap = copyIdentifierMap(identifierMap);
                 yield new For(resolveForInit(init, newVariableMap), resolveExp(condition, newVariableMap), resolveExp(post, newVariableMap), resolveStatement(body, newVariableMap), label);
             }
@@ -567,9 +535,7 @@ public class SemanticAnalysis {
                              Type type) ->
                     new Conditional(resolveExp(condition, identifierMap), resolveExp(ifTrue, identifierMap), resolveExp(ifFalse, identifierMap), type);
             case FunctionCall(Identifier name, List<Exp> args, Type type) ->
-                    identifierMap.get(name.name()) instanceof Entry newFunctionName
-                            ? new FunctionCall(new Identifier(newFunctionName.name(), type), resolveArgs(identifierMap, args), type)
-                            : fail("Undeclared function:" + name);
+                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Identifier(newFunctionName.name(), type), resolveArgs(identifierMap, args), type) : fail("Undeclared function:" + name);
             case Cast(Type type, Exp e) ->
                     new Cast(type, resolveExp(e, identifierMap));
             default ->
