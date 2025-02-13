@@ -144,6 +144,7 @@ public class Codegen {
                     TypeAsm typeAsm = valToAsmType(v1);
                     assert (typeAsm == valToAsmType(v2));
                     instructionAsms.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
+                    // dstName will hold the result of the comparison, which is always a LONGWORD
                     instructionAsms.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
                     instructionAsms.add(new SetCC(op1, toOperand(dstName)));
                 }
