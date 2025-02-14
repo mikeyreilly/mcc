@@ -308,7 +308,7 @@ public class Parser {
             case TokenWithValue(
                     TokenType type, String value
             ) -> {
-                if (type == NUMERIC)
+                if (type == INT_LITERAL)
                     yield parseConst(value, true);
                 if (type == LONG_LITERAL) {
                     yield parseConst(value.substring(0, value.length() - 1), false);

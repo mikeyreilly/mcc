@@ -13,9 +13,10 @@ public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
     static final Token[] TOKEN_TYPES_TO_MATCH =
             new Token[]{IDENTIFIER, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
-                    CLOSE_BRACE, LONG_LITERAL, NUMERIC, SEMICOLON, SINGLE_LINE_COMMENT,
-                    MULTILINE_COMMENT, DECREMENT, INCREMENT, COMPLIMENT, SUB,
-                    ADD, IMUL, DIVIDE, REMAINDER,
+                    UNSIGNED_LONG_LITERAL, UNSIGNED_INT_LITERAL,
+                    CLOSE_BRACE, LONG_LITERAL, INT_LITERAL, SEMICOLON,
+                    SINGLE_LINE_COMMENT, MULTILINE_COMMENT, DECREMENT,
+                    INCREMENT, COMPLIMENT, SUB, ADD, IMUL, DIVIDE, REMAINDER,
                     AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
                     GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
                     BECOMES, QUESTION_MARK, COLON, COMMA};
@@ -40,23 +41,24 @@ public class Lexer {
                 if (matcher.lookingAt()) {
                     int end = matcher.end();
                     if (tokenType != TokenType.SINGLE_LINE_COMMENT && tokenType != TokenType.MULTILINE_COMMENT) {
-                        if (tokenType == IDENTIFIER || tokenType == TokenType.NUMERIC || tokenType == LONG_LITERAL) {
+                        if (tokenType == IDENTIFIER || tokenType == TokenType.INT_LITERAL || tokenType == LONG_LITERAL) {
                             int start = matcher.start();
                             String value = src.substring(start, end);
                             Token token = switch (value) {
-                                case "int" -> TokenType.INT;
-                                case "long" -> TokenType.LONG;
-                                case "void" -> TokenType.VOID;
-                                case "return" -> TokenType.RETURN;
-                                case "if" -> TokenType.IF;
-                                case "else" -> TokenType.ELSE;
                                 case "break" -> TokenType.BREAK;
                                 case "continue" -> TokenType.CONTINUE;
-                                case "while" -> TokenType.WHILE;
                                 case "do" -> TokenType.DO;
-                                case "for" -> TokenType.FOR;
-                                case "static" -> TokenType.STATIC;
+                                case "else" -> TokenType.ELSE;
                                 case "extern" -> TokenType.EXTERN;
+                                case "for" -> TokenType.FOR;
+                                case "if" -> TokenType.IF;
+                                case "int" -> TokenType.INT;
+                                case "long" -> TokenType.LONG;
+                                case "return" -> TokenType.RETURN;
+                                case "static" -> TokenType.STATIC;
+                                case "unsigned" -> TokenType.UNSIGNED;
+                                case "void" -> TokenType.VOID;
+                                case "while" -> TokenType.WHILE;
                                 default -> new TokenWithValue(tokenType, value);
                             };
                             tokens.add(token);
