@@ -169,6 +169,8 @@ public class Codegen {
                         instructionAsms.add(new Movsx(toOperand(src), toOperand(dst)));
                 case TruncateIr(ValIr src, VarIr dst) ->
                         instructionAsms.add(new Mov(LONGWORD, toOperand(src), toOperand(dst)));
+                case ZeroExtendIr zeroExtendIr -> {
+                }
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);

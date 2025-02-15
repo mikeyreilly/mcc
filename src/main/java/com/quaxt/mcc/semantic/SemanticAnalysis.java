@@ -37,6 +37,7 @@ public class SemanticAnalysis {
 
     }
 
+    @SuppressWarnings("unchecked")
     private static <T extends Statement> T loopLabelStatement(T statement, String currentLabel) {
         return switch (statement) {
             case null -> null;
@@ -385,21 +386,9 @@ public class SemanticAnalysis {
 
     private static Type getCommonType(Type t1, Type t2) {
         if (t1 == t2) return t1;
-        if (size(t1) == size(t2)) return signed(t1) ? t2 : t1;
-        if (size(t1) > size(t2)) return t1;
+        if (t1.size() == t2.size()) return t1.isSigned() ? t2 : t1;
+        if (t1.size() > t2.size()) return t1;
         return t2;
-    }
-
-    private static int size(Type t) {
-        return switch (t) {
-            case LONG, ULONG -> 8;
-            case INT, UINT -> 4;
-            default -> -1;
-        };
-    }
-
-    private static boolean signed(Type t) {
-        return t == INT || t == LONG;
     }
 
     record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {

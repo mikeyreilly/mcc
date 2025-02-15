@@ -206,6 +206,10 @@ public class IrGen {
                 return c;
             case ConstLong c:
                 return c;
+            case ConstUInt c:
+                return c;
+            case ConstULong c:
+                return c;
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
                 ValIr c = compileExp(condition, instructions);
@@ -291,12 +295,20 @@ public class IrGen {
             }
             case Cast(Type t, Exp inner): {
                 ValIr result = compileExp(inner, instructions);
+                Type innerType = inner.type();
                 if (t == inner.type()) {
                     return result;
                 }
                 VarIr dst = makeTemporary("dst", t);
-                if (t == LONG) instructions.add(new SignExtendIr(result, dst));
-                else instructions.add(new TruncateIr(result, dst));
+                if (t.size() == innerType.size()) {
+                    instructions.add(new Copy(result, dst));
+                } else if (t.size() < innerType.size()) {
+                    instructions.add(new TruncateIr(result, dst));
+                } else if (innerType.isSigned()) {
+                    instructions.add(new SignExtendIr(result, dst));
+                } else {
+                    instructions.add(new ZeroExtendIr(result, dst));
+                }
                 return dst;
             }
 
