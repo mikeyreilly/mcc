@@ -1,5 +1,6 @@
 package com.quaxt.mcc.semantic;
 
+import com.quaxt.mcc.InitialValue;
 import com.quaxt.mcc.IntInit;
 import com.quaxt.mcc.LongInit;
 import com.quaxt.mcc.StaticInit;

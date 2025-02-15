@@ -62,6 +62,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         long init = switch (v.init()) {
             case IntInit(int i) -> i;
             case LongInit(long l) -> l;
+            case UIntInit(int i) -> i;
+            case ULongInit(long l) -> l;
         };
 
         boolean global = v.global();
@@ -74,6 +76,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             out.println("                .zero " + switch (v.init()) {
                 case IntInit _ -> 4;
                 case LongInit _ -> 8;
+                case UIntInit _ -> 4;
+                case ULongInit _ -> 8;
             });
         } else {
             String name = v.name();
@@ -82,8 +86,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             out.println("                .balign " + v.alignment());
             out.println(name + ":");
             out.println(switch (v.init()) {
-                case IntInit _ -> "                .long ";
-                case LongInit _ -> "                .quad ";
+                case IntInit _, UIntInit _ -> "                .long ";
+                case LongInit _, ULongInit _ -> "                .quad ";
             } + init);
 
         }

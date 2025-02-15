@@ -15,8 +15,7 @@ import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
-import static com.quaxt.mcc.semantic.Primitive.INT;
-import static com.quaxt.mcc.semantic.Primitive.LONG;
+import static com.quaxt.mcc.semantic.Primitive.*;
 
 public class SemanticAnalysis {
 
@@ -124,6 +123,9 @@ public class SemanticAnalysis {
             case ConstInt(int i) ->
                     convertConst(new IntInit(i), decl.varType());
             case ConstLong(long l) -> new LongInit(l);
+            case ConstUInt(int i) -> new UIntInit(i);
+            case ConstULong(long l) -> new ULongInit(l);
+
             case null ->
                     decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
             default -> throw new RuntimeException("Non constant initializer");
@@ -153,16 +155,20 @@ public class SemanticAnalysis {
     }
 
     private static InitialValue convertConst(InitialValue init, Type type) {
-        return switch (init) {
-            case InitialValue.NoInitializer _, InitialValue.Tentative _ -> init;
-            case IntInit(int i) -> switch (type) {
-                case LONG -> new LongInit(i);
-                default -> init;
-            };
-            case LongInit(long l) -> switch (type) {
-                case INT -> new IntInit((int) l);
-                default -> init;
-            };
+        long initL = switch (init) {
+            case IntInit(int i) -> i;
+            case LongInit(long l) -> l;
+            case UIntInit(int i) -> i;
+            case ULongInit(long l) -> l;
+            default ->
+                    throw new IllegalArgumentException("not a const:" + init);
+        };
+        return switch (type) {
+            case LONG -> new LongInit(initL);
+            case INT -> new IntInit((int) initL);
+            case ULONG -> new ULongInit(initL);
+            case UINT -> new UIntInit((int) initL);
+            default -> null;
         };
     }
 
@@ -279,6 +285,8 @@ public class SemanticAnalysis {
             return new VarDecl(decl.name(), switch (initialValue) {
                 case IntInit(int i) -> new ConstInt(i);
                 case LongInit(long l) -> new ConstLong(l);
+                case UIntInit(int i) -> new ConstUInt(i);
+                case ULongInit(long l) -> new ConstULong(l);
                 default -> null;
             }, decl.varType(), decl.storageClass());
         } else {
@@ -376,9 +384,23 @@ public class SemanticAnalysis {
     }
 
     private static Type getCommonType(Type t1, Type t2) {
-        return t1 == t2 ? t1 : LONG;
+        if (t1 == t2) return t1;
+        if (size(t1) == size(t2)) return signed(t1) ? t2 : t1;
+        if (size(t1) > size(t2)) return t1;
+        return t2;
     }
 
+    private static int size(Type t) {
+        return switch (t) {
+            case LONG, ULONG -> 8;
+            case INT, UINT -> 4;
+            default -> -1;
+        };
+    }
+
+    private static boolean signed(Type t) {
+        return t == INT || t == LONG;
+    }
 
     record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {
     }

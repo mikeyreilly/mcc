@@ -1,5 +1,6 @@
 package com.quaxt.mcc.semantic;
 
+import com.quaxt.mcc.InitialValue;
 import com.quaxt.mcc.StaticInit;
 
 public sealed interface Type permits FunType, Primitive {
