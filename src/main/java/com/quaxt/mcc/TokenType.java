@@ -9,16 +9,16 @@ public enum TokenType implements Token {
     UNSIGNED_INT_LITERAL("[0-9]+[uU]\\b"),
     LONG_LITERAL("[0-9]+[lL]\\b"), INT_LITERAL("[0-9]+\\b"), SEMICOLON(";"),
     SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
-            Pattern.DOTALL)), UNSIGNED(),
+            Pattern.DOTALL)), UNSIGNED(), SIGNED(),
     LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
-            BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
+    BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
     DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~"),
-    NOT("!"),QUESTION_MARK("\\?"),COLON(":"),
+    NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
     COMMA(",");
     final Pattern regex;
 
     TokenType(String pattern) {
-       this(Pattern.compile(pattern));
+        this(Pattern.compile(pattern));
     }
 
     TokenType(Pattern pattern) {
@@ -29,7 +29,7 @@ public enum TokenType implements Token {
         regex = null;
     }
 
-    public Pattern regex(){
+    public Pattern regex() {
         return regex;
     }
 }

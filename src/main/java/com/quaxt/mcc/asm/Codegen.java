@@ -1,10 +1,7 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.parser.ConstInt;
-import com.quaxt.mcc.parser.ConstLong;
-import com.quaxt.mcc.parser.Constant;
-import com.quaxt.mcc.parser.Identifier;
+import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
@@ -392,6 +389,8 @@ public class Codegen {
             case ConstInt(int i) -> new Imm(i);
             case VarIr(String identifier) -> new Pseudo(identifier);
             case ConstLong(long l) -> new Imm(l);
+            case ConstUInt(int i) -> new Imm(i);
+            case ConstULong(long l) -> new Imm(l);
         };
     }
 

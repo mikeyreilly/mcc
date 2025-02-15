@@ -81,9 +81,9 @@ public class Parser {
         return new DoWhile(body, condition, null);
     }
 
-    private static Declaration parseDeclaration(List<Token> tokens) {
+    private static Declaration parseDeclaration(List<Token> tokens, boolean throwExceptionIfNoType) {
         // parse int i; or int i=5; or int foo(void);
-        TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens);
+        TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
         if (typeAndStorageClass == null) return null;
         Token t = tokens.removeFirst();
         String name = parseIdentifier(t);
@@ -107,7 +107,7 @@ public class Parser {
         return new VarDecl(name, exp, typeAndStorageClass.type(), typeAndStorageClass.storageClass());
     }
 
-    private static TypeAndStorageClass parseTypeAndStorageClass(List<Token> tokens) {
+    private static TypeAndStorageClass parseTypeAndStorageClass(List<Token> tokens, boolean throwExceptionIfNoType) {
         if (tokens.isEmpty()) return null;
         List<Token> types = new ArrayList<>();
         List<StorageClass> storageClasses = new ArrayList<>();
@@ -115,7 +115,7 @@ public class Parser {
 
         while (true) {
             t = tokens.getFirst();
-            if (isType(t)) {
+            if (isTypeSpecifier(t)) {
                 tokens.removeFirst();
                 types.add(t);
             } else if (STATIC == t) {
@@ -128,7 +128,7 @@ public class Parser {
                 break;
             }
         }
-        Type type = parseType(types);
+        Type type = parseType(types, throwExceptionIfNoType);
 
         if (storageClasses.size() > 1) {
             fail("invalid storage class");
@@ -137,18 +137,11 @@ public class Parser {
         return new TypeAndStorageClass(type, storageClass);
     }
 
-    private static Type tokenToType(Token t) {
-        return switch (t) {
-            case INT -> com.quaxt.mcc.semantic.Primitive.INT;
-            case LONG -> com.quaxt.mcc.semantic.Primitive.LONG;
-            default -> throw new RuntimeException("invalid type specifier");
-        };
-    }
-
-
-    private static Type parseType(List<Token> types) {
+    private static Type parseType(List<Token> types, boolean throwExceptionIfNoType) {
         boolean foundInt = false;
         boolean foundLong = false;
+        boolean foundSigned = false;
+        boolean foundUnsigned = false;
         for (Token t : types) {
             switch (t) {
                 case INT -> {
@@ -159,28 +152,39 @@ public class Parser {
                     if (foundLong) fail("invalid type specifier");
                     else foundLong = true;
                 }
+                case SIGNED -> {
+                    if (foundSigned || foundUnsigned)
+                        fail("invalid type specifier");
+                    else foundSigned = true;
+                }
+                case UNSIGNED -> {
+                    if (foundSigned || foundUnsigned)
+                        fail("invalid type specifier");
+                    else foundUnsigned = true;
+                }
                 default -> fail("invalid type specifier");
-
             }
         }
-        if (foundLong) return com.quaxt.mcc.semantic.Primitive.LONG;
-        else if (foundInt) return com.quaxt.mcc.semantic.Primitive.INT;
-        else throw new RuntimeException("invalid type specifier");
+
+        if (foundLong)
+            return foundUnsigned ? com.quaxt.mcc.semantic.Primitive.ULONG : com.quaxt.mcc.semantic.Primitive.LONG;
+        else if (foundInt)
+            return foundUnsigned ? com.quaxt.mcc.semantic.Primitive.UINT : com.quaxt.mcc.semantic.Primitive.INT;
+        else if (foundSigned) return com.quaxt.mcc.semantic.Primitive.INT;
+        else if (foundUnsigned) return com.quaxt.mcc.semantic.Primitive.UINT;
+        if (throwExceptionIfNoType)
+            throw new RuntimeException("invalid type specifier");
+        return null;
     }
 
 
     public static Program parseProgram(List<Token> tokens) {
         Declaration declaration;
         ArrayList<Declaration> declarations = new ArrayList<>();
-        while ((declaration = parseDeclaration(tokens)) != null) {
+        while ((declaration = parseDeclaration(tokens, true)) != null) {
             declarations.add(declaration);
         }
         return new Program(declarations);
-    }
-
-    private static String parseIdentifier(List<Token> tokens) {
-        Token identifier = tokens.removeFirst();
-        return parseIdentifier(identifier);
     }
 
     private static String parseIdentifier(Token identifier) {
@@ -192,8 +196,8 @@ public class Parser {
         throw new IllegalArgumentException("Expected identifier, got " + identifier);
     }
 
-    private static boolean isType(Token type) {
-        return INT == type || LONG == type;
+    private static boolean isTypeSpecifier(Token type) {
+        return INT == type || LONG == type || UNSIGNED == type || SIGNED == type;
     }
 
     private static Function parseRestOfFunction(List<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
@@ -210,7 +214,7 @@ public class Parser {
             paramTypes = new ArrayList<>();
 
             while (true) {
-                TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens);
+                TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, true);
                 paramTypes.add(typeAndStorageClass.type());
                 String identifierName = expectIdentifier(tokens);
                 if (typeAndStorageClass.storageClass() != null)
@@ -268,16 +272,22 @@ public class Parser {
 
 
     private static BlockItem parseBlockItem(List<Token> tokens) {
-        return switch (tokens.getFirst()) {
-            case INT, LONG, STATIC, EXTERN -> parseDeclaration(tokens);
-            default -> parseStatement(tokens);
-        };
+        Token t = tokens.getFirst();
+        return t == EXTERN || t == STATIC || isTypeSpecifier(t) ?
+                parseDeclaration(tokens, false)
+                : parseStatement(tokens);
     }
 
-    private static Constant parseConst(String value, boolean isIntToken) {
-        long v = Long.parseLong(value);
-        if (v < (1L << 31) - 1L && isIntToken)
-            return new ConstInt((int) v);
+    public static Constant parseConst(String value, boolean isIntToken, boolean signed) {
+        if (signed) {
+            long v = Long.parseLong(value);
+            if (v < 1L << 31 && isIntToken)
+                return new ConstInt((int) v);
+            else return new ConstLong(v);
+        }
+        long v = Long.parseUnsignedLong(value);
+        if (v <= 0xffff_ffffL && isIntToken)
+            return new ConstUInt((int) v);
         else return new ConstLong(v);
     }
 
@@ -288,13 +298,18 @@ public class Parser {
                     new UnaryOp(UnaryOperator.COMPLEMENT, parseFactor(tokens), null);
             case COMPLIMENT ->
                     new UnaryOp(UnaryOperator.NEGATE, parseFactor(tokens), null);
-            case NOT -> new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
+            case NOT ->
+                    new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
             case OPEN_PAREN -> {
-                if (tokens.size() > 1 && isType(tokens.get(0)) && CLOSE_PAREN == tokens.get(1)) {
-                    Type type = tokenToType(tokens.removeFirst());
+                TypeAndStorageClass typeSpecifierAndStorageClass = parseTypeAndStorageClass(tokens, false);
+                if (typeSpecifierAndStorageClass != null && CLOSE_PAREN == tokens.getFirst()) {
+                    if (typeSpecifierAndStorageClass.storageClass() != null) {
+                        fail("storage class not allowed in cast");
+                    }
+                    Type type = typeSpecifierAndStorageClass.type();
                     tokens.removeFirst();//close_paren
                     Exp inner = parseExp(tokens, 0);
-                    if (inner instanceof Assignment){
+                    if (inner instanceof Assignment) {
                         fail("lvalue required as left operand of assignment");
                     }
                     yield new Cast(type, inner);
@@ -309,9 +324,13 @@ public class Parser {
                     TokenType type, String value
             ) -> {
                 if (type == INT_LITERAL)
-                    yield parseConst(value, true);
-                if (type == LONG_LITERAL) {
-                    yield parseConst(value.substring(0, value.length() - 1), false);
+                    yield parseConst(value, true, true);
+                if (type == LONG_LITERAL)
+                    yield parseConst(value.substring(0, value.length() - 1), false, true);
+                if (type == UNSIGNED_INT_LITERAL)
+                    yield parseConst(value.substring(0, value.length() - 1), true, false);
+                if (type == UNSIGNED_LONG_LITERAL) {
+                    yield parseConst(value.substring(0, value.length() - 2), false, false);
                 }
                 Identifier id = new Identifier(value, null);
                 if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
@@ -395,7 +414,7 @@ public class Parser {
 
     private static ForInit parseForInit(List<Token> tokens) {
         Token t = tokens.getFirst();
-        if (t == INT || t == LONG) return (ForInit) parseDeclaration(tokens);
+        if (isTypeSpecifier(t)) return (ForInit) parseDeclaration(tokens, true);
         Exp r = t == SEMICOLON ? null : parseExp(tokens, 0);
         expect(SEMICOLON, tokens);
         return r;

@@ -41,7 +41,8 @@ public class Lexer {
                 if (matcher.lookingAt()) {
                     int end = matcher.end();
                     if (tokenType != TokenType.SINGLE_LINE_COMMENT && tokenType != TokenType.MULTILINE_COMMENT) {
-                        if (tokenType == IDENTIFIER || tokenType == TokenType.INT_LITERAL || tokenType == LONG_LITERAL) {
+                        if (tokenType == IDENTIFIER || tokenType == TokenType.INT_LITERAL || tokenType == LONG_LITERAL
+                                || tokenType == UNSIGNED_INT_LITERAL || tokenType == UNSIGNED_LONG_LITERAL) {
                             int start = matcher.start();
                             String value = src.substring(start, end);
                             Token token = switch (value) {
@@ -55,6 +56,7 @@ public class Lexer {
                                 case "int" -> TokenType.INT;
                                 case "long" -> TokenType.LONG;
                                 case "return" -> TokenType.RETURN;
+                                case "signed" -> TokenType.SIGNED;
                                 case "static" -> TokenType.STATIC;
                                 case "unsigned" -> TokenType.UNSIGNED;
                                 case "void" -> TokenType.VOID;

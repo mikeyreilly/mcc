@@ -5,7 +5,7 @@ import com.quaxt.mcc.LongInit;
 import com.quaxt.mcc.StaticInit;
 
 public enum Primitive implements Type {
-    INT(new IntInit(0)), LONG(new LongInit(0));
+    INT(new IntInit(0)), UINT(new IntInit(0)), LONG(new LongInit(0)), ULONG(new LongInit(0));
 
     private final StaticInit zero;
 
