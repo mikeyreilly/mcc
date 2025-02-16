@@ -286,9 +286,9 @@ public class Parser {
             else return new ConstLong(v);
         }
         long v = Long.parseUnsignedLong(value);
-        if (v <= 0xffff_ffffL && isIntToken)
+        if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && isIntToken)
             return new ConstUInt((int) v);
-        else return new ConstLong(v);
+        else return new ConstULong(v);
     }
 
     private static Exp parseFactor(List<Token> tokens) {
@@ -308,7 +308,10 @@ public class Parser {
                     }
                     Type type = typeSpecifierAndStorageClass.type();
                     tokens.removeFirst();//close_paren
-                    Exp inner = parseExp(tokens, 0);
+                    // We use parseFactor so (int)x=y is not parsed as (int)(x=y)
+                    // Could use parseExp(tokens, 60) which would do the same
+                    // thing but more slowly
+                    Exp inner = parseFactor(tokens);
                     if (inner instanceof Assignment) {
                         fail("lvalue required as left operand of assignment");
                     }
@@ -398,6 +401,7 @@ public class Parser {
 
     private static int getPrecedence(Token t) {
         return switch (t) {
+            // case CAST -> 60; just reminding myself it's higher than these others
             case IMUL, DIVIDE, REMAINDER -> 50;
             case SUB, ADD -> 45;
             case LESS_THAN, LESS_THAN_OR_EQUAL, GREATER_THAN,

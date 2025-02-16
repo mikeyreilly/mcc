@@ -123,10 +123,12 @@ public class SemanticAnalysis {
         InitialValue initialValue = switch (decl.init()) {
             case ConstInt(int i) ->
                     convertConst(new IntInit(i), decl.varType());
-            case ConstLong(long l) -> new LongInit(l);
-            case ConstUInt(int i) -> new UIntInit(i);
-            case ConstULong(long l) -> new ULongInit(l);
-
+            case ConstLong(long i) ->
+                    convertConst(new LongInit(i), decl.varType());
+            case ConstUInt(int i) ->
+                    convertConst(new UIntInit(i), decl.varType());
+            case ConstULong(long i) ->
+                    convertConst(new ULongInit(i), decl.varType());
             case null ->
                     decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
             default -> throw new RuntimeException("Non constant initializer");
@@ -142,11 +144,11 @@ public class SemanticAnalysis {
 
             if (oldDecl.attrs() instanceof StaticAttributes(
                     InitialValue oldInit, boolean _)) {
-                if (oldInit instanceof IntInit oldInitialConstant) {
-                    if (initialValue instanceof IntInit)
+                if (oldInit instanceof StaticInit oldInitialConstant) {
+                    if (initialValue instanceof StaticInit)
                         fail("Conflicting file scope variable definitions");
                     else initialValue = oldInitialConstant;
-                } else if (!(initialValue instanceof IntInit) && oldInit == TENTATIVE)
+                } else if (!(initialValue instanceof StaticInit) && oldInit == TENTATIVE)
                     initialValue = TENTATIVE;
             }
         }
@@ -159,7 +161,7 @@ public class SemanticAnalysis {
         long initL = switch (init) {
             case IntInit(int i) -> i;
             case LongInit(long l) -> l;
-            case UIntInit(int i) -> i;
+            case UIntInit(int i) -> Integer.toUnsignedLong(i);
             case ULongInit(long l) -> l;
             default ->
                     throw new IllegalArgumentException("not a const:" + init);
@@ -342,7 +344,7 @@ public class SemanticAnalysis {
                 Exp typedIfTrue = typeCheckExpression(ifTrue);
                 Exp typedIfFalse = typeCheckExpression(ifFalse);
                 Type t1 = typedIfTrue.type();
-                Type t2 = typedIfTrue.type();
+                Type t2 = typedIfFalse.type();
                 Type commonType = getCommonType(t1, t2);
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
@@ -530,8 +532,9 @@ public class SemanticAnalysis {
         return new VarDecl(uniqueName, resolveExp(init, identifierMap), decl.varType(), decl.storageClass());
     }
 
-    private static Exp resolveExp(Exp exp, Map<String, Entry> identifierMap) {
-        return switch (exp) {
+    private static <T extends Exp> T resolveExp(T exp, Map<String, Entry> identifierMap) {
+        @SuppressWarnings("unchecked")
+        T r = (T) switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right, Type type) ->
                     left instanceof Identifier v ? new Assignment(resolveExp(v, identifierMap), resolveExp(right, identifierMap), type) : fail("Invalid lvalue");
@@ -549,15 +552,14 @@ public class SemanticAnalysis {
                     identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Identifier(newFunctionName.name(), type), resolveArgs(identifierMap, args), type) : fail("Undeclared function:" + name);
             case Cast(Type type, Exp e) ->
                     new Cast(type, resolveExp(e, identifierMap));
-            default ->
-                    throw new IllegalStateException("Unexpected value: " + exp);
         };
+        return r;
     }
 
     private static <T extends Exp> List<T> resolveArgs(Map<String, Entry> identifierMap, List<T> args) {
         List<T> newArgs = new ArrayList<>();
         for (T arg : args) {
-            newArgs.add((T) resolveExp(arg, identifierMap));
+            newArgs.add(resolveExp(arg, identifierMap));
         }
         return newArgs;
     }

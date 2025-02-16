@@ -138,23 +138,26 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case LabelIr(String label) -> label + ":";
                 case SetCC(
                         CmpOperator cmpOperator,
+                        boolean signed,
                         Operand o
-                ) ->
-                        "set" + cmpOperator.code + "\t" + formatOperand(instruction, o);
+                ) -> "set" + (signed ? cmpOperator.code
+                        : cmpOperator.unsignedCode) + "\t"
+                        + formatOperand(instruction, o);
                 case JmpCC(
                         CmpOperator cmpOperator,
+                        boolean signed,
                         String label
-                ) -> "j" + cmpOperator.code + "\t" + label;
+                ) -> "j"  + (signed ? cmpOperator.code
+                        : cmpOperator.unsignedCode) + "\t" + label;
                 case Call(String functionName) ->
                         "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
-
-
                 case Cdq(TypeAsm t) -> instruction.format(t);
                 case Movsx(Operand src, Operand dst) -> {
                     String srcF = formatOperand(LONGWORD, instruction, src);
                     String dstF = formatOperand(QUADWORD, instruction, dst);
                     yield "movslq\t" + srcF + ", " + dstF;
                 }
+                case MovZeroExtend movZeroExtend -> throw new RuntimeException("can't happen because movZeroExtend is removed in fixup");
             };
             if (instruction instanceof LabelIr) {
                 out.println(s);

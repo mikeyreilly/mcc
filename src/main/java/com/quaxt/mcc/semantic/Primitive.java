@@ -1,12 +1,9 @@
 package com.quaxt.mcc.semantic;
 
-import com.quaxt.mcc.InitialValue;
-import com.quaxt.mcc.IntInit;
-import com.quaxt.mcc.LongInit;
-import com.quaxt.mcc.StaticInit;
+import com.quaxt.mcc.*;
 
 public enum Primitive implements Type {
-    INT(new IntInit(0)), UINT(new IntInit(0)), LONG(new LongInit(0)), ULONG(new LongInit(0));
+    INT(new IntInit(0)), UINT(new UIntInit(0)), LONG(new LongInit(0)), ULONG(new ULongInit(0));
 
     private final StaticInit zero;
 

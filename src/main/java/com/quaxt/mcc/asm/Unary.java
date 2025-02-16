@@ -9,6 +9,7 @@ public record Unary(UnaryOperator op, TypeAsm type,
     @Override
     public String format(TypeAsm t) {
         return switch (op) {
+            case DIV -> "div";
             case IDIV -> "idiv";
             case NEGATE -> "not";
             case COMPLEMENT -> "neg";

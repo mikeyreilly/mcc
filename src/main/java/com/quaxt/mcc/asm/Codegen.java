@@ -8,8 +8,7 @@ import com.quaxt.mcc.tacky.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.quaxt.mcc.ArithmeticOperator.ADD;
-import static com.quaxt.mcc.ArithmeticOperator.SUB;
+import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
@@ -17,8 +16,7 @@ import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.asm.TypeAsm.LONGWORD;
 import static com.quaxt.mcc.asm.TypeAsm.QUADWORD;
-import static com.quaxt.mcc.semantic.Primitive.INT;
-import static com.quaxt.mcc.semantic.Primitive.LONG;
+import static com.quaxt.mcc.semantic.Primitive.*;
 
 public class Codegen {
 
@@ -31,7 +29,7 @@ public class Codegen {
                 case StaticVariable(String name, boolean global, Type t,
                                     StaticInit init) -> {
                     int alignment = switch (t) {
-                        case INT -> 4;
+                        case UINT, INT -> 4;
                         default -> 8;
                     };
                     l.add(new StaticVariableAsm(name, global, alignment, init));
@@ -73,13 +71,13 @@ public class Codegen {
 
     public static FunctionAsm generateAssembly(FunctionIr functionIr) {
         List<Instruction> instructionAsms = new ArrayList<>();
-        List<Identifier> type = functionIr.type();
-        for (int i = 0; i < type.size() && i < 6; i++) {
-            Identifier param = type.get(i);
+        List<Identifier> functionType = functionIr.type();
+        for (int i = 0; i < functionType.size() && i < 6; i++) {
+            Identifier param = functionType.get(i);
             instructionAsms.add(new Mov(toTypeAsm(param.type()), registers[i], new Pseudo(param.name())));
         }
-        for (int i = 6; i < type.size(); i++) {
-            Identifier param = type.get(i);
+        for (int i = 6; i < functionType.size(); i++) {
+            Identifier param = functionType.get(i);
             instructionAsms.add(new Mov(toTypeAsm(param.type()), new Stack(16 + (i - 6) * 8), new Pseudo(param.name())));
         }
 
@@ -93,12 +91,12 @@ public class Codegen {
                 case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
                     Operand dst1 = toOperand(dstIr);
                     Operand src1 = toOperand(srcIr);
-                    TypeAsm typeAsm = valToAsmType(srcIr);
+                    Type type = valToType(srcIr);
+                    TypeAsm typeAsm = toTypeAsm(type);
                     if (op1 == UnaryOperator.NOT) {
                         instructionAsms.add(new Cmp(typeAsm, new Imm(0), src1));
                         instructionAsms.add(new Mov(typeAsm, new Imm(0), dst1));
-                        instructionAsms.add(new SetCC(EQUALS, dst1));
-
+                        instructionAsms.add(new SetCC(EQUALS, type.isSigned(), dst1));
                     } else {
                         instructionAsms.add(new Mov(typeAsm, src1, dst1));
                         instructionAsms.add(new Unary(op1, typeAsm, dst1));
@@ -108,28 +106,28 @@ public class Codegen {
                         ArithmeticOperator op1, ValIr v1, ValIr v2,
                         VarIr dstName
                 ) -> {
-                    TypeAsm typeAsm = valToAsmType(v1);
+                    Type type = valToType(v1);
+                    TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
                     switch (op1) {
                         case ADD, SUB, IMUL -> {
                             instructionAsms.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
                             instructionAsms.add(new Binary(op1, typeAsm, toOperand(v2), toOperand(dstName)));
                         }
-                        case DIVIDE -> {
-                            instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
-                            instructionAsms.add(new Cdq(typeAsm));
-                            instructionAsms.add(new Unary(UnaryOperator.IDIV, typeAsm, toOperand(v2)));
-                            instructionAsms.add(new Mov(typeAsm, AX, toOperand(dstName)));
-
+                        case DIVIDE, REMAINDER -> {
+                            // MR-TODO need to check if unsigned and if so do what's on p.288
+                            if (type.isSigned()) {
+                                instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
+                                instructionAsms.add(new Cdq(typeAsm));
+                                instructionAsms.add(new Unary(UnaryOperator.IDIV, typeAsm, toOperand(v2)));
+                                instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
+                            } else {
+                                instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
+                                instructionAsms.add(new Mov(typeAsm, new Imm(0), DX));
+                                instructionAsms.add(new Unary(UnaryOperator.DIV, typeAsm, toOperand(v2)));
+                                instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
+                            }
                         }
-                        case REMAINDER -> {
-                            instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
-                            instructionAsms.add(new Cdq(typeAsm));
-                            instructionAsms.add(new Unary(UnaryOperator.IDIV, typeAsm, toOperand(v2)));
-                            instructionAsms.add(new Mov(typeAsm, DX, toOperand(dstName)));
-                        }
-
-
                         default ->
                                 throw new IllegalStateException("Unexpected value: " + op1);
                     }
@@ -138,12 +136,13 @@ public class Codegen {
                 case BinaryIr(
                         CmpOperator op1, ValIr v1, ValIr v2, VarIr dstName
                 ) -> {
-                    TypeAsm typeAsm = valToAsmType(v1);
+                    Type type = valToType(v1);
+                    TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
                     instructionAsms.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
                     // dstName will hold the result of the comparison, which is always a LONGWORD
                     instructionAsms.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
-                    instructionAsms.add(new SetCC(op1, toOperand(dstName)));
+                    instructionAsms.add(new SetCC(op1, type.isSigned(), toOperand(dstName)));
                 }
                 case Copy(ValIr val, VarIr dst1) -> {
                     TypeAsm typeAsm = valToAsmType(val);
@@ -152,14 +151,16 @@ public class Codegen {
                 }
                 case Jump jump -> instructionAsms.add(jump);
                 case JumpIfNotZero(ValIr v, String label) -> {
-                    TypeAsm typeAsm = valToAsmType(v);
+                    Type type = valToType(v);
+                    TypeAsm typeAsm = toTypeAsm(type);
                     instructionAsms.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(NOT_EQUALS, label));
+                    instructionAsms.add(new JmpCC(NOT_EQUALS, type.isSigned(), label));
                 }
                 case JumpIfZero(ValIr v, String label) -> {
-                    TypeAsm typeAsm = valToAsmType(v);
+                    Type type = valToType(v);
+                    TypeAsm typeAsm = toTypeAsm(type);
                     instructionAsms.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(EQUALS, label));
+                    instructionAsms.add(new JmpCC(EQUALS, type.isSigned(), label));
                 }
                 case LabelIr labelIr -> instructionAsms.add(labelIr);
                 case FunCall funCall -> {
@@ -169,7 +170,8 @@ public class Codegen {
                         instructionAsms.add(new Movsx(toOperand(src), toOperand(dst)));
                 case TruncateIr(ValIr src, VarIr dst) ->
                         instructionAsms.add(new Mov(LONGWORD, toOperand(src), toOperand(dst)));
-                case ZeroExtendIr zeroExtendIr -> {
+                case ZeroExtendIr(ValIr src, VarIr dst) -> {
+                    instructionAsms.add(new MovZeroExtend(toOperand(src), toOperand(dst)));
                 }
             }
         }
@@ -200,14 +202,17 @@ public class Codegen {
                                 dePseudo(minuend, varTable, offset));
                 case SetCC(
                         CmpOperator cmpOperator,
+                        boolean signed,
                         Operand operand
-                ) -> new SetCC(cmpOperator,
+                ) -> new SetCC(cmpOperator, signed,
                         dePseudo(operand, varTable, offset));
                 case Push(Operand operand) ->
                         new Push(dePseudo(operand, varTable, offset));
-
                 case Movsx(Operand src, Operand dst) ->
                         new Movsx(dePseudo(src, varTable, offset),
+                                dePseudo(dst, varTable, offset));
+                case MovZeroExtend(Operand src, Operand dst) ->
+                        new MovZeroExtend(dePseudo(src, varTable, offset),
                                 dePseudo(dst, varTable, offset));
             };
             instructions.set(i, newInst);
@@ -230,9 +235,18 @@ public class Codegen {
             Instruction oldInst = instructions.get(i);
 
             switch (oldInst) {
+                case MovZeroExtend(Operand src, Operand dst) -> {
+                    if (dst instanceof Reg) {
+                        instructions.set(i, new Mov(LONGWORD, src, dst));
+                    } else {
+                        instructions.set(i, new Mov(LONGWORD, src, R11));
+                        instructions.add(i + 1, new Mov(QUADWORD, R11, dst));
+                    }
+                }
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
                            Operand operand) -> {
-                    if (op == UnaryOperator.IDIV && operand instanceof Imm) {
+                    if ((op == UnaryOperator.IDIV || op == UnaryOperator.DIV)
+                            && operand instanceof Imm) {
                         instructions.set(i, new Mov(typeAsm, operand, R10));
                         instructions.add(i + 1, new Unary(op, typeAsm, R10));
                     }
@@ -325,17 +339,21 @@ public class Codegen {
     }
 
     private static TypeAsm valToAsmType(ValIr val) {
+        return toTypeAsm(valToType(val));
+    }
+
+    private static Type valToType(ValIr val) {
         return switch (val) {
-            case Constant constant -> toTypeAsm(constant.type());
+            case Constant constant -> constant.type();
             case VarIr(String identifier) ->
-                    toTypeAsm(SYMBOL_TABLE.get(identifier).type());
+                    SYMBOL_TABLE.get(identifier).type();
         };
     }
 
     private static TypeAsm toTypeAsm(Type type) {
         return switch (type) {
-            case INT -> LONGWORD;
-            case LONG -> QUADWORD;
+            case INT, UINT -> LONGWORD;
+            case LONG, ULONG -> QUADWORD;
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
         };
