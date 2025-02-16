@@ -10,13 +10,6 @@ public record ConstUInt(int i) implements Constant {
         return UINT;
     }
 
-    public static void main(String[] args) {
-        var r = new ConstUInt(-1);
-        var s = r.toString();
-        Record x;
-        System.out.println(s);
-    }
-
     @Override
     public String toString() {
         return "ConstUInt[i=" + Integer.toUnsignedString(i) + "]";

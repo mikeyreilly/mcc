@@ -1,4 +1,4 @@
 package com.quaxt.mcc;
 
-public sealed interface StaticInit extends InitialValue permits IntInit, LongInit, UIntInit, ULongInit {
+public sealed interface StaticInit extends InitialValue permits DoubleInit, IntInit, LongInit, UIntInit, ULongInit {
 }

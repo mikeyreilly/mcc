@@ -13,6 +13,7 @@ public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
     static final Token[] TOKEN_TYPES_TO_MATCH =
             new Token[]{IDENTIFIER, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
+                    DOUBLE_LITERAL,
                     UNSIGNED_LONG_LITERAL, UNSIGNED_INT_LITERAL,
                     CLOSE_BRACE, LONG_LITERAL, INT_LITERAL, SEMICOLON,
                     SINGLE_LINE_COMMENT, MULTILINE_COMMENT, DECREMENT,
@@ -39,9 +40,10 @@ public class Lexer {
             for (Token tokenType : TOKEN_TYPES_TO_MATCH) {
                 matcher.usePattern(tokenType.regex());
                 if (matcher.lookingAt()) {
-                    int end = matcher.end();
+                    int end = matcher.end(tokenType.group());
                     if (tokenType != TokenType.SINGLE_LINE_COMMENT && tokenType != TokenType.MULTILINE_COMMENT) {
-                        if (tokenType == IDENTIFIER || tokenType == TokenType.INT_LITERAL || tokenType == LONG_LITERAL
+                        if (tokenType == IDENTIFIER || tokenType == TokenType.DOUBLE_LITERAL ||
+                                tokenType == TokenType.INT_LITERAL || tokenType == LONG_LITERAL
                                 || tokenType == UNSIGNED_INT_LITERAL || tokenType == UNSIGNED_LONG_LITERAL) {
                             int start = matcher.start();
                             String value = src.substring(start, end);

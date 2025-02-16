@@ -411,13 +411,14 @@ public class Codegen {
             case ConstLong(long l) -> new Imm(l);
             case ConstUInt(int i) -> new Imm(i);
             case ConstULong(long l) -> new Imm(l);
+            case ConstDouble(double d) -> new ImmDouble(d);
         };
     }
 
 
     private static Operand dePseudo(Operand in, Map<String, Integer> varTable, AtomicInteger offset) {
         return switch (in) {
-            case Imm _, Reg _, Stack _ -> in;
+            case Imm _, ImmDouble _, Reg _, Stack _ -> in;
             case Pseudo(String identifier) -> {
                 if (BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry(
                         TypeAsm type, boolean isStatic)) {
