@@ -11,8 +11,8 @@ public record Unary(UnaryOperator op, TypeAsm type,
         return switch (op) {
             case DIV -> "div";
             case IDIV -> "idiv";
-            case NEGATE -> "not";
-            case COMPLEMENT -> "neg";
+            case BITWISE_NOT -> "not";
+            case UNARY_MINUS -> "neg";
             case NOT -> "not";
         } + (type == QUADWORD ? "q" : "l") + "\t";
     }

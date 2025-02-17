@@ -14,7 +14,7 @@ public enum TokenType implements Token {
             Pattern.DOTALL), 0), UNSIGNED(), SIGNED(),
     DOUBLE(), LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
     BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
-    DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~"),
+    DECREMENT("--"), INCREMENT("\\+\\+"), BITWISE_NOT("~"),
     NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
     COMMA(",");
     final Pattern regex;

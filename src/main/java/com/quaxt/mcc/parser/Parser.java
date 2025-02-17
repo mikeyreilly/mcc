@@ -3,6 +3,7 @@ package com.quaxt.mcc.parser;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.semantic.FunType;
+import com.quaxt.mcc.semantic.Primitive;
 import com.quaxt.mcc.semantic.Type;
 
 import java.util.ArrayList;
@@ -13,6 +14,8 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.TokenType.*;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
+import static com.quaxt.mcc.semantic.Primitive.UINT;
+import static com.quaxt.mcc.semantic.Primitive.ULONG;
 
 public class Parser {
     private static Token expect(Token expected, List<Token> tokens) {
@@ -177,11 +180,11 @@ public class Parser {
             return com.quaxt.mcc.semantic.Primitive.DOUBLE;
         }
         if (foundLong)
-            return foundUnsigned ? com.quaxt.mcc.semantic.Primitive.ULONG : com.quaxt.mcc.semantic.Primitive.LONG;
+            return foundUnsigned ? ULONG : com.quaxt.mcc.semantic.Primitive.LONG;
         else if (foundInt)
-            return foundUnsigned ? com.quaxt.mcc.semantic.Primitive.UINT : com.quaxt.mcc.semantic.Primitive.INT;
+            return foundUnsigned ? UINT : com.quaxt.mcc.semantic.Primitive.INT;
         else if (foundSigned) return com.quaxt.mcc.semantic.Primitive.INT;
-        else if (foundUnsigned) return com.quaxt.mcc.semantic.Primitive.UINT;
+        else if (foundUnsigned) return UINT;
         if (throwExceptionIfNoType)
             throw new RuntimeException("invalid type specifier");
         return null;
@@ -288,15 +291,17 @@ public class Parser {
                 : parseStatement(tokens);
     }
 
-    public static Constant parseConst(String value, boolean isIntToken, boolean signed) {
-        if (signed) {
+    public static Constant parseConst(String value, Type type) {
+        if (type == Primitive.DOUBLE)
+            return new ConstDouble(Double.parseDouble(value));
+        if (type.isSigned()) {
             long v = Long.parseLong(value);
-            if (v < 1L << 31 && isIntToken)
+            if (v < 1L << 31 && type == Primitive.INT)
                 return new ConstInt((int) v);
             else return new ConstLong(v);
         }
         long v = Long.parseUnsignedLong(value);
-        if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && isIntToken)
+        if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && type == Primitive.INT)
             return new ConstUInt((int) v);
         else return new ConstULong(v);
     }
@@ -305,9 +310,9 @@ public class Parser {
         Token token = tokens.removeFirst();
         return switch (token) {
             case SUB ->
-                    new UnaryOp(UnaryOperator.COMPLEMENT, parseFactor(tokens), null);
-            case COMPLIMENT ->
-                    new UnaryOp(UnaryOperator.NEGATE, parseFactor(tokens), null);
+                    new UnaryOp(UnaryOperator.UNARY_MINUS, parseFactor(tokens), null);
+            case BITWISE_NOT ->
+                    new UnaryOp(UnaryOperator.BITWISE_NOT, parseFactor(tokens), null);
             case NOT ->
                     new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
             case OPEN_PAREN -> {
@@ -334,16 +339,16 @@ public class Parser {
                 }
             }
             case TokenWithValue(
-                    TokenType type, String value
+                    TokenType tokenType, String value
             ) -> {
-                if (type == INT_LITERAL)
-                    yield parseConst(value, true, true);
-                if (type == LONG_LITERAL)
-                    yield parseConst(value.substring(0, value.length() - 1), false, true);
-                if (type == UNSIGNED_INT_LITERAL)
-                    yield parseConst(value.substring(0, value.length() - 1), true, false);
-                if (type == UNSIGNED_LONG_LITERAL) {
-                    yield parseConst(value.substring(0, value.length() - 2), false, false);
+                Type t = com.quaxt.mcc.semantic.Primitive.fromTokenType(tokenType);
+                int len = value.length() - (t == null ? 0 : switch (t) {
+                    case Primitive.LONG, UINT -> 1;
+                    case ULONG -> 2;
+                    default -> 0;
+                });
+                if (t != null) {
+                    yield parseConst(value.substring(0, len), t);
                 }
                 Identifier id = new Identifier(value, null);
                 if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {

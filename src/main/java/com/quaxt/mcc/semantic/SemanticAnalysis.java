@@ -129,6 +129,8 @@ public class SemanticAnalysis {
                     convertConst(new UIntInit(i), decl.varType());
             case ConstULong(long i) ->
                     convertConst(new ULongInit(i), decl.varType());
+            case ConstDouble(double d) ->
+                    convertConst(new DoubleInit(d), decl.varType());
             case null ->
                     decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
             default -> throw new RuntimeException("Non constant initializer");
@@ -158,6 +160,17 @@ public class SemanticAnalysis {
     }
 
     private static InitialValue convertConst(InitialValue init, Type type) {
+        if (init instanceof DoubleInit(double d)) {
+            return switch (type) {
+                case DOUBLE -> init;
+                case LONG -> new LongInit((long) d);
+                case INT -> new IntInit((int) d);
+                case ULONG -> new ULongInit((long) d);
+                case UINT -> new UIntInit((int) d);
+                default ->
+                        throw new IllegalArgumentException("not a const:" + init);
+            };
+        }
         long initL = switch (init) {
             case IntInit(int i) -> i;
             case LongInit(long l) -> l;
@@ -167,6 +180,7 @@ public class SemanticAnalysis {
                     throw new IllegalArgumentException("not a const:" + init);
         };
         return switch (type) {
+            case DOUBLE -> new DoubleInit(initL);
             case LONG -> new LongInit(initL);
             case INT -> new IntInit((int) initL);
             case ULONG -> new ULongInit(initL);
@@ -277,12 +291,16 @@ public class SemanticAnalysis {
             }
             return decl;
         } else if (decl.storageClass() == STATIC) {
-            InitialValue initialValue;
-            if (decl.init() instanceof ConstInt(int i))
-                initialValue = new IntInit(i);
-            else if (decl.init() == null) initialValue = new IntInit(0);
-            else
-                throw new RuntimeException("Non-constant initializer on local static variable");
+            InitialValue initialValue = switch (decl.init()) {
+                case ConstInt(int i) -> new IntInit(i);
+                case ConstDouble(double d) -> new DoubleInit(d);
+                case ConstLong(long l) -> new LongInit(l);
+                case ConstUInt(int i) -> new UIntInit(i);
+                case ConstULong(long l) -> new ULongInit(l);
+                case null -> new IntInit(0);
+                default ->
+                        throw new RuntimeException("Non-constant initializer on local static variable");
+            };
             initialValue = convertConst(initialValue, decl.varType());
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(initialValue, false)));
             return new VarDecl(decl.name(), switch (initialValue) {
@@ -324,6 +342,9 @@ public class SemanticAnalysis {
                 }
                 Type t1 = typedE1.type();
                 Type t2 = typedE2.type();
+                if (op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE)) {
+                    fail("invalid operands to binary % (have ‘" + t1 + "’ and ‘" + t2 + "’");
+                }
                 Type commonType = getCommonType(t1, t2);
                 Exp convertedE1 = convertTo(typedE1, commonType);
                 Exp convertedE2 = convertTo(typedE2, commonType);
@@ -377,6 +398,9 @@ public class SemanticAnalysis {
             }
             case UnaryOp(UnaryOperator op, Exp inner, Type type) -> {
                 Exp typedInner = typeCheckExpression(inner);
+                if (op == UnaryOperator.BITWISE_NOT && typedInner.type() == Primitive.DOUBLE) {
+                    fail("can't apply ~ to double");
+                }
                 yield switch (op) {
                     case NOT -> new UnaryOp(op, typedInner, INT);
                     default -> new UnaryOp(op, typedInner, typedInner.type());
@@ -387,10 +411,11 @@ public class SemanticAnalysis {
     }
 
     private static Type getCommonType(Type t1, Type t2) {
-        if (t1 == t2) return t1;
-        if (t1.size() == t2.size()) return t1.isSigned() ? t2 : t1;
-        if (t1.size() > t2.size()) return t1;
-        return t2;
+        return t1 == t2 ? t1
+                : t1 == DOUBLE || t2 == DOUBLE ? DOUBLE
+                : t1.size() == t2.size() ? (t1.isSigned() ? t2 : t1)
+                : t1.size() > t2.size() ? t1
+                : t2;
     }
 
     record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {

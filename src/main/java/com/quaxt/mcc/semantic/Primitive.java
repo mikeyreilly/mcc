@@ -12,9 +12,14 @@ public enum Primitive implements Type {
         this.zero = zero;
     }
 
-     @Override
-     public StaticInit zero() {
-        return zero;
+    public static Type fromTokenType(TokenType tokenType) {
+        return switch (tokenType) {
+            case DOUBLE_LITERAL -> DOUBLE;
+            case UNSIGNED_LONG_LITERAL -> ULONG;
+            case UNSIGNED_INT_LITERAL -> UINT;
+            case LONG_LITERAL -> LONG;
+            case INT_LITERAL -> INT;
+            default -> null;
+        };
     }
-
 }
