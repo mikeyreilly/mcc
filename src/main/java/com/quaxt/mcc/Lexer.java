@@ -51,6 +51,7 @@ public class Lexer {
                                 case "break" -> TokenType.BREAK;
                                 case "continue" -> TokenType.CONTINUE;
                                 case "do" -> TokenType.DO;
+                                case "double" -> TokenType.DOUBLE;
                                 case "else" -> TokenType.ELSE;
                                 case "extern" -> TokenType.EXTERN;
                                 case "for" -> TokenType.FOR;

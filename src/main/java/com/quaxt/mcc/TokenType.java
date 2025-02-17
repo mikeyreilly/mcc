@@ -12,7 +12,7 @@ public enum TokenType implements Token {
     LONG_LITERAL("([0-9]+[lL])[^\\w.]", 1), INT_LITERAL("([0-9]+)[^\\w.]", 1), SEMICOLON(";"),
     SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
             Pattern.DOTALL), 0), UNSIGNED(), SIGNED(),
-    LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
+    DOUBLE(), LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
     BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
     DECREMENT("--"), INCREMENT("\\+\\+"), COMPLIMENT("~"),
     NOT("!"), QUESTION_MARK("\\?"), COLON(":"),

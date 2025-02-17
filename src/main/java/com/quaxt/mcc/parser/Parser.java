@@ -138,12 +138,17 @@ public class Parser {
     }
 
     private static Type parseType(List<Token> types, boolean throwExceptionIfNoType) {
+        boolean foundDouble = false;
         boolean foundInt = false;
         boolean foundLong = false;
         boolean foundSigned = false;
         boolean foundUnsigned = false;
         for (Token t : types) {
             switch (t) {
+                case DOUBLE -> {
+                    if (foundDouble) fail("invalid type specifier");
+                    else foundDouble = true;
+                }
                 case INT -> {
                     if (foundInt) fail("invalid type specifier");
                     else foundInt = true;
@@ -165,7 +170,12 @@ public class Parser {
                 default -> fail("invalid type specifier");
             }
         }
-
+        if (foundDouble) {
+            if (types.size() != 1) {
+                fail("can't combine double with other type specifiers");
+            }
+            return com.quaxt.mcc.semantic.Primitive.DOUBLE;
+        }
         if (foundLong)
             return foundUnsigned ? com.quaxt.mcc.semantic.Primitive.ULONG : com.quaxt.mcc.semantic.Primitive.LONG;
         else if (foundInt)
@@ -197,7 +207,7 @@ public class Parser {
     }
 
     private static boolean isTypeSpecifier(Token type) {
-        return INT == type || LONG == type || UNSIGNED == type || SIGNED == type;
+        return INT == type || LONG == type || UNSIGNED == type || SIGNED == type || DOUBLE == type;
     }
 
     private static Function parseRestOfFunction(List<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
