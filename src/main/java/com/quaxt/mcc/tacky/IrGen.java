@@ -14,8 +14,7 @@ import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
-import static com.quaxt.mcc.semantic.Primitive.INT;
-import static com.quaxt.mcc.semantic.Primitive.LONG;
+import static com.quaxt.mcc.semantic.Primitive.*;
 
 import com.quaxt.mcc.semantic.Type;
 
@@ -210,6 +209,8 @@ public class IrGen {
                 return c;
             case ConstULong c:
                 return c;
+            case ConstDouble c:
+                return c;
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
                 ValIr c = compileExp(condition, instructions);
@@ -300,7 +301,11 @@ public class IrGen {
                     return result;
                 }
                 VarIr dst = makeTemporary("dst", t);
-                if (t.size() == innerType.size()) {
+                if (t == DOUBLE) {
+                    instructions.add(innerType.isSigned() ? new DoubleToInt(result, dst) : new DoubleToUInt(result, dst));
+                } else if (innerType == DOUBLE) {
+                    instructions.add(t.isSigned() ? new IntToDouble(result, dst) : new UIntToDouble(result, dst));
+                } else if (t.size() == innerType.size()) {
                     instructions.add(new Copy(result, dst));
                 } else if (t.size() < innerType.size()) {
                     instructions.add(new TruncateIr(result, dst));

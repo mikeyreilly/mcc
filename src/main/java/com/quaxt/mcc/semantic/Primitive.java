@@ -11,7 +11,9 @@ public enum Primitive implements Type {
     Primitive(StaticInit zero) {
         this.zero = zero;
     }
-
+    public StaticInit zero() {
+        return zero;
+    }
     public static Type fromTokenType(TokenType tokenType) {
         return switch (tokenType) {
             case DOUBLE_LITERAL -> DOUBLE;
