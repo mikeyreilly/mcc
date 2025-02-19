@@ -12,6 +12,8 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.asm.DoubleReg.XMM14;
+import static com.quaxt.mcc.asm.DoubleReg.XMM15;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.asm.TypeAsm.LONGWORD;
@@ -21,10 +23,10 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 public class Codegen {
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
-        ArrayList<TopLevelAsm> l = new ArrayList<>();
+        ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
         for (TopLevel topLevel : programIr.topLevels()) {
             switch (topLevel) {
-                case FunctionIr f -> l.add(generateAssembly(f));
+                case FunctionIr f -> topLevels.add(generateAssembly(f));
 
                 case StaticVariable(String name, boolean global, Type t,
                                     StaticInit init) -> {
@@ -32,14 +34,14 @@ public class Codegen {
                         case UINT, INT -> 4;
                         default -> 8;
                     };
-                    l.add(new StaticVariableAsm(name, global, alignment, init));
+                    topLevels.add(new StaticVariableAsm(name, global, alignment, init));
                 }
             }
         }
-
+        topLevels.addAll(CONSTANT_TABLE.values());
         generateBackendSymbolTable();
 
-        for (TopLevelAsm topLevelAsm : l) {
+        for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
 
                 List<Instruction> instructionAsms = functionAsm.instructions();
@@ -48,10 +50,10 @@ public class Codegen {
             }
         }
 
-        return new ProgramAsm(l);
+        return new ProgramAsm(topLevels);
     }
 
-    static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE = new HashMap<>();
+    public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE = new HashMap<>();
 
     private static void generateBackendSymbolTable() {
         for (Map.Entry<String, SymbolTableEntry> e : SYMBOL_TABLE.entrySet()) {
@@ -62,10 +64,13 @@ public class Codegen {
                 case FunAttributes(boolean defined, boolean _) ->
                         new FunEntry(defined);
                 case IdentifierAttributes.LocalAttr _ ->
-                        new ObjEntry(toTypeAsm(v.type()), false);
+                        new ObjEntry(toTypeAsm(v.type()), false, false);
                 case StaticAttributes _ ->
-                        new ObjEntry(toTypeAsm(v.type()), true);
+                        new ObjEntry(toTypeAsm(v.type()), true, false);
             });
+        }
+        for (StaticConstant v : CONSTANT_TABLE.values()) {
+            BACKEND_SYMBOL_TABLE.put(v.label(), new ObjEntry(TypeAsm.DOUBLE, true, true));
         }
     }
 
@@ -173,6 +178,12 @@ public class Codegen {
                 case ZeroExtendIr(ValIr src, VarIr dst) -> {
                     instructionAsms.add(new MovZeroExtend(toOperand(src), toOperand(dst)));
                 }
+                case IntToDouble(ValIr src, VarIr dst) -> {
+                    instructionAsms.add(new Cvttsd2si(toTypeAsm(valToType(dst)), toOperand(src), toOperand(dst)));
+                }
+                case DoubleToInt _, DoubleToUInt _,
+                     UIntToDouble _ ->
+                        throw new Todo("Time to implement double conversions");
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);
@@ -214,6 +225,9 @@ public class Codegen {
                 case MovZeroExtend(Operand src, Operand dst) ->
                         new MovZeroExtend(dePseudo(src, varTable, offset),
                                 dePseudo(dst, varTable, offset));
+                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) ->
+                        new Cvttsd2si(dstType, dePseudo(src, varTable, offset),
+                                dePseudo(dst, varTable, offset));
             };
             instructions.set(i, newInst);
         }
@@ -239,31 +253,31 @@ public class Codegen {
                     if (dst instanceof Reg) {
                         instructions.set(i, new Mov(LONGWORD, src, dst));
                     } else {
-                        instructions.set(i, new Mov(LONGWORD, src, R11));
-                        instructions.add(i + 1, new Mov(QUADWORD, R11, dst));
+                        instructions.set(i, new Mov(LONGWORD, src, dstReg(QUADWORD)));
+                        instructions.add(i + 1, new Mov(QUADWORD, dstReg(QUADWORD), dst));
                     }
                 }
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
                            Operand operand) -> {
                     if ((op == UnaryOperator.IDIV || op == UnaryOperator.DIV)
                             && operand instanceof Imm) {
-                        instructions.set(i, new Mov(typeAsm, operand, R10));
-                        instructions.add(i + 1, new Unary(op, typeAsm, R10));
+                        instructions.set(i, new Mov(typeAsm, operand, srcReg(typeAsm)));
+                        instructions.add(i + 1, new Unary(op, typeAsm, srcReg(typeAsm)));
                     }
                 }
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) -> {
                     if (isRam(src) && isRam(dst)) {
-                        instructions.set(i, new Mov(typeAsm, src, R10));
-                        instructions.add(i + 1, new Mov(typeAsm, R10, dst));
+                        instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                        instructions.add(i + 1, new Mov(typeAsm, srcReg(typeAsm), dst));
                     } else if (isRam(dst) && typeAsm == QUADWORD && src instanceof Imm imm && imm.isAwkward()) {
-                        instructions.set(i, new Mov(typeAsm, src, R10));
-                        instructions.add(i + 1, new Mov(typeAsm, R10, dst));
+                        instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                        instructions.add(i + 1, new Mov(typeAsm, srcReg(typeAsm), dst));
                     }
                 }
                 case Push(Operand operand) -> {
                     if (operand instanceof Imm imm && imm.isAwkward()) {
-                        instructions.set(i, new Mov(QUADWORD, operand, R10));
-                        instructions.add(i + 1, new Push(R10));
+                        instructions.set(i, new Mov(QUADWORD, operand, srcReg(QUADWORD)));
+                        instructions.add(i + 1, new Push(srcReg(QUADWORD)));
                     }
                 }
                 case Binary(
@@ -271,23 +285,23 @@ public class Codegen {
                         Operand dst
                 ) -> {
                     if (src instanceof Imm imm && imm.isAwkward()) {
-                        instructions.set(i, new Mov(typeAsm, src, R10));
-                        instructions.add(i + 1, new Binary(op, typeAsm, R10, dst));
+                        instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                        instructions.add(i + 1, new Binary(op, typeAsm, srcReg(typeAsm), dst));
                         i = i + 2; // will be i+1 at start of next iteration -> want to catch conditions below
                     } else {
                         switch (op) {
                             case ADD, SUB -> {
                                 if (isRam(src) && isRam(dst)) {
-                                    instructions.set(i, new Mov(typeAsm, src, R10));
-                                    instructions.add(i + 1, new Binary(op, typeAsm, R10, dst));
+                                    instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                                    instructions.add(i + 1, new Binary(op, typeAsm, srcReg(typeAsm), dst));
                                 }
 
                             }
                             case IMUL -> {
                                 if (isRam(dst)) {
-                                    instructions.set(i, new Mov(typeAsm, dst, R11));
-                                    instructions.add(i + 1, new Binary(op, typeAsm, src, R11));
-                                    instructions.add(i + 2, new Mov(typeAsm, R11, dst));
+                                    instructions.set(i, new Mov(typeAsm, dst, dstReg(typeAsm)));
+                                    instructions.add(i + 1, new Binary(op, typeAsm, src, dstReg(typeAsm)));
+                                    instructions.add(i + 2, new Mov(typeAsm, dstReg(typeAsm), dst));
                                 }
                             }
 
@@ -298,20 +312,20 @@ public class Codegen {
 
                 case Cmp(TypeAsm typeAsm, Operand src, Operand dst) -> {
                     if (isRam(src) && isRam(dst)) {
-                        instructions.set(i, new Mov(typeAsm, src, R10));
-                        instructions.add(i + 1, new Cmp(typeAsm, R10, dst));
+                        instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                        instructions.add(i + 1, new Cmp(typeAsm, srcReg(typeAsm), dst));
                     } else if (dst instanceof Imm) {
                         if (src instanceof Imm imm && imm.isAwkward()) {
-                            instructions.set(i, new Mov(typeAsm, src, R10));
-                            instructions.add(i + 1, new Mov(typeAsm, dst, R11));
-                            instructions.add(i + 2, new Cmp(typeAsm, R10, R11));
+                            instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                            instructions.add(i + 1, new Mov(typeAsm, dst, dstReg(typeAsm)));
+                            instructions.add(i + 2, new Cmp(typeAsm, srcReg(typeAsm), dstReg(typeAsm)));
                         } else {
-                            instructions.set(i, new Mov(typeAsm, dst, R11));
-                            instructions.add(i + 1, new Cmp(typeAsm, src, R11));
+                            instructions.set(i, new Mov(typeAsm, dst, dstReg(typeAsm)));
+                            instructions.add(i + 1, new Cmp(typeAsm, src, dstReg(typeAsm)));
                         }
                     } else if (src instanceof Imm imm && imm.isAwkward()) {
-                        instructions.set(i, new Mov(typeAsm, src, R10));
-                        instructions.add(i + 1, new Cmp(typeAsm, R10, dst));
+                        instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                        instructions.add(i + 1, new Cmp(typeAsm, srcReg(typeAsm), dst));
                     }
                 }
                 case Movsx(Operand src, Operand dst) -> {
@@ -330,12 +344,24 @@ public class Codegen {
                         }
                     }
                 }
+                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
+                    if (isRam(dst)) {
+                        instructions.set(i, new Cvttsd2si(dstType, src, R11));
+                        instructions.add(i + 1, new Mov(QUADWORD, R11, dst));
+                    }
+                }
                 default -> {
                 }
-
             }
-
         }
+    }
+
+    private static Operand dstReg(TypeAsm typeAsm) {
+        return typeAsm == TypeAsm.DOUBLE ? XMM15 : R11;
+    }
+
+    private static Operand srcReg(TypeAsm typeAsm) {
+        return typeAsm == TypeAsm.DOUBLE ? XMM14 : R10;
     }
 
     private static TypeAsm valToAsmType(ValIr val) {
@@ -354,6 +380,7 @@ public class Codegen {
         return switch (type) {
             case INT, UINT -> LONGWORD;
             case LONG, ULONG -> QUADWORD;
+            case DOUBLE -> TypeAsm.DOUBLE;
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
         };
@@ -404,6 +431,13 @@ public class Codegen {
         }
     }
 
+    static HashMap<Double, StaticConstant> CONSTANT_TABLE = new HashMap<>();
+
+    public static Data resolveConstant(double d) {
+        StaticConstant x = CONSTANT_TABLE.computeIfAbsent(d, _ -> new StaticConstant("c." + Double.toHexString(d), 8, new DoubleInit(d)));
+        return new Data(x.label());
+    }
+
     private static Operand toOperand(ValIr val) {
         return switch (val) {
             case ConstInt(int i) -> new Imm(i);
@@ -411,17 +445,17 @@ public class Codegen {
             case ConstLong(long l) -> new Imm(l);
             case ConstUInt(int i) -> new Imm(i);
             case ConstULong(long l) -> new Imm(l);
-            case ConstDouble(double d) -> new ImmDouble(d);
+            case ConstDouble(double d) -> resolveConstant(d);
         };
     }
 
 
     private static Operand dePseudo(Operand in, Map<String, Integer> varTable, AtomicInteger offset) {
         return switch (in) {
-            case Imm _, ImmDouble _, Reg _, Stack _ -> in;
+            case Imm _, Reg _, Stack _, DoubleReg _, Data _ -> in;
             case Pseudo(String identifier) -> {
                 if (BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry(
-                        TypeAsm type, boolean isStatic)) {
+                        TypeAsm type, boolean isStatic, boolean isConstant)) {
                     if (isStatic) yield new Data(identifier);
 
                     Integer varOffset = varTable.get(identifier);
@@ -443,8 +477,6 @@ public class Codegen {
                 } else throw new IllegalArgumentException(identifier);
 
             }
-
-            case Data data -> throw new Todo();
         };
     }
 

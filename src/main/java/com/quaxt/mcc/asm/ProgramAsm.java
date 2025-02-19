@@ -7,8 +7,8 @@ import com.quaxt.mcc.tacky.LabelIr;
 import java.io.PrintWriter;
 import java.util.List;
 
-import static com.quaxt.mcc.asm.TypeAsm.LONGWORD;
-import static com.quaxt.mcc.asm.TypeAsm.QUADWORD;
+import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
+import static com.quaxt.mcc.asm.TypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private static void printIndent(PrintWriter out, String s) {
@@ -26,8 +26,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 default -> reg.d;
             };
             case Stack(int offset) -> offset + "(%rbp)";
-            case Data data -> data.identifier() + "(%rip)";
-            case ImmDouble immDouble -> throw new Todo();
+            case Data data -> {
+                boolean isConstant = BACKEND_SYMBOL_TABLE.get(data.identifier()) instanceof ObjEntry e && e.isConstant();
+                yield (isConstant ? ".L" + data.identifier() : data.identifier()) + "(%rip)";
+            }
+            case DoubleReg reg -> reg.toString();
         };
     }
 
@@ -36,6 +39,15 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             return "%" + switch (t) {
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
+                default ->
+                        throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
+            };
+        }
+        if (o instanceof DoubleReg reg) {
+            return "%" + switch (t) {
+                case DOUBLE -> reg.toString();
+                default ->
+                        throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
             };
         }
         return formatOperand(s, o);
@@ -50,12 +62,27 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case StaticVariableAsm staticVariableAsm -> {
                     emitStaticVariableAsm(out, staticVariableAsm);
                 }
+                case StaticConstant sc -> {
+                    emitStaticConstantAsm(out, sc);
+                }
             }
         }
 
 
         out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0\"");
         out.println("                .section	.note.GNU-stack,\"\",@progbits");
+    }
+
+    private void emitStaticConstantAsm(PrintWriter out, StaticConstant v) {
+        long init = switch (v.init()) {
+            case DoubleInit(double d) -> Double.doubleToLongBits(d);
+            case null -> 0L;
+        };
+        String name = v.label();
+        out.println("                .section .rodata");
+        out.println("                .balign 16");
+        out.println(".L" + name + ":");
+        out.println("                .quad " + init);
     }
 
     private void emitStaticVariableAsm(PrintWriter out, StaticVariableAsm v) {
@@ -151,7 +178,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                         CmpOperator cmpOperator,
                         boolean signed,
                         String label
-                ) -> "j"  + (signed ? cmpOperator.code
+                ) -> "j" + (signed ? cmpOperator.code
                         : cmpOperator.unsignedCode) + "\t" + label;
                 case Call(String functionName) ->
                         "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
@@ -161,7 +188,13 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     String dstF = formatOperand(QUADWORD, instruction, dst);
                     yield "movslq\t" + srcF + ", " + dstF;
                 }
-                case MovZeroExtend movZeroExtend -> throw new RuntimeException("can't happen because movZeroExtend is removed in fixup");
+                case MovZeroExtend movZeroExtend ->
+                        throw new RuntimeException("can't happen because movZeroExtend is removed in fixup");
+                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
+                    String srcF = formatOperand(DOUBLE, instruction, src);
+                    String dstF = formatOperand(QUADWORD, instruction, dst);
+                    yield "cvttsd2si\t" + srcF + ", " + dstF;
+                }
             };
             if (instruction instanceof LabelIr) {
                 out.println(s);

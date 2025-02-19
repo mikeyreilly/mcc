@@ -1,7 +1,7 @@
 package com.quaxt.mcc.asm;
 
 public enum TypeAsm {
-    LONGWORD(4), QUADWORD(8);
+    LONGWORD(4), QUADWORD(8), DOUBLE(8);
 
     private final int size;
 
