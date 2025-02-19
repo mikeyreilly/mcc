@@ -41,25 +41,27 @@ public class Mcc {
         return pb.start().waitFor();
     }
 
-    private static int assembleAndLink(Path asmFile, String bareFileName, boolean doNotCompile) throws InterruptedException, IOException {
+    private static int assembleAndLink(Path asmFile, String bareFileName, boolean doNotCompile, List<String> libs) throws InterruptedException, IOException {
         List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc", asmFile.toString()));
         if (doNotCompile) {
             gccArgs.add("-c");
         }
         gccArgs.addAll(Arrays.asList("-o", asmFile.resolveSibling(bareFileName + (doNotCompile ? ".o" : "")).toString()));
+        gccArgs.addAll(libs);
         ProcessBuilder pb =
                 new ProcessBuilder(gccArgs.toArray(new String[0])).inheritIO();
         return pb.start().waitFor();
     }
-
 
     public static void main(String[] args0) throws Exception {
         ArrayList<String> args = Arrays.stream(args0)
                 .collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;
+        List<String> libs = new ArrayList<>();
         for (int i = args.size() - 1; i >= 0; i--) {
-            Mode newMode = switch (args.get(i)) {
+            String arg = args.get(i);
+            Mode newMode = switch (arg) {
                 case "--lex" -> Mode.LEX;
                 case "--parse" -> Mode.PARSE;
                 case "--validate" -> Mode.VALIDATE;
@@ -71,7 +73,13 @@ public class Mcc {
                     args.remove(i);
                     yield null;
                 }
-                default -> null;
+                default -> {
+                    if (arg.startsWith("-l")) {
+                        libs.addFirst(arg);
+                        args.remove(i);
+                    }
+                    yield null;
+                }
             };
             if (newMode != null) {
                 mode = newMode;
@@ -126,7 +134,7 @@ public class Mcc {
         if (mode == Mode.COMPILE) {
             return;
         }
-        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile);
+        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile, libs);
 //        if (exitCode == 0) {
         Files.delete(asmFile);
 //        }
