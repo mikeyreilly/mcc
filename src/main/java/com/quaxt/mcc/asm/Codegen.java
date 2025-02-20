@@ -352,7 +352,10 @@ public class Codegen {
                 }
 
                 case Cmp(TypeAsm typeAsm, Operand src, Operand dst) -> {
-                    if (isRam(src) && isRam(dst)) {
+                    if (typeAsm == TypeAsm.DOUBLE && !(dst instanceof DoubleReg)) {
+                        instructions.set(i, new Mov(typeAsm, dst, dstReg(typeAsm)));
+                        instructions.add(i + 1, new Cmp(typeAsm, src, dstReg(typeAsm)));
+                    } else if (isRam(src) && isRam(dst)) {
                         instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
                         instructions.add(i + 1, new Cmp(typeAsm, srcReg(typeAsm), dst));
                     } else if (dst instanceof Imm) {
