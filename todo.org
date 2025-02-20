@@ -1,0 +1,24 @@
+* DONE double constants
+* TODO converting doubles and integers
+** DONE convert double to long
+** TODO other conversions
+* TODO handling double function args
+* TODO floating point arithmetic
+** DONE add, subtract, multiply, divide
+** TODO negate
+* TODO comparing doubles
+* TODO unary instructions, binary instructions and conditional jumps
+* TODO return double
+* TODO handle -lm arg
+
+I'm going to start with just the first two, so that I can make this compile and return the right answer
+
+#+begin_src c
+int main(void) {
+        double d = 42.0;
+        return (int)d;
+}
+#+end_src
+
+<2025-02-19 Wed 19:03> The above is done - next working on making
+double multiplication work

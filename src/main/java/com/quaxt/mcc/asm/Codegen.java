@@ -114,27 +114,32 @@ public class Codegen {
                     Type type = valToType(v1);
                     TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
-                    switch (op1) {
-                        case ADD, SUB, IMUL -> {
-                            instructionAsms.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
-                            instructionAsms.add(new Binary(op1, typeAsm, toOperand(v2), toOperand(dstName)));
-                        }
-                        case DIVIDE, REMAINDER -> {
-                            // MR-TODO need to check if unsigned and if so do what's on p.288
-                            if (type.isSigned()) {
-                                instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
-                                instructionAsms.add(new Cdq(typeAsm));
-                                instructionAsms.add(new Unary(UnaryOperator.IDIV, typeAsm, toOperand(v2)));
-                                instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
-                            } else {
-                                instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
-                                instructionAsms.add(new Mov(typeAsm, new Imm(0), DX));
-                                instructionAsms.add(new Unary(UnaryOperator.DIV, typeAsm, toOperand(v2)));
-                                instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
+                    if (typeAsm == TypeAsm.DOUBLE) {
+                        instructionAsms.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
+                        instructionAsms.add(new Binary(convertOp(op1, typeAsm), typeAsm, toOperand(v2), toOperand(dstName)));
+                    } else {
+                        switch (op1) {
+                            case ADD, SUB, IMUL -> {
+                                instructionAsms.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
+                                instructionAsms.add(new Binary(op1, typeAsm, toOperand(v2), toOperand(dstName)));
                             }
+                            case DIVIDE, REMAINDER -> {
+
+                                if (type.isSigned()) {
+                                    instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
+                                    instructionAsms.add(new Cdq(typeAsm));
+                                    instructionAsms.add(new Unary(UnaryOperator.IDIV, typeAsm, toOperand(v2)));
+                                    instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
+                                } else {
+                                    instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
+                                    instructionAsms.add(new Mov(typeAsm, new Imm(0), DX));
+                                    instructionAsms.add(new Unary(UnaryOperator.DIV, typeAsm, toOperand(v2)));
+                                    instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
+                                }
+                            }
+                            default ->
+                                    throw new IllegalStateException("Unexpected value: " + op1);
                         }
-                        default ->
-                                throw new IllegalStateException("Unexpected value: " + op1);
                     }
 
                 }
@@ -187,6 +192,16 @@ public class Codegen {
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);
+    }
+
+    private static ArithmeticOperator convertOp(ArithmeticOperator op1, TypeAsm typeAsm) {
+        return typeAsm == TypeAsm.DOUBLE ? switch (op1) {
+            case SUB -> DOUBLE_SUB;
+            case ADD -> DOUBLE_ADD;
+            case IMUL -> DOUBLE_MUL;
+            case DIVIDE -> DOUBLE_DIVIDE;
+            default -> op1;
+        } : op1;
     }
 
     private static AtomicInteger replacePseudoRegisters(List<Instruction> instructions) {
@@ -297,7 +312,7 @@ public class Codegen {
                                 }
 
                             }
-                            case IMUL -> {
+                            case IMUL, DOUBLE_SUB, DOUBLE_ADD, DOUBLE_MUL, DOUBLE_DIVIDE -> {
                                 if (isRam(dst)) {
                                     instructions.set(i, new Mov(typeAsm, dst, dstReg(typeAsm)));
                                     instructions.add(i + 1, new Binary(op, typeAsm, src, dstReg(typeAsm)));
