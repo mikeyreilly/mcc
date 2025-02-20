@@ -2,6 +2,7 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.*;
+import com.quaxt.mcc.semantic.Primitive;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
@@ -18,19 +19,23 @@ import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.asm.TypeAsm.LONGWORD;
 import static com.quaxt.mcc.asm.TypeAsm.QUADWORD;
 import static com.quaxt.mcc.semantic.Primitive.*;
+import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
 public class Codegen {
     static HashMap<Double, StaticConstant> CONSTANT_TABLE = new HashMap<>();
     private static final Data NEGATIVE_ZERO;
+    private static final Data UPPER_BOUND;
 
     private static String toHexString(double d) {
         return Double.toHexString(d).replaceAll("-", "_");
     }
-
+    private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L<<63);
     static {
         double negative_zero = -0.0;
+        // can't just call resolve constant because 16-byte alignment
         CONSTANT_TABLE.put(negative_zero, new StaticConstant("c." + toHexString(negative_zero), 16, new DoubleInit(negative_zero)));
         NEGATIVE_ZERO = resolveConstant(-0.0d);
+        UPPER_BOUND = resolveConstant(0x1.0p63);
     }
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
@@ -539,18 +544,41 @@ public class Codegen {
                         instructionAsms.add(new Mov(LONGWORD, toOperand(src), toOperand(dst)));
                 case ZeroExtendIr(ValIr src, VarIr dst) ->
                         instructionAsms.add(new MovZeroExtend(toOperand(src), toOperand(dst)));
-                case IntToDouble(ValIr src, VarIr dst) -> {
-                    if (valToType(src).isSigned()) {
+                case IntToDouble(ValIr src, VarIr dst) ->
                         instructionAsms.add(new Cvtsi2sd(toTypeAsm(valToType(src)), toOperand(src), toOperand(dst)));
-                    } else {
-                        throw new Todo("Time to implement unsigned integer to double");
-                    }
-                }
                 case DoubleToInt(ValIr src, VarIr dst) ->
                         instructionAsms.add(new Cvttsd2si(toTypeAsm(valToType(dst)), toOperand(src), toOperand(dst)));
-                case DoubleToUInt _,
-                     UIntToDouble _ ->
-                        throw new Todo("Time to implement double conversions");
+                case DoubleToUInt(ValIr src, ValIr dst) -> {
+                    Type dstType = valToType(dst);
+                    if (dstType == Primitive.INT) {
+                        instructionAsms.add(new Cvttsd2si(QUADWORD, toOperand(src), Reg.AX));
+                        instructionAsms.add(new Mov(LONGWORD, Reg.AX, toOperand(dst)));
+                    } else{
+                        //p.335
+                        LabelIr label1 = newLabel("aub");
+                        LabelIr label2 = newLabel("endCmp");
+
+                        instructionAsms.add(new Cmp(TypeAsm.DOUBLE, UPPER_BOUND, toOperand(src)));
+                        instructionAsms.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,true,
+                                label1.label()));
+                        instructionAsms.add(new Cvttsd2si(QUADWORD, toOperand(src),toOperand(dst)));
+                        instructionAsms.add(new Jump(label2.label()));
+
+                        instructionAsms.add(label1);
+                        instructionAsms.add(new Mov(TypeAsm.DOUBLE, toOperand(src), XMM0));
+
+                        instructionAsms.add(new Binary(DOUBLE_SUB, TypeAsm.DOUBLE, UPPER_BOUND, toOperand(dst)));
+                        instructionAsms.add(new Cvttsd2si(QUADWORD, XMM0 ,toOperand(dst)));
+                        instructionAsms.add(new Mov(TypeAsm.QUADWORD, UPPER_BOUND_LONG_IMMEDIATE, AX));
+
+                        instructionAsms.add(new Binary(ADD, TypeAsm.QUADWORD, AX, toOperand(dst)));
+
+                        instructionAsms.add(label2);
+                    }
+
+                }
+                case UIntToDouble _ ->
+                        throw new Todo("Time to implement unsigned to double conversions see top of p.355");
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);

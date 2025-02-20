@@ -331,7 +331,7 @@ public class IrGen {
 
     static AtomicLong labelCount = new AtomicLong(0L);
 
-    private static LabelIr newLabel(String prefix) {
+    public static LabelIr newLabel(String prefix) {
         return new LabelIr(".L" + prefix + labelCount.getAndIncrement());
     }
 
