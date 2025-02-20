@@ -7,6 +7,7 @@
 ** DONE add, subtract, multiply, divide
 ** DONE negate
 * TODO comparing doubles
+** DONE greater than works, maybe everything does, will check when functions are done
 * TODO unary instructions, binary instructions and conditional jumps
 * TODO return double
 * TODO handle -lm arg
@@ -23,3 +24,5 @@ int main(void) {
 <2025-02-19 Wed 19:03> The above is done - next working on making
 double multiplication work
 <2025-02-20 Thu 11:13> The above is done - now adding remaining conversions
+<2025-02-20 Thu 13:05> conversions done - now doing function calls
+<2025-02-20 Thu 18:46> function calls with double args done

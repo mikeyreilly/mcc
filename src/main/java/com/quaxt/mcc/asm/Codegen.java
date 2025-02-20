@@ -12,8 +12,7 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
-import static com.quaxt.mcc.asm.DoubleReg.XMM14;
-import static com.quaxt.mcc.asm.DoubleReg.XMM15;
+import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.asm.TypeAsm.LONGWORD;
@@ -310,7 +309,10 @@ public class Codegen {
         return src instanceof Stack || src instanceof Data;
     }
 
-    private static Reg[] registers = new Reg[]{DI, SI, DX, CX, R8, R9};
+    private final static Reg[] INTEGER_REGISTERS = new Reg[]{DI, SI, DX, CX, R8, R9};
+    private final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{
+            XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7
+    };
 
     public static Data resolveConstant(double d) {
         StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d, _ ->
@@ -365,47 +367,49 @@ public class Codegen {
         if (funCall instanceof FunCall(
                 String name, ArrayList<ValIr> args, ValIr dst
         )) {
-            int argc = args.size();
-            int stackArgCount = argc > 6 ? (argc - 6) : 0;
-            int stackPadding = stackArgCount % 2 == 1 ? 8 : 0;
-            if (stackPadding != 0) {
-                instructionAsms.add(new Binary(SUB, QUADWORD, new Imm(stackPadding), SP));
-            }
-
             List<TypedOperand> operands = new ArrayList<>();
             for (ValIr arg : args) {
                 TypeAsm typeAsm = valToAsmType(arg);
                 Operand operand = toOperand(arg);
                 operands.add(new TypedOperand(typeAsm, operand));
             }
-            var mrTodo = classifyParameters(operands);
-
-
-            for (int i = 0; i < 6 && i < argc; i++) {
-                Reg r = registers[i];
-                ValIr arg = args.get(i);
-                TypeAsm typeAsm = valToAsmType(arg);
-                Operand operand = toOperand(arg);
-                instructionAsms.add(new Mov(typeAsm, operand, r));
+            ParameterClassification classifiedArgs = classifyParameters(operands);
+            ArrayList<TypedOperand> integerArguments = classifiedArgs.integerArguments();
+            ArrayList<Operand> doubleArguments = classifiedArgs.doubleArguments();
+            ArrayList<TypedOperand> stackArguments = classifiedArgs.stackArguments();
+            int stackArgCount = stackArguments.size();
+            int stackPadding = stackArgCount % 2 == 1 ? 8 : 0;
+            if (stackPadding != 0) {
+                instructionAsms.add(new Binary(SUB, QUADWORD, new Imm(stackPadding), SP));
             }
-            for (int i = argc - 1; i > 5; i--) {
-                ValIr arg = args.get(i);
-                Operand operand = toOperand(arg);
-                if (operand instanceof Imm || operand instanceof Reg || valToAsmType(arg) == QUADWORD) {
+
+            for (int i = 0; i < integerArguments.size(); i++) {
+                var integerArg = integerArguments.get(i);
+                Reg r = INTEGER_REGISTERS[i];
+                instructionAsms.add(new Mov(integerArg.type(), integerArg.operand(), r));
+            }
+            for (int i = 0; i < doubleArguments.size(); i++) {
+                Operand doubleArg = doubleArguments.get(i);
+                DoubleReg r = DOUBLE_REGISTERS[i];
+                instructionAsms.add(new Mov(TypeAsm.DOUBLE, doubleArg, r));
+            }
+            for (TypedOperand to : stackArguments) {
+                Operand operand = to.operand();
+                if (operand instanceof Imm || operand instanceof Reg || to.type() == QUADWORD) {
                     instructionAsms.add(new Push(operand));
                 } else {
                     instructionAsms.add(new Mov(LONGWORD, operand, AX));
                     instructionAsms.add(new Push(AX));
                 }
-
             }
             instructionAsms.add(new Call(name));
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD, new Imm(bytesToRemove), SP));
             }
-            TypeAsm typeAsm = valToAsmType(dst);
-            instructionAsms.add(new Mov(typeAsm, AX, toOperand(dst)));
+            TypeAsm returnType = valToAsmType(dst);
+
+            instructionAsms.add(new Mov(returnType, returnType == TypeAsm.DOUBLE ? XMM0 : AX, toOperand(dst)));
         }
     }
 
@@ -417,21 +421,31 @@ public class Codegen {
         for (Identifier param : functionType) {
             operands.add(new TypedOperand(toTypeAsm(param.type()), new Pseudo(param.name())));
         }
-        var mrTodo = classifyParameters(operands);
-        for (int i = 0; i < functionType.size() && i < 6; i++) {
-            Identifier param = functionType.get(i);
-            instructionAsms.add(new Mov(toTypeAsm(param.type()), registers[i], new Pseudo(param.name())));
+        ParameterClassification classifiedParameters = classifyParameters(operands);
+        ArrayList<TypedOperand> integerArguments = classifiedParameters.integerArguments();
+        ArrayList<Operand> doubleArguments = classifiedParameters.doubleArguments();
+        ArrayList<TypedOperand> stackArguments = classifiedParameters.stackArguments();
+
+        for (int i = 0; i < integerArguments.size(); i++) {
+            TypedOperand to = integerArguments.get(i);
+            instructionAsms.add(new Mov(to.type(), INTEGER_REGISTERS[i], to.operand()));
         }
-        for (int i = 6; i < functionType.size(); i++) {
-            Identifier param = functionType.get(i);
-            instructionAsms.add(new Mov(toTypeAsm(param.type()), new Stack(16 + (i - 6) * 8), new Pseudo(param.name())));
+
+        for (int i = 0; i < doubleArguments.size(); i++) {
+            Operand operand = doubleArguments.get(i);
+            instructionAsms.add(new Mov(TypeAsm.DOUBLE, DOUBLE_REGISTERS[i], operand));
+        }
+        for (int i = 0; i < stackArguments.size(); i++) {
+            TypedOperand to = stackArguments.get(i);
+            instructionAsms.add(new Mov(to.type(), new Stack(16 + i * 8), to.operand()));
         }
 
         for (InstructionIr inst : functionIr.instructions()) {
             switch (inst) {
                 case ReturnInstructionIr(ValIr val) -> {
                     Operand src1 = toOperand(val);
-                    instructionAsms.add(new Mov(valToAsmType(val), src1, AX));
+                    TypeAsm returnType = valToAsmType(val);
+                    instructionAsms.add(new Mov(returnType, src1, returnType == TypeAsm.DOUBLE ? XMM0 : AX));
                     instructionAsms.add(RET);
                 }
                 case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
@@ -560,15 +574,14 @@ public class Codegen {
             TypeAsm type = to.type();
             Operand operand = to.operand();
             if (type == TypeAsm.DOUBLE) {
-                if (doubleArguments.size() < 8)  doubleArguments.add(operand);
-                stackArguments.add(to);
-            }
-            else {
+                if (doubleArguments.size() < 8) doubleArguments.add(operand);
+                else stackArguments.add(to);
+            } else {
                 if (integerArguments.size() < 6) integerArguments.add(to);
                 else stackArguments.add(to);
             }
         }
-        return new ParameterClassification(integerArguments,doubleArguments,stackArguments);
+        return new ParameterClassification(integerArguments, doubleArguments, stackArguments);
 
     }
 
