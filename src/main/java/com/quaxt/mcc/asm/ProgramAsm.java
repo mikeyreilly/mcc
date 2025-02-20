@@ -92,7 +92,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case LongInit(long l) -> l;
             case UIntInit(int i) -> i;
             case ULongInit(long l) -> l;
-            case DoubleInit(double d) -> throw new Todo();
+            case DoubleInit(double d) -> -1;
         };
 
         boolean global = v.global();
@@ -107,7 +107,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case LongInit _ -> 8;
                 case UIntInit _ -> 4;
                 case ULongInit _ -> 8;
-                case DoubleInit _ -> throw new Todo();
+                case DoubleInit _ -> throw new AssertionError("init is set to non zero for DoubleInit");
             });
         } else {
             String name = v.name();
@@ -116,10 +116,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             out.println("                .balign " + v.alignment());
             out.println(name + ":");
             out.println(switch (v.init()) {
-                case IntInit _, UIntInit _ -> "                .long ";
-                case LongInit _, ULongInit _ -> "                .quad ";
-                case DoubleInit doubleInit -> throw new Todo();
-            } + init);
+                case IntInit _, UIntInit _ -> "                .long "+ init;
+                case LongInit _, ULongInit _ -> "                .quad "+ init;
+                case DoubleInit(double d) -> "                .quad "+ Double.doubleToLongBits(d);
+            } );
 
         }
 

@@ -260,7 +260,7 @@ public class Codegen {
                 case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
                     if (isRam(dst)) {
                         instructions.set(i, new Cvttsd2si(dstType, src, R11));
-                        instructions.add(i + 1, new Mov(QUADWORD, R11, dst));
+                        instructions.add(i + 1, new Mov(dstType, R11, dst));
                     }
                 }
                 case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) -> {
