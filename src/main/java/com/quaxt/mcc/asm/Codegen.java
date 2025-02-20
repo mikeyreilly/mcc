@@ -461,7 +461,7 @@ public class Codegen {
                     if (op1 == UnaryOperator.NOT) {
                         instructionAsms.add(new Cmp(typeAsm, new Imm(0), src1));
                         instructionAsms.add(new Mov(typeAsm, new Imm(0), dst1));
-                        instructionAsms.add(new SetCC(EQUALS, type.isSigned(), dst1));
+                        instructionAsms.add(new SetCC(EQUALS, type.isSignedOrNotDouble(), dst1));
                     } else if (op1 == UnaryOperator.UNARY_MINUS && typeAsm == TypeAsm.DOUBLE) {
                         instructionAsms.add(new Mov(typeAsm, src1, dst1));
                         instructionAsms.add(new Binary(BITWISE_XOR, typeAsm, NEGATIVE_ZERO, dst1));
@@ -515,7 +515,7 @@ public class Codegen {
                     instructionAsms.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
                     // dstName will hold the result of the comparison, which is always a LONGWORD
                     instructionAsms.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
-                    instructionAsms.add(new SetCC(op1, type.isSigned(), toOperand(dstName)));
+                    instructionAsms.add(new SetCC(op1, type.isSignedOrNotDouble(), toOperand(dstName)));
                 }
                 case Copy(ValIr val, VarIr dst1) -> {
                     TypeAsm typeAsm = valToAsmType(val);
@@ -527,13 +527,13 @@ public class Codegen {
                     Type type = valToType(v);
                     TypeAsm typeAsm = toTypeAsm(type);
                     instructionAsms.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(NOT_EQUALS, type.isSigned(), label));
+                    instructionAsms.add(new JmpCC(NOT_EQUALS, type.isSignedOrNotDouble(), label));
                 }
                 case JumpIfZero(ValIr v, String label) -> {
                     Type type = valToType(v);
                     TypeAsm typeAsm = toTypeAsm(type);
                     instructionAsms.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
-                    instructionAsms.add(new JmpCC(EQUALS, type.isSigned(), label));
+                    instructionAsms.add(new JmpCC(EQUALS, type.isSignedOrNotDouble(), label));
                 }
                 case LabelIr labelIr -> instructionAsms.add(labelIr);
                 case FunCall funCall ->
@@ -559,7 +559,7 @@ public class Codegen {
                         LabelIr label2 = newLabel("endCmp");
 
                         instructionAsms.add(new Cmp(TypeAsm.DOUBLE, UPPER_BOUND, toOperand(src)));
-                        instructionAsms.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,true,
+                        instructionAsms.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL, false,
                                 label1.label()));
                         instructionAsms.add(new Cvttsd2si(QUADWORD, toOperand(src),toOperand(dst)));
                         instructionAsms.add(new Jump(label2.label()));
