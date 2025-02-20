@@ -302,9 +302,9 @@ public class IrGen {
                 }
                 VarIr dst = makeTemporary("dst", t);
                 if (t == DOUBLE) {
-                    instructions.add(innerType.isSigned() ? new DoubleToInt(result, dst) : new DoubleToUInt(result, dst));
+                    instructions.add(innerType.isSigned() ? new IntToDouble(result, dst) : new UIntToDouble(result, dst));
                 } else if (innerType == DOUBLE) {
-                    instructions.add(t.isSigned() ? new IntToDouble(result, dst) : new UIntToDouble(result, dst));
+                    instructions.add(t.isSigned() ? new DoubleToInt(result, dst) : new DoubleToUInt(result, dst));
                 } else if (t.size() == innerType.size()) {
                     instructions.add(new Copy(result, dst));
                 } else if (t.size() < innerType.size()) {
@@ -319,7 +319,6 @@ public class IrGen {
 
             default:
                 throw new IllegalStateException("Unexpected exp: " + expr);
-
         }
     }
 
@@ -330,9 +329,7 @@ public class IrGen {
         return v;
     }
 
-
     static AtomicLong labelCount = new AtomicLong(0L);
-
 
     private static LabelIr newLabel(String prefix) {
         return new LabelIr(".L" + prefix + labelCount.getAndIncrement());

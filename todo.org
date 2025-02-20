@@ -3,9 +3,9 @@
 ** DONE convert double to long
 ** TODO other conversions
 * TODO handling double function args
-* TODO floating point arithmetic
+* DONE floating point arithmetic
 ** DONE add, subtract, multiply, divide
-** TODO negate
+** DONE negate
 * TODO comparing doubles
 * TODO unary instructions, binary instructions and conditional jumps
 * TODO return double
@@ -22,3 +22,4 @@ int main(void) {
 
 <2025-02-19 Wed 19:03> The above is done - next working on making
 double multiplication work
+<2025-02-20 Thu 11:13> The above is done - now adding remaining conversions

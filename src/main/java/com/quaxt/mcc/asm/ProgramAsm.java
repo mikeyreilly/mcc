@@ -45,7 +45,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         }
         if (o instanceof DoubleReg reg) {
             return "%" + switch (t) {
-                case DOUBLE -> reg.toString();
+                case DOUBLE, QUADWORD -> reg.toString();
                 default ->
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
             };
@@ -80,7 +80,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         };
         String name = v.label();
         out.println("                .section .rodata");
-        out.println("                .balign 16");
+        out.println("                .balign " + v.alignment());
         out.println(".L" + name + ":");
         out.println("                .quad " + init);
     }
@@ -192,8 +192,13 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                         throw new RuntimeException("can't happen because movZeroExtend is removed in fixup");
                 case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
                     String srcF = formatOperand(DOUBLE, instruction, src);
-                    String dstF = formatOperand(QUADWORD, instruction, dst);
-                    yield "cvttsd2si\t" + srcF + ", " + dstF;
+                    String dstF = formatOperand(dstType, instruction, dst);
+                    yield (dstType==QUADWORD?"cvttsd2siq\t":"cvttsd2sil\t") + srcF + ", " + dstF;
+                }
+                case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
+                    String srcF = formatOperand(srcType, instruction, src);
+                    String dstF = formatOperand(DOUBLE, instruction, dst);
+                    yield (srcType==QUADWORD?"cvtsi2sdq\t":"cvtsi2sdl\t") + srcF + ", " + dstF;
                 }
             };
             if (instruction instanceof LabelIr) {

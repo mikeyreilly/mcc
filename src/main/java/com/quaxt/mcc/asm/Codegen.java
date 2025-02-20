@@ -21,6 +21,18 @@ import static com.quaxt.mcc.asm.TypeAsm.QUADWORD;
 import static com.quaxt.mcc.semantic.Primitive.*;
 
 public class Codegen {
+    static HashMap<Double, StaticConstant> CONSTANT_TABLE = new HashMap<>();
+    private static final Data NEGATIVE_ZERO;
+
+    private static String toHexString(double d) {
+        return Double.toHexString(d).replaceAll("-", "_");
+    }
+
+    static {
+        double negative_zero = -0.0;
+        CONSTANT_TABLE.put(negative_zero, new StaticConstant("c." + toHexString(negative_zero), 16, new DoubleInit(negative_zero)));
+        NEGATIVE_ZERO = resolveConstant(-0.0d);
+    }
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
         ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
@@ -102,6 +114,9 @@ public class Codegen {
                         instructionAsms.add(new Cmp(typeAsm, new Imm(0), src1));
                         instructionAsms.add(new Mov(typeAsm, new Imm(0), dst1));
                         instructionAsms.add(new SetCC(EQUALS, type.isSigned(), dst1));
+                    } else if (op1 == UnaryOperator.UNARY_MINUS && typeAsm == TypeAsm.DOUBLE) {
+                        instructionAsms.add(new Mov(typeAsm, src1, dst1));
+                        instructionAsms.add(new Binary(BITWISE_XOR, typeAsm, NEGATIVE_ZERO, dst1));
                     } else {
                         instructionAsms.add(new Mov(typeAsm, src1, dst1));
                         instructionAsms.add(new Unary(op1, typeAsm, dst1));
@@ -184,9 +199,16 @@ public class Codegen {
                     instructionAsms.add(new MovZeroExtend(toOperand(src), toOperand(dst)));
                 }
                 case IntToDouble(ValIr src, VarIr dst) -> {
+                    if (valToType(src).isSigned()) {
+                        instructionAsms.add(new Cvtsi2sd(toTypeAsm(valToType(src)), toOperand(src), toOperand(dst)));
+                    } else {
+                        throw new Todo("Time to implement unsigned integer to double");
+                    }
+                }
+                case DoubleToInt(ValIr src, VarIr dst) -> {
                     instructionAsms.add(new Cvttsd2si(toTypeAsm(valToType(dst)), toOperand(src), toOperand(dst)));
                 }
-                case DoubleToInt _, DoubleToUInt _,
+                case DoubleToUInt _,
                      UIntToDouble _ ->
                         throw new Todo("Time to implement double conversions");
             }
@@ -242,6 +264,9 @@ public class Codegen {
                                 dePseudo(dst, varTable, offset));
                 case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) ->
                         new Cvttsd2si(dstType, dePseudo(src, varTable, offset),
+                                dePseudo(dst, varTable, offset));
+                case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) ->
+                        new Cvtsi2sd(dstType, dePseudo(src, varTable, offset),
                                 dePseudo(dst, varTable, offset));
             };
             instructions.set(i, newInst);
@@ -312,7 +337,8 @@ public class Codegen {
                                 }
 
                             }
-                            case IMUL, DOUBLE_SUB, DOUBLE_ADD, DOUBLE_MUL, DOUBLE_DIVIDE -> {
+                            case IMUL, DOUBLE_SUB, DOUBLE_ADD, DOUBLE_MUL,
+                                 DOUBLE_DIVIDE, BITWISE_XOR -> {
                                 if (isRam(dst)) {
                                     instructions.set(i, new Mov(typeAsm, dst, dstReg(typeAsm)));
                                     instructions.add(i + 1, new Binary(op, typeAsm, src, dstReg(typeAsm)));
@@ -363,6 +389,12 @@ public class Codegen {
                     if (isRam(dst)) {
                         instructions.set(i, new Cvttsd2si(dstType, src, R11));
                         instructions.add(i + 1, new Mov(QUADWORD, R11, dst));
+                    }
+                }
+                case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) -> {
+                    if (isRam(dst)) {
+                        instructions.set(i, new Cvtsi2sd(dstType, src, XMM15));
+                        instructions.add(i + 1, new Mov(QUADWORD, XMM15, dst));
                     }
                 }
                 default -> {
@@ -446,11 +478,11 @@ public class Codegen {
         }
     }
 
-    static HashMap<Double, StaticConstant> CONSTANT_TABLE = new HashMap<>();
 
     public static Data resolveConstant(double d) {
-        StaticConstant x = CONSTANT_TABLE.computeIfAbsent(d, _ -> new StaticConstant("c." + Double.toHexString(d), 8, new DoubleInit(d)));
-        return new Data(x.label());
+        StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d, _ ->
+                new StaticConstant("c." + toHexString(d), 8, new DoubleInit(d)));
+        return new Data(c.label());
     }
 
     private static Operand toOperand(ValIr val) {
