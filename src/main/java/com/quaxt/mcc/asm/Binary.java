@@ -38,7 +38,7 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case DOUBLE_SUB -> "subsd	";
             case DOUBLE_ADD -> "addsd	";
             case DOUBLE_MUL -> "mulsd	";
-            case DOUBLE_DIVIDE -> "div	";
+            case DOUBLE_DIVIDE -> "divsd	";
             case BITWISE_XOR -> "xorpd	";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
