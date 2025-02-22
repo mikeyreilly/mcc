@@ -621,7 +621,7 @@ public class Codegen {
                         ins.add(new Binary(AND, QUADWORD,new Imm(1), AX));
                         ins.add(new Binary(OR, QUADWORD, AX, DX));
                         ins.add(new Cvtsi2sd(QUADWORD, DX, dst));
-                        ins.add(new Binary(ADD, QUADWORD,dst, dst));
+                        ins.add(new Binary(DOUBLE_ADD, DOUBLE, dst, dst));
                         ins.add(label2);
                     }
                 }

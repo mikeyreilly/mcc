@@ -159,14 +159,28 @@ public class SemanticAnalysis {
         return decl;
     }
 
+    private static double unsignedLongToDouble(long ul) {
+        double d = (double) (ul & 0x7fffffffffffffffL);
+        double r = ul < 0 ? d + 0x1.0p63 : d;
+        return r;
+    }
+
+    private static long doubleToUnsignedLong(double d) {
+        if (d > 0x1.0p63) {
+            return (long) (d - 0x1.0p63) + (1L << 63);
+        }
+        return (long) d;
+    }
+
     private static InitialValue convertConst(InitialValue init, Type type) {
         if (init instanceof DoubleInit(double d)) {
             return switch (type) {
                 case DOUBLE -> init;
                 case LONG -> new LongInit((long) d);
                 case INT -> new IntInit((int) d);
-                case ULONG -> new ULongInit((long) d);
-                case UINT -> new UIntInit((int) d);
+                case ULONG -> new ULongInit(doubleToUnsignedLong(d));
+                // casting directly to int be wrong result for doubles > 2^31
+                case UINT -> new UIntInit((int) (long) d);
                 default ->
                         throw new IllegalArgumentException("not a const:" + init);
             };
@@ -180,7 +194,10 @@ public class SemanticAnalysis {
                     throw new IllegalArgumentException("not a const:" + init);
         };
         return switch (type) {
-            case DOUBLE -> new DoubleInit(initL);
+            case DOUBLE -> {
+                double d = init instanceof ULongInit ? unsignedLongToDouble(initL) : (double) initL;
+                yield new DoubleInit(d);
+            }
             case LONG -> new LongInit(initL);
             case INT -> new IntInit((int) initL);
             case ULONG -> new ULongInit(initL);
@@ -188,6 +205,7 @@ public class SemanticAnalysis {
             default -> null;
         };
     }
+
 
     private static Function typeCheckFunctionDeclaration(Function decl, boolean blockScope) {
         if (blockScope && decl.storageClass() == STATIC) {
@@ -302,7 +320,11 @@ public class SemanticAnalysis {
                         throw new RuntimeException("Non-constant initializer on local static variable");
             };
             initialValue = convertConst(initialValue, decl.varType());
-            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(initialValue, false)));
+            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(switch (initialValue) {
+                case DoubleInit _ -> DOUBLE;
+                case LongInit _, ULongInit _ -> LONG;
+                default -> INT;
+            }, new StaticAttributes(initialValue, false)));
             return new VarDecl(decl.name(), switch (initialValue) {
                 case IntInit(int i) -> new ConstInt(i);
                 case LongInit(long l) -> new ConstLong(l);
@@ -398,7 +420,7 @@ public class SemanticAnalysis {
             }
             case UnaryOp(UnaryOperator op, Exp inner, Type type) -> {
                 Exp typedInner = typeCheckExpression(inner);
-                if (op == UnaryOperator.BITWISE_NOT && typedInner.type() == Primitive.DOUBLE) {
+                if (op == UnaryOperator.BITWISE_NOT && typedInner.type() == DOUBLE) {
                     fail("can't apply ~ to double");
                 }
                 yield switch (op) {
