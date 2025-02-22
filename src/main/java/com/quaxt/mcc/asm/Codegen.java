@@ -18,6 +18,7 @@ import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.asm.TypeAsm.*;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
+import static com.quaxt.mcc.UnaryOperator.SHR;
 
 public class Codegen {
     static HashMap<Double, StaticConstant> CONSTANT_TABLE = new HashMap<>();
@@ -428,7 +429,7 @@ public class Codegen {
 
     public static FunctionAsm generateAssembly(FunctionIr functionIr) {
         // here we can convert arguments to pseudos (which are operands)
-        List<Instruction> instructionAsms = new ArrayList<>();
+        List<Instruction> ins = new ArrayList<>();
         List<Identifier> functionType = functionIr.type();
         List<TypedOperand> operands = new ArrayList<>();
         for (Identifier param : functionType) {
@@ -441,16 +442,16 @@ public class Codegen {
 
         for (int i = 0; i < integerArguments.size(); i++) {
             TypedOperand to = integerArguments.get(i);
-            instructionAsms.add(new Mov(to.type(), INTEGER_REGISTERS[i], to.operand()));
+            ins.add(new Mov(to.type(), INTEGER_REGISTERS[i], to.operand()));
         }
 
         for (int i = 0; i < doubleArguments.size(); i++) {
             Operand operand = doubleArguments.get(i);
-            instructionAsms.add(new Mov(DOUBLE, DOUBLE_REGISTERS[i], operand));
+            ins.add(new Mov(DOUBLE, DOUBLE_REGISTERS[i], operand));
         }
         for (int i = 0; i < stackArguments.size(); i++) {
             TypedOperand to = stackArguments.get(i);
-            instructionAsms.add(new Mov(to.type(), new Stack(16 + i * 8), to.operand()));
+            ins.add(new Mov(to.type(), new Stack(16 + i * 8), to.operand()));
         }
 
         for (InstructionIr inst : functionIr.instructions()) {
@@ -458,8 +459,8 @@ public class Codegen {
                 case ReturnInstructionIr(ValIr val) -> {
                     Operand src1 = toOperand(val);
                     TypeAsm returnType = valToAsmType(val);
-                    instructionAsms.add(new Mov(returnType, src1, returnType == DOUBLE ? XMM0 : AX));
-                    instructionAsms.add(RET);
+                    ins.add(new Mov(returnType, src1, returnType == DOUBLE ? XMM0 : AX));
+                    ins.add(RET);
                 }
                 case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
                     Operand dst1 = toOperand(dstIr);
@@ -468,21 +469,21 @@ public class Codegen {
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (op1 == UnaryOperator.NOT) {
                         if (typeAsm == DOUBLE) {
-                            instructionAsms.add(new Binary(BITWISE_XOR, DOUBLE, XMM0, XMM0));
-                            instructionAsms.add(new Cmp(DOUBLE, XMM0, src1));
-                            instructionAsms.add(new Mov(valToAsmType(dstIr), new Imm(0), dst1));
-                            instructionAsms.add(new SetCC(EQUALS, true, dst1));
+                            ins.add(new Binary(BITWISE_XOR, DOUBLE, XMM0, XMM0));
+                            ins.add(new Cmp(DOUBLE, XMM0, src1));
+                            ins.add(new Mov(valToAsmType(dstIr), new Imm(0), dst1));
+                            ins.add(new SetCC(EQUALS, true, dst1));
                         } else {
-                            instructionAsms.add(new Cmp(typeAsm, new Imm(0), src1));
-                            instructionAsms.add(new Mov(typeAsm, new Imm(0), dst1));
-                            instructionAsms.add(new SetCC(EQUALS, type.unsignedOrDouble(), dst1));
+                            ins.add(new Cmp(typeAsm, new Imm(0), src1));
+                            ins.add(new Mov(typeAsm, new Imm(0), dst1));
+                            ins.add(new SetCC(EQUALS, type.unsignedOrDouble(), dst1));
                         }
                     } else if (op1 == UnaryOperator.UNARY_MINUS && typeAsm == DOUBLE) {
-                        instructionAsms.add(new Mov(typeAsm, src1, dst1));
-                        instructionAsms.add(new Binary(BITWISE_XOR, typeAsm, NEGATIVE_ZERO, dst1));
+                        ins.add(new Mov(typeAsm, src1, dst1));
+                        ins.add(new Binary(BITWISE_XOR, typeAsm, NEGATIVE_ZERO, dst1));
                     } else {
-                        instructionAsms.add(new Mov(typeAsm, src1, dst1));
-                        instructionAsms.add(new Unary(op1, typeAsm, dst1));
+                        ins.add(new Mov(typeAsm, src1, dst1));
+                        ins.add(new Unary(op1, typeAsm, dst1));
                     }
                 }
                 case BinaryIr(
@@ -493,26 +494,26 @@ public class Codegen {
                     TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
                     if (typeAsm == DOUBLE) {
-                        instructionAsms.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
-                        instructionAsms.add(new Binary(convertOp(op1, typeAsm), typeAsm, toOperand(v2), toOperand(dstName)));
+                        ins.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
+                        ins.add(new Binary(convertOp(op1, typeAsm), typeAsm, toOperand(v2), toOperand(dstName)));
                     } else {
                         switch (op1) {
                             case ADD, SUB, IMUL -> {
-                                instructionAsms.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
-                                instructionAsms.add(new Binary(op1, typeAsm, toOperand(v2), toOperand(dstName)));
+                                ins.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
+                                ins.add(new Binary(op1, typeAsm, toOperand(v2), toOperand(dstName)));
                             }
                             case DIVIDE, REMAINDER -> {
 
                                 if (type.isSigned()) {
-                                    instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
-                                    instructionAsms.add(new Cdq(typeAsm));
-                                    instructionAsms.add(new Unary(UnaryOperator.IDIV, typeAsm, toOperand(v2)));
-                                    instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
+                                    ins.add(new Mov(typeAsm, toOperand(v1), AX));
+                                    ins.add(new Cdq(typeAsm));
+                                    ins.add(new Unary(UnaryOperator.IDIV, typeAsm, toOperand(v2)));
+                                    ins.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
                                 } else {
-                                    instructionAsms.add(new Mov(typeAsm, toOperand(v1), AX));
-                                    instructionAsms.add(new Mov(typeAsm, new Imm(0), DX));
-                                    instructionAsms.add(new Unary(UnaryOperator.DIV, typeAsm, toOperand(v2)));
-                                    instructionAsms.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
+                                    ins.add(new Mov(typeAsm, toOperand(v1), AX));
+                                    ins.add(new Mov(typeAsm, new Imm(0), DX));
+                                    ins.add(new Unary(UnaryOperator.DIV, typeAsm, toOperand(v2)));
+                                    ins.add(new Mov(typeAsm, op1 == DIVIDE ? AX : DX, toOperand(dstName)));
                                 }
                             }
                             default ->
@@ -527,82 +528,106 @@ public class Codegen {
                     Type type = valToType(v1);
                     TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
-                    instructionAsms.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
+                    ins.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
                     // dstName will hold the result of the comparison, which is always a LONGWORD
-                    instructionAsms.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
-                    instructionAsms.add(new SetCC(op1, type.unsignedOrDouble(), toOperand(dstName)));
+                    ins.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
+                    ins.add(new SetCC(op1, type.unsignedOrDouble(), toOperand(dstName)));
                 }
                 case Copy(ValIr val, VarIr dst1) -> {
                     TypeAsm typeAsm = valToAsmType(val);
                     assert (typeAsm == valToAsmType(dst1));
-                    instructionAsms.add(new Mov(typeAsm, toOperand(val), toOperand(dst1)));
+                    ins.add(new Mov(typeAsm, toOperand(val), toOperand(dst1)));
                 }
-                case Jump jump -> instructionAsms.add(jump);
+                case Jump jump -> ins.add(jump);
                 case JumpIfNotZero(ValIr v, String label) -> {
                     Type type = valToType(v);
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (typeAsm == DOUBLE) {
-                        instructionAsms.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
-                        instructionAsms.add(new Cmp(typeAsm, XMM0, toOperand(v)));
+                        ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
+                        ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
                     } else {
-                        instructionAsms.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
+                        ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
                     }
-                    instructionAsms.add(new JmpCC(NOT_EQUALS, type.unsignedOrDouble(), label));
+                    ins.add(new JmpCC(NOT_EQUALS, type.unsignedOrDouble(), label));
                 }
                 case JumpIfZero(ValIr v, String label) -> {
                     Type type = valToType(v);
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (typeAsm == DOUBLE) {
-                        instructionAsms.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
-                        instructionAsms.add(new Cmp(typeAsm, XMM0, toOperand(v)));
+                        ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
+                        ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
                     } else {
-                        instructionAsms.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
+                        ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
                     }
-                    instructionAsms.add(new JmpCC(EQUALS, type.unsignedOrDouble(), label));
+                    ins.add(new JmpCC(EQUALS, type.unsignedOrDouble(), label));
 
                 }
-                case LabelIr labelIr -> instructionAsms.add(labelIr);
-                case FunCall funCall ->
-                        codegenFunCall(funCall, instructionAsms);
+                case LabelIr labelIr -> ins.add(labelIr);
+                case FunCall funCall -> codegenFunCall(funCall, ins);
                 case SignExtendIr(ValIr src, VarIr dst) ->
-                        instructionAsms.add(new Movsx(toOperand(src), toOperand(dst)));
+                        ins.add(new Movsx(toOperand(src), toOperand(dst)));
                 case TruncateIr(ValIr src, VarIr dst) ->
-                        instructionAsms.add(new Mov(LONGWORD, toOperand(src), toOperand(dst)));
+                        ins.add(new Mov(LONGWORD, toOperand(src), toOperand(dst)));
                 case ZeroExtendIr(ValIr src, VarIr dst) ->
-                        instructionAsms.add(new MovZeroExtend(toOperand(src), toOperand(dst)));
+                        ins.add(new MovZeroExtend(toOperand(src), toOperand(dst)));
                 case IntToDouble(ValIr src, VarIr dst) ->
-                        instructionAsms.add(new Cvtsi2sd(toTypeAsm(valToType(src)), toOperand(src), toOperand(dst)));
+                        ins.add(new Cvtsi2sd(toTypeAsm(valToType(src)), toOperand(src), toOperand(dst)));
                 case DoubleToInt(ValIr src, VarIr dst) ->
-                        instructionAsms.add(new Cvttsd2si(toTypeAsm(valToType(dst)), toOperand(src), toOperand(dst)));
+                        ins.add(new Cvttsd2si(toTypeAsm(valToType(dst)), toOperand(src), toOperand(dst)));
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
                     Type dstType = valToType(dst);
                     if (dstType == Primitive.INT) {
-                        instructionAsms.add(new Cvttsd2si(QUADWORD, toOperand(src), Reg.AX));
-                        instructionAsms.add(new Mov(LONGWORD, Reg.AX, toOperand(dst)));
+                        ins.add(new Cvttsd2si(QUADWORD, toOperand(src), Reg.AX));
+                        ins.add(new Mov(LONGWORD, Reg.AX, toOperand(dst)));
                     } else {
                         //p.335
                         LabelIr label1 = newLabel("aub");
                         LabelIr label2 = newLabel("endCmp");
-                        instructionAsms.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
-                        instructionAsms.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL, true, label1.label()));
-                        instructionAsms.add(new Cvttsd2si(QUADWORD, toOperand(src), toOperand(dst)));
-                        instructionAsms.add(new Jump(label2.label()));
+                        ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
+                        ins.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL, true, label1.label()));
+                        ins.add(new Cvttsd2si(QUADWORD, toOperand(src), toOperand(dst)));
+                        ins.add(new Jump(label2.label()));
 
-                        instructionAsms.add(label1);
-                        instructionAsms.add(new Mov(DOUBLE, toOperand(src), XMM0));
-                        instructionAsms.add(new Binary(DOUBLE_SUB, DOUBLE, UPPER_BOUND, XMM0));
-                        instructionAsms.add(new Cvttsd2si(QUADWORD, XMM0, toOperand(dst)));
-                        instructionAsms.add(new Mov(TypeAsm.QUADWORD, UPPER_BOUND_LONG_IMMEDIATE, AX));
-                        instructionAsms.add(new Binary(ADD, TypeAsm.QUADWORD, AX, toOperand(dst)));
-                        instructionAsms.add(label2);
+                        ins.add(label1);
+                        ins.add(new Mov(DOUBLE, toOperand(src), XMM0));
+                        ins.add(new Binary(DOUBLE_SUB, DOUBLE, UPPER_BOUND, XMM0));
+                        ins.add(new Cvttsd2si(QUADWORD, XMM0, toOperand(dst)));
+                        ins.add(new Mov(TypeAsm.QUADWORD, UPPER_BOUND_LONG_IMMEDIATE, AX));
+                        ins.add(new Binary(ADD, TypeAsm.QUADWORD, AX, toOperand(dst)));
+                        ins.add(label2);
                     }
 
                 }
-                case UIntToDouble _ ->
-                        throw new Todo("Time to implement unsigned to double conversions see top of p.355");
+                case UIntToDouble(ValIr srcV, ValIr dstV) -> {
+                    var src = toOperand(srcV);
+                    var dst = toOperand(dstV);
+                    Type dstType = valToType(dstV);
+                    if (dstType == Primitive.INT) {
+                        ins.add(new MovZeroExtend(src, Reg.AX));
+                        ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
+                    } else {
+                        LabelIr label1 = newLabel("outOfRange");
+                        LabelIr label2 = newLabel("end");
+
+                        ins.add(new Cmp(QUADWORD, new Imm(0), src));
+                        ins.add(new JmpCC(CmpOperator.LESS_THAN, false, label1.label()));
+                        ins.add(new Cvtsi2sd(QUADWORD, src, dst));
+                        ins.add(new Jump(label2.label()));
+
+                        ins.add(label1);
+                        ins.add(new Mov(QUADWORD, src, AX));
+                        ins.add(new Mov(QUADWORD, AX, DX));
+                        ins.add(new Unary(SHR, QUADWORD, DX));
+                        ins.add(new Binary(AND, QUADWORD,new Imm(1), AX));
+                        ins.add(new Binary(OR, QUADWORD, AX, DX));
+                        ins.add(new Cvtsi2sd(QUADWORD, DX, dst));
+                        ins.add(new Binary(ADD, QUADWORD,dst, dst));
+                        ins.add(label2);
+                    }
+                }
             }
         }
-        return new FunctionAsm(functionIr.name(), functionIr.global(), instructionAsms);
+        return new FunctionAsm(functionIr.name(), functionIr.global(), ins);
     }
 
     private record TypedOperand(TypeAsm type, Operand operand) {

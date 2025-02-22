@@ -14,6 +14,7 @@ public record Unary(UnaryOperator op, TypeAsm type,
             case BITWISE_NOT -> "not";
             case UNARY_MINUS -> "neg";
             case NOT -> "not";
+            case SHR -> "shr";
         } + (type == QUADWORD ? "q" : "l") + "\t";
     }
 }

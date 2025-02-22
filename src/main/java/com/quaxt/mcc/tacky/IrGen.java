@@ -332,7 +332,7 @@ public class IrGen {
     static AtomicLong labelCount = new AtomicLong(0L);
 
     public static LabelIr newLabel(String prefix) {
-        return new LabelIr(".L" + prefix + labelCount.getAndIncrement());
+        return new LabelIr(".L" + prefix + '.' + labelCount.getAndIncrement());
     }
 
     private static VarIr makeTemporary(String prefix, Type t) {
