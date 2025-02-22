@@ -18,11 +18,8 @@ public sealed interface Type permits FunType, Primitive {
         };
     }
 
-    /**
-     * double uses same cmp codes as unsigned
-     */
-    default boolean isSignedOrNotDouble() {
-        return this == INT || this == LONG | this == DOUBLE;
+    default boolean unsignedOrDouble(){
+        return this == UINT || this == ULONG | this == DOUBLE;
     }
 
     default boolean isSigned() {

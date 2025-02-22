@@ -5,4 +5,4 @@ else
     mccdir=./
 fi
 
-java -cp "${mccdir}target/mcc-1.0-SNAPSHOT.jar" com.quaxt.mcc.Mcc "$@"
+java -cp "${mccdir}target/classes" com.quaxt.mcc.Mcc "$@"

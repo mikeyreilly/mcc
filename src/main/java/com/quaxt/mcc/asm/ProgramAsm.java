@@ -169,17 +169,17 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case LabelIr(String label) -> label + ":";
                 case SetCC(
                         CmpOperator cmpOperator,
-                        boolean signed,
+                        boolean unsigned,
                         Operand o
-                ) -> "set" + (signed ? cmpOperator.code
-                        : cmpOperator.unsignedCode) + "\t"
+                ) -> "set" + (unsigned ? cmpOperator.unsignedCode
+                        : cmpOperator.code) + "\t"
                         + formatOperand(instruction, o);
                 case JmpCC(
                         CmpOperator cmpOperator,
-                        boolean signed,
+                        boolean unsigned,
                         String label
-                ) -> "j" + (signed ? cmpOperator.code
-                        : cmpOperator.unsignedCode) + "\t" + label;
+                ) -> "j" + (unsigned ? cmpOperator.unsignedCode
+                        : cmpOperator.code) + "\t" + label;
                 case Call(String functionName) ->
                         "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
                 case Cdq(TypeAsm t) -> instruction.format(t);
