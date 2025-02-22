@@ -407,9 +407,10 @@ public class Codegen {
                 DoubleReg r = DOUBLE_REGISTERS[i];
                 instructionAsms.add(new Mov(DOUBLE, doubleArg, r));
             }
-            for (TypedOperand to : stackArguments) {
+            for (int i = stackArguments.size() - 1; i >= 0; i--) {
+                TypedOperand to = stackArguments.get(i);
                 Operand operand = to.operand();
-                if (operand instanceof Imm || operand instanceof Reg || to.type() == QUADWORD) {
+                if (operand instanceof Imm || operand instanceof Reg || to.type() == QUADWORD || to.type() == DOUBLE) {
                     instructionAsms.add(new Push(operand));
                 } else {
                     instructionAsms.add(new Mov(LONGWORD, operand, AX));
@@ -618,7 +619,7 @@ public class Codegen {
                         ins.add(new Mov(QUADWORD, src, AX));
                         ins.add(new Mov(QUADWORD, AX, DX));
                         ins.add(new Unary(SHR, QUADWORD, DX));
-                        ins.add(new Binary(AND, QUADWORD,new Imm(1), AX));
+                        ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));
                         ins.add(new Binary(OR, QUADWORD, AX, DX));
                         ins.add(new Cvtsi2sd(QUADWORD, DX, dst));
                         ins.add(new Binary(DOUBLE_ADD, DOUBLE, dst, dst));

@@ -179,7 +179,7 @@ public class SemanticAnalysis {
                 case LONG -> new LongInit((long) d);
                 case INT -> new IntInit((int) d);
                 case ULONG -> new ULongInit(doubleToUnsignedLong(d));
-                // casting directly to int be wrong result for doubles > 2^31
+                // casting directly to int would be wrong result for doubles > 2^31
                 case UINT -> new UIntInit((int) (long) d);
                 default ->
                         throw new IllegalArgumentException("not a const:" + init);

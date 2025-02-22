@@ -139,14 +139,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case Mov(TypeAsm t, Operand src, Operand dst) ->
                         instruction.format(t) + formatOperand(t, instruction, src) + ", " + formatOperand(t, instruction, dst);
 
-                case Push(Operand arg) -> {
-                    if (arg instanceof Data) {
-                        yield "pushl\t" + formatOperand(instruction, arg);
-                    } else {
-                        yield "pushq\t" + formatOperand(instruction, arg);
-                    }
-
-                }
+                case Push(Operand arg) ->
+                        "pushq\t" + formatOperand(instruction, arg);
 
                 case Nullary.RET -> {
                     printIndent(out, "movq\t%rbp, %rsp");
