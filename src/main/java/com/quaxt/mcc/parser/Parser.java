@@ -3,6 +3,7 @@ package com.quaxt.mcc.parser;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.semantic.FunType;
+import com.quaxt.mcc.semantic.Pointer;
 import com.quaxt.mcc.semantic.Primitive;
 import com.quaxt.mcc.semantic.Type;
 
@@ -84,12 +85,121 @@ public class Parser {
         return new DoWhile(body, condition, null);
     }
 
+    sealed interface Declarator permits Ident, PointerDeclarator, FunDeclarator {
+    }
+
+    record Ident(String identifier) implements Declarator {
+    }
+
+    record PointerDeclarator(Declarator declarator) implements Declarator {
+    }
+
+    record FunDeclarator(List<ParamInfo> params,
+                         Declarator declarator) implements Declarator {
+    }
+
+    record ParamInfo(Type type, Declarator declarator) {
+    }
+
+//    record NameType(String name, Type type) {
+//    }
+
+    record NameDeclTypeParams(String name, Type type,
+                              ArrayList<String> paramNames) {
+    }
+
+    private static Declarator parseDeclarator(List<Token> tokens) {
+        Token t = tokens.removeFirst();
+        Declarator d = switch (t) {
+            case OPEN_PAREN -> {
+                Declarator inner = parseDeclarator(tokens);
+                expect(CLOSE_PAREN, tokens);
+                yield inner;
+            }
+            case IMUL -> new PointerDeclarator(parseDeclarator(tokens));
+            case TokenWithValue(Token type,
+                                String name) when type == IDENTIFIER ->
+                    new Ident(name);
+            default ->
+                    throw new RuntimeException("while parsing declarator found unexpected token :" + t);
+        };
+        if (tokens.getFirst() == OPEN_PAREN) {
+            tokens.removeFirst();
+            Token firstParam = tokens.getFirst();
+            List<ParamInfo> params;
+            if (VOID == firstParam.type()) {
+                tokens.removeFirst();
+                expect(CLOSE_PAREN, tokens);
+                params = Collections.emptyList();
+            } else {
+                params = new ArrayList<>();
+
+                while (true) {
+                    TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, true);
+                    if (typeAndStorageClass.storageClass() != null)
+                        fail("error: storage class specified for parameter");
+                    Declarator paramDeclarator = parseDeclarator(tokens);
+                    NameDeclTypeParams ppp = processDeclarator(paramDeclarator, typeAndStorageClass.type());
+                    params.add(new ParamInfo(ppp.type(), paramDeclarator));
+
+                    Token token = tokens.removeFirst();
+                    if (token == CLOSE_PAREN) break;
+                    else if (token != COMMA)
+                        throw new IllegalArgumentException("Expected COMMA, got " + token);
+                }
+
+            }
+            return new FunDeclarator(params, d);
+        }
+        return d;
+    }
+
+    private static NameDeclTypeParams processDeclarator(Declarator declarator, Type baseType) {
+        return switch (declarator) {
+            case Ident(String name) ->
+                    new NameDeclTypeParams(name, baseType, new ArrayList<>());
+            case PointerDeclarator(Declarator d) ->
+                    processDeclarator(d, new Pointer(baseType));
+            case FunDeclarator(List<ParamInfo> params,
+                               Declarator d) -> {
+
+                ArrayList<String> paramNames = new ArrayList<>();
+                List<Type> paramTypes = new ArrayList<>();
+
+                for (ParamInfo pi : params) {
+                    NameDeclTypeParams decl = processDeclarator(pi.declarator()
+                            , pi.type());
+                    String name = decl.name();
+                    Type type = decl.type();
+                    if (type instanceof FunType)
+                        throw new RuntimeException("function pointers are not supported");
+                    paramNames.add(name);
+                    paramTypes.add(type);
+                }
+                FunType derivedType = new FunType(paramTypes, baseType);
+                yield new NameDeclTypeParams(switch (d) {
+                    case Ident(String name) -> name;
+                    default ->
+                            throw new RuntimeException("Can't apply additional derivations to a function type");
+                }, derivedType, paramNames);
+
+            }
+
+        };
+    }
+
     private static Declaration parseDeclaration(List<Token> tokens, boolean throwExceptionIfNoType) {
         // parse int i; or int i=5; or int foo(void);
         TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
         if (typeAndStorageClass == null) return null;
-        Token t = tokens.removeFirst();
-        String name = parseIdentifier(t);
+        Declarator declarator = parseDeclarator(tokens);
+        NameDeclTypeParams foo = processDeclarator(declarator, typeAndStorageClass.type());
+        String name = foo.name();
+        Type type = foo.type();
+        ArrayList<String> paramNames = foo.paramNames();
+        if (type instanceof FunType(List<Type> paramTypes1, Type ret)) {
+            return parseRestOfFunction(paramNames, paramTypes1, tokens, name, typeAndStorageClass.type(), typeAndStorageClass.storageClass());
+        }
         Token token = tokens.removeFirst();
         Exp exp;
         switch (token.type()) {
@@ -101,14 +211,13 @@ public class Parser {
             case SEMICOLON:
                 exp = null;
                 break;
-            case OPEN_PAREN:
-                return parseRestOfFunction(tokens, name, typeAndStorageClass.type(), typeAndStorageClass.storageClass());
             default:
                 throw new IllegalArgumentException("Expected ; or =, got " + token);
         }
 
         return new VarDecl(name, exp, typeAndStorageClass.type(), typeAndStorageClass.storageClass());
     }
+
 
     private static TypeAndStorageClass parseTypeAndStorageClass(List<Token> tokens, boolean throwExceptionIfNoType) {
         if (tokens.isEmpty()) return null;
@@ -177,13 +286,13 @@ public class Parser {
             if (types.size() != 1) {
                 fail("can't combine double with other type specifiers");
             }
-            return com.quaxt.mcc.semantic.Primitive.DOUBLE;
+            return Primitive.DOUBLE;
         }
         if (foundLong)
-            return foundUnsigned ? ULONG : com.quaxt.mcc.semantic.Primitive.LONG;
+            return foundUnsigned ? ULONG : Primitive.LONG;
         else if (foundInt)
-            return foundUnsigned ? UINT : com.quaxt.mcc.semantic.Primitive.INT;
-        else if (foundSigned) return com.quaxt.mcc.semantic.Primitive.INT;
+            return foundUnsigned ? UINT : Primitive.INT;
+        else if (foundSigned) return Primitive.INT;
         else if (foundUnsigned) return UINT;
         if (throwExceptionIfNoType)
             throw new RuntimeException("invalid type specifier");
@@ -213,33 +322,11 @@ public class Parser {
         return INT == type || LONG == type || UNSIGNED == type || SIGNED == type || DOUBLE == type;
     }
 
-    private static Function parseRestOfFunction(List<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
-        Token firstParam = tokens.getFirst();
-        List<Identifier> params;
-        List<Type> paramTypes;
-        if (VOID == firstParam.type()) {
-            tokens.removeFirst();
-            expect(CLOSE_PAREN, tokens);
-            params = Collections.emptyList();
-            paramTypes = Collections.emptyList();
-        } else {
-            params = new ArrayList<>();
-            paramTypes = new ArrayList<>();
+    private static Function parseRestOfFunction(ArrayList<String> paramNames, List<Type> paramTypes, List<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
 
-            while (true) {
-                TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, true);
-                paramTypes.add(typeAndStorageClass.type());
-                String identifierName = expectIdentifier(tokens);
-                if (typeAndStorageClass.storageClass() != null)
-                    fail("error: storage class specified for parameter " + identifierName);
-                params.add(new Identifier(identifierName, null));
-
-                Token token = tokens.removeFirst();
-                if (token == CLOSE_PAREN) break;
-                else if (token != COMMA)
-                    throw new IllegalArgumentException("Expected COMMA, got " + token);
-            }
-
+        List<Identifier> params = new ArrayList<>();
+        for (int i = 0; i < paramNames.size(); i++) {
+            params.add(new Identifier(paramNames.get(i), paramTypes.get(i)));
         }
 
         Block block;
@@ -313,6 +400,10 @@ public class Parser {
                     new UnaryOp(UnaryOperator.UNARY_MINUS, parseFactor(tokens), null);
             case BITWISE_NOT ->
                     new UnaryOp(UnaryOperator.BITWISE_NOT, parseFactor(tokens), null);
+            case AMPERSAND ->
+                    new UnaryOp(UnaryOperator.ADDRESS, parseFactor(tokens), null);
+            case IMUL ->
+                    new UnaryOp(UnaryOperator.DEREFERENCE, parseFactor(tokens), null);
             case NOT ->
                     new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
             case OPEN_PAREN -> {
@@ -341,7 +432,7 @@ public class Parser {
             case TokenWithValue(
                     TokenType tokenType, String value
             ) -> {
-                Type t = com.quaxt.mcc.semantic.Primitive.fromTokenType(tokenType);
+                Type t = Primitive.fromTokenType(tokenType);
                 int len = value.length() - (t == null ? 0 : switch (t) {
                     case Primitive.LONG, UINT -> 1;
                     case ULONG -> 2;
@@ -459,4 +550,5 @@ public class Parser {
 
     private record TypeAndStorageClass(Type type, StorageClass storageClass) {
     }
+
 }

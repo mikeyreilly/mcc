@@ -16,7 +16,7 @@ public enum TokenType implements Token {
     BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
     DECREMENT("--"), INCREMENT("\\+\\+"), BITWISE_NOT("~"),
     NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
-    COMMA(",");
+    COMMA(","), AMPERSAND("&");
     final Pattern regex;
     private final int group;
 
