@@ -19,7 +19,7 @@ import static com.quaxt.mcc.semantic.Primitive.UINT;
 import static com.quaxt.mcc.semantic.Primitive.ULONG;
 
 public class Parser {
-    private static Token expect(Token expected, List<Token> tokens) {
+    public static Token expect(Token expected, List<Token> tokens) {
         Token token = tokens.removeFirst();
         if (expected != token.type()) {
             throw new IllegalArgumentException("Expected " + expected + ", got " + token);
@@ -85,27 +85,48 @@ public class Parser {
         return new DoWhile(body, condition, null);
     }
 
-    sealed interface Declarator permits Ident, PointerDeclarator, FunDeclarator {
-    }
+    sealed interface Declarator permits Ident, PointerDeclarator, FunDeclarator {}
 
-    record Ident(String identifier) implements Declarator {
-    }
+    record Ident(String identifier) implements Declarator {}
 
-    record PointerDeclarator(Declarator declarator) implements Declarator {
-    }
+    record PointerDeclarator(Declarator declarator) implements Declarator {}
 
     record FunDeclarator(List<ParamInfo> params,
-                         Declarator declarator) implements Declarator {
-    }
+                         Declarator declarator) implements Declarator {}
 
-    record ParamInfo(Type type, Declarator declarator) {
-    }
+    record ParamInfo(Type type, Declarator declarator) {}
 
-//    record NameType(String name, Type type) {
-//    }
 
     record NameDeclTypeParams(String name, Type type,
-                              ArrayList<String> paramNames) {
+                              ArrayList<String> paramNames) {}
+
+    sealed interface AbstractDeclarator permits AbstractBase, AbstractPointer, DirectAbstractDeclarator {}
+
+    record AbstractBase() implements AbstractDeclarator {}
+
+    record DirectAbstractDeclarator(
+            AbstractDeclarator declarator) implements AbstractDeclarator {}
+
+    record AbstractPointer(
+            AbstractDeclarator declarator) implements AbstractDeclarator {}
+
+    private static AbstractDeclarator parseAbstractDeclarator(List<Token> tokens) {
+        if (tokens.isEmpty()) {
+            return new AbstractBase();
+        }
+        return switch (tokens.getFirst()) {
+            case IMUL -> {
+                tokens.removeFirst();
+                yield new AbstractPointer(parseAbstractDeclarator(tokens));
+            }
+            case OPEN_PAREN -> {
+                tokens.removeFirst();
+                AbstractDeclarator d = new DirectAbstractDeclarator(parseAbstractDeclarator(tokens));
+                expect(CLOSE_PAREN, tokens);
+                yield d;
+            }
+            default -> new AbstractBase();
+        };
     }
 
     private static Declarator parseDeclarator(List<Token> tokens) {
@@ -160,15 +181,13 @@ public class Parser {
                     new NameDeclTypeParams(name, baseType, new ArrayList<>());
             case PointerDeclarator(Declarator d) ->
                     processDeclarator(d, new Pointer(baseType));
-            case FunDeclarator(List<ParamInfo> params,
-                               Declarator d) -> {
+            case FunDeclarator(List<ParamInfo> params, Declarator d) -> {
 
                 ArrayList<String> paramNames = new ArrayList<>();
                 List<Type> paramTypes = new ArrayList<>();
 
                 for (ParamInfo pi : params) {
-                    NameDeclTypeParams decl = processDeclarator(pi.declarator()
-                            , pi.type());
+                    NameDeclTypeParams decl = processDeclarator(pi.declarator(), pi.type());
                     String name = decl.name();
                     Type type = decl.type();
                     if (type instanceof FunType)
@@ -182,9 +201,7 @@ public class Parser {
                     default ->
                             throw new RuntimeException("Can't apply additional derivations to a function type");
                 }, derivedType, paramNames);
-
             }
-
         };
     }
 
@@ -193,10 +210,10 @@ public class Parser {
         TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
         if (typeAndStorageClass == null) return null;
         Declarator declarator = parseDeclarator(tokens);
-        NameDeclTypeParams foo = processDeclarator(declarator, typeAndStorageClass.type());
-        String name = foo.name();
-        Type type = foo.type();
-        ArrayList<String> paramNames = foo.paramNames();
+        NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator, typeAndStorageClass.type());
+        String name = nameDeclTypeParams.name();
+        Type type = nameDeclTypeParams.type();
+        ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
         if (type instanceof FunType(List<Type> paramTypes1, Type ret)) {
             return parseRestOfFunction(paramNames, paramTypes1, tokens, name, typeAndStorageClass.type(), typeAndStorageClass.storageClass());
         }
@@ -219,7 +236,7 @@ public class Parser {
     }
 
 
-    private static TypeAndStorageClass parseTypeAndStorageClass(List<Token> tokens, boolean throwExceptionIfNoType) {
+    public static TypeAndStorageClass parseTypeAndStorageClass(List<Token> tokens, boolean throwExceptionIfNoType) {
         if (tokens.isEmpty()) return null;
         List<Token> types = new ArrayList<>();
         List<StorageClass> storageClasses = new ArrayList<>();
@@ -246,7 +263,7 @@ public class Parser {
             fail("invalid storage class");
         }
         StorageClass storageClass = storageClasses.isEmpty() ? null : storageClasses.getFirst();
-        return new TypeAndStorageClass(type, storageClass);
+        return type == null ? null : new TypeAndStorageClass(type, storageClass);
     }
 
     private static Type parseType(List<Token> types, boolean throwExceptionIfNoType) {
@@ -288,10 +305,8 @@ public class Parser {
             }
             return Primitive.DOUBLE;
         }
-        if (foundLong)
-            return foundUnsigned ? ULONG : Primitive.LONG;
-        else if (foundInt)
-            return foundUnsigned ? UINT : Primitive.INT;
+        if (foundLong) return foundUnsigned ? ULONG : Primitive.LONG;
+        else if (foundInt) return foundUnsigned ? UINT : Primitive.INT;
         else if (foundSigned) return Primitive.INT;
         else if (foundUnsigned) return UINT;
         if (throwExceptionIfNoType)
@@ -310,9 +325,8 @@ public class Parser {
     }
 
     private static String parseIdentifier(Token identifier) {
-        if (identifier instanceof TokenWithValue(
-                TokenType type, String value
-        ) && type == IDENTIFIER) {
+        if (identifier instanceof TokenWithValue(TokenType type,
+                                                 String value) && type == IDENTIFIER) {
             return value;
         }
         throw new IllegalArgumentException("Expected identifier, got " + identifier);
@@ -342,9 +356,8 @@ public class Parser {
     private static String expectIdentifier(List<Token> tokens) {
         Token token = tokens.removeFirst();
 
-        if (token instanceof TokenWithValue(
-                Token type, String value
-        ) && type == IDENTIFIER) {
+        if (token instanceof TokenWithValue(Token type,
+                                            String value) && type == IDENTIFIER) {
             return value;
         }
         throw new IllegalArgumentException("Expected IDENTIFIER got " + token);
@@ -373,9 +386,7 @@ public class Parser {
 
     private static BlockItem parseBlockItem(List<Token> tokens) {
         Token t = tokens.getFirst();
-        return t == EXTERN || t == STATIC || isTypeSpecifier(t) ?
-                parseDeclaration(tokens, false)
-                : parseStatement(tokens);
+        return t == EXTERN || t == STATIC || isTypeSpecifier(t) ? parseDeclaration(tokens, false) : parseStatement(tokens);
     }
 
     public static Constant parseConst(String value, Type type) {
@@ -408,12 +419,16 @@ public class Parser {
                     new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
             case OPEN_PAREN -> {
                 TypeAndStorageClass typeSpecifierAndStorageClass = parseTypeAndStorageClass(tokens, false);
-                if (typeSpecifierAndStorageClass != null && CLOSE_PAREN == tokens.getFirst()) {
+                if (typeSpecifierAndStorageClass != null) {
                     if (typeSpecifierAndStorageClass.storageClass() != null) {
                         fail("storage class not allowed in cast");
                     }
                     Type type = typeSpecifierAndStorageClass.type();
-                    tokens.removeFirst();//close_paren
+                    if (tokens.getFirst() != CLOSE_PAREN) {
+                        type = processAbstractDeclarator(parseAbstractDeclarator(tokens), type);
+                    }
+                    expect(CLOSE_PAREN, tokens);
+
                     // We use parseFactor so (int)x=y is not parsed as (int)(x=y)
                     // Could use parseExp(tokens, 60) which would do the same
                     // thing but more slowly
@@ -429,9 +444,7 @@ public class Parser {
                     yield r;
                 }
             }
-            case TokenWithValue(
-                    TokenType tokenType, String value
-            ) -> {
+            case TokenWithValue(TokenType tokenType, String value) -> {
                 Type t = Primitive.fromTokenType(tokenType);
                 int len = value.length() - (t == null ? 0 : switch (t) {
                     case Primitive.LONG, UINT -> 1;
@@ -473,6 +486,15 @@ public class Parser {
             default ->
                     throw new IllegalArgumentException("Expected exp, got " + token);
 
+        };
+    }
+
+    private static Type processAbstractDeclarator(AbstractDeclarator abstractDeclarator, Type type) {
+        return switch (abstractDeclarator) {
+            case AbstractBase _ -> type;
+            case AbstractPointer _ -> new Pointer(type);
+            case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
+                    processAbstractDeclarator(declarator, type);
         };
     }
 
@@ -548,7 +570,6 @@ public class Parser {
         throw new RuntimeException(s);
     }
 
-    private record TypeAndStorageClass(Type type, StorageClass storageClass) {
-    }
+    public record TypeAndStorageClass(Type type, StorageClass storageClass) {}
 
 }
