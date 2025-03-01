@@ -160,8 +160,8 @@ public class Parser {
                     if (typeAndStorageClass.storageClass() != null)
                         fail("error: storage class specified for parameter");
                     Declarator paramDeclarator = parseDeclarator(tokens);
-                    NameDeclTypeParams ppp = processDeclarator(paramDeclarator, typeAndStorageClass.type());
-                    params.add(new ParamInfo(ppp.type(), paramDeclarator));
+                    NameDeclTypeParams nameDeclTypeParams = processDeclarator(paramDeclarator, typeAndStorageClass.type());
+                    params.add(new ParamInfo(nameDeclTypeParams.type(), paramDeclarator));
 
                     Token token = tokens.removeFirst();
                     if (token == CLOSE_PAREN) break;
@@ -189,7 +189,7 @@ public class Parser {
                 for (ParamInfo pi : params) {
                     NameDeclTypeParams decl = processDeclarator(pi.declarator(), pi.type());
                     String name = decl.name();
-                    Type type = decl.type();
+                    Type type = pi.type();
                     if (type instanceof FunType)
                         throw new RuntimeException("function pointers are not supported");
                     paramNames.add(name);
@@ -215,7 +215,7 @@ public class Parser {
         Type type = nameDeclTypeParams.type();
         ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
         if (type instanceof FunType(List<Type> paramTypes1, Type ret)) {
-            return parseRestOfFunction(paramNames, paramTypes1, tokens, name, typeAndStorageClass.type(), typeAndStorageClass.storageClass());
+            return parseRestOfFunction(paramNames, paramTypes1, tokens, name, ret, typeAndStorageClass.storageClass());
         }
         Token token = tokens.removeFirst();
         Exp exp;
@@ -232,7 +232,7 @@ public class Parser {
                 throw new IllegalArgumentException("Expected ; or =, got " + token);
         }
 
-        return new VarDecl(name, exp, typeAndStorageClass.type(), typeAndStorageClass.storageClass());
+        return new VarDecl(name, exp, type, typeAndStorageClass.storageClass());
     }
 
 
@@ -425,7 +425,8 @@ public class Parser {
                     }
                     Type type = typeSpecifierAndStorageClass.type();
                     if (tokens.getFirst() != CLOSE_PAREN) {
-                        type = processAbstractDeclarator(parseAbstractDeclarator(tokens), type);
+                        AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens);
+                        type = processAbstractDeclarator(abstractDeclarator, type);
                     }
                     expect(CLOSE_PAREN, tokens);
 
@@ -492,7 +493,7 @@ public class Parser {
     private static Type processAbstractDeclarator(AbstractDeclarator abstractDeclarator, Type type) {
         return switch (abstractDeclarator) {
             case AbstractBase _ -> type;
-            case AbstractPointer _ -> new Pointer(type);
+            case AbstractPointer(AbstractDeclarator declarator) -> new Pointer(processAbstractDeclarator(declarator, type));
             case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
                     processAbstractDeclarator(declarator, type);
         };
