@@ -5,7 +5,7 @@ import com.quaxt.mcc.semantic.FunType;
 import java.util.List;
 
 public record Function(String name,
-                       List<Identifier> parameters,
+                       List<Var> parameters,
                        Block body,
                        FunType funType,
                        StorageClass storageClass) implements Declaration {

@@ -431,9 +431,9 @@ public class Codegen {
     public static FunctionAsm generateAssembly(FunctionIr functionIr) {
         // here we can convert arguments to pseudos (which are operands)
         List<Instruction> ins = new ArrayList<>();
-        List<Identifier> functionType = functionIr.type();
+        List<Var> functionType = functionIr.type();
         List<TypedOperand> operands = new ArrayList<>();
-        for (Identifier param : functionType) {
+        for (Var param : functionType) {
             operands.add(new TypedOperand(toTypeAsm(param.type()), new Pseudo(param.name())));
         }
         ParameterClassification classifiedParameters = classifyParameters(operands);

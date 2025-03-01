@@ -281,11 +281,11 @@ public class IrGen {
                         return dstName;
                     }
                 }
-            case Assignment(Identifier left, Exp right, Type type):
+            case Assignment(Var left, Exp right, Type type):
                 return assign(left.name(), right, instructions);
-            case Identifier(String name, Type type):
+            case Var(String name, Type type):
                 return new VarIr(name);
-            case FunctionCall(Identifier name, List<Exp> args, Type type): {
+            case FunctionCall(Var name, List<Exp> args, Type type): {
                 VarIr result = makeTemporary("tmp.", type);
                 ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {
