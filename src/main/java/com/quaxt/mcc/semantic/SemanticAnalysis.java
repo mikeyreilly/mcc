@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
+import static com.quaxt.mcc.CmpOperator.EQUALS;
+import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
@@ -205,6 +207,7 @@ public class SemanticAnalysis {
             case INT -> new IntInit((int) initL);
             case ULONG -> new ULongInit(initL);
             case UINT -> new UIntInit((int) initL);
+            case Pointer _ -> new UIntInit((int) initL);
             default -> null;
         };
     }
@@ -287,7 +290,7 @@ public class SemanticAnalysis {
 
             case Return(Exp exp) -> {
                 Type returnType = enclosingFunction.funType().ret();
-                yield new Return(convertTo(typeCheckExpression(exp), returnType));
+                yield new Return(convertByAssignment(typeCheckExpression(exp), returnType));
 
             }
             case While(Exp condition, Statement whileBody, String label) ->
@@ -323,11 +326,7 @@ public class SemanticAnalysis {
                         throw new RuntimeException("Non-constant initializer on local static variable");
             };
             initialValue = convertConst(initialValue, decl.varType());
-            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(switch (initialValue) {
-                case DoubleInit _ -> DOUBLE;
-                case LongInit _, ULongInit _ -> LONG;
-                default -> INT;
-            }, new StaticAttributes(initialValue, false)));
+            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
             return new VarDecl(decl.name(), switch (initialValue) {
                 case IntInit(int i) -> new ConstInt(i);
                 case LongInit(long l) -> new ConstLong(l);
@@ -337,8 +336,8 @@ public class SemanticAnalysis {
             }, decl.varType(), decl.storageClass());
         } else {
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
-            Exp typeCheckedInit = (decl.init() != null) ? typeCheckExpression(decl.init()) : null;
-            return new VarDecl(decl.name(), convertTo(typeCheckedInit, decl.varType()), decl.varType(), decl.storageClass());
+            Exp init = decl.init() != null ? convertByAssignment(typeCheckExpression(decl.init()), decl.varType()) : null;
+            return new VarDecl(decl.name(), init, decl.varType(), decl.storageClass());
         }
     }
 
@@ -347,15 +346,40 @@ public class SemanticAnalysis {
         return new Cast(t, e);
     }
 
+    private static Exp convertByAssignment(Exp e, Type targetType) {
+        Type t = e.type();
+        if (t.equals(targetType)) return e;
+        if ((isArithmeticType(t) && isArithmeticType(targetType)) || (isNullPointerConstant(e) && targetType instanceof Pointer))
+            return convertTo(e, targetType);
+        throw new RuntimeException("Cannot convert type for assignment");
+    }
+
+    private static boolean isArithmeticType(Type t) {
+        return t instanceof Primitive;
+    }
+
     private static Exp typeCheckExpression(Exp exp) {
         return switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right, Type type) -> {
+                if (!isLvalue(left))
+                    throw new RuntimeException("cannot assign to non-lvalue");
                 Exp typedLeft = typeCheckExpression(left);
                 Exp typedRight = typeCheckExpression(right);
                 Type leftType = typedLeft.type();
-                Exp convertedRight = convertTo(typedRight, leftType);
+                Exp convertedRight = convertByAssignment(typedRight, leftType);
                 yield new Assignment(typedLeft, convertedRight, leftType);
+            }
+            case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
+                          Type type) when op == EQUALS || op == NOT_EQUALS -> {
+                Exp typedE1 = typeCheckExpression(e1);
+                Exp typedE2 = typeCheckExpression(e2);
+                Type t1 = typedE1.type();
+                Type t2 = typedE2.type();
+                Type commonType = t1 instanceof Pointer || t2 instanceof Pointer ? getCommonPointerType(typedE1, typedE2) : getCommonType(t1, t2);
+                Exp convertedE1 = convertTo(typedE1, commonType);
+                Exp convertedE2 = convertTo(typedE2, commonType);
+                yield new BinaryOp(op, convertedE1, convertedE2, INT);
             }
             case BinaryOp(BinaryOperator op, Exp e1, Exp e2, Type type) -> {
                 Exp typedE1 = typeCheckExpression(e1);
@@ -379,6 +403,7 @@ public class SemanticAnalysis {
 
             }
             case Cast(Type type, Exp inner) -> {
+                //MR-TODO check illegal cast pointer<->double
                 Exp typedInner = typeCheckExpression(inner);
                 yield new Cast(type, typedInner);
             }
@@ -389,7 +414,7 @@ public class SemanticAnalysis {
                 Exp typedIfFalse = typeCheckExpression(ifFalse);
                 Type t1 = typedIfTrue.type();
                 Type t2 = typedIfFalse.type();
-                Type commonType = getCommonType(t1, t2);
+                Type commonType = t1 instanceof Pointer || t2 instanceof Pointer ? getCommonPointerType(typedIfTrue, typedIfFalse) : getCommonType(t1, t2);
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
             case Constant constant -> constant;
@@ -404,7 +429,7 @@ public class SemanticAnalysis {
                             Exp arg = args.get(i);
                             Type paramType = params.get(i);
                             Exp typedArg = typeCheckExpression(arg);
-                            convertedArgs.add(convertTo(typedArg, paramType));
+                            convertedArgs.add(convertByAssignment(typedArg, paramType));
                         }
                         yield new FunctionCall(name, convertedArgs, ret);
                     }
@@ -433,7 +458,7 @@ public class SemanticAnalysis {
                 Exp typedInner = typeCheckExpression(inner);
                 yield switch (typedInner.type()) {
                     case Pointer(Type referenced) ->
-                            new Dereference(inner, referenced);
+                            new Dereference(typedInner, referenced);
                     default -> fail("Cannot dereference non-pointer");
                 };
 
@@ -441,13 +466,32 @@ public class SemanticAnalysis {
             case AddrOf(Exp inner, Type type) -> {
                 if (isLvalue(inner)) {
                     Exp typedInner = typeCheckExpression(inner);
-                    Type referenced_t = typedInner.type();
-                    yield new AddrOf(typedInner, new Pointer(referenced_t));
+                    Type referencedType = typedInner.type();
+                    yield new AddrOf(typedInner, new Pointer(referencedType));
                 } else {
                     yield fail("Cannot take address of non-lvalue");
                 }
 
             }
+        };
+    }
+
+    private static Type getCommonPointerType(Exp e1, Exp e2) {
+        Type t1 = e1.type();
+        Type t2 = e2.type();
+        if (t1.equals(t2)) return t1;
+        if (isNullPointerConstant(e1)) return t2;
+        if (isNullPointerConstant(e2)) return t1;
+        throw new RuntimeException("Expressions have incompatible types");
+    }
+
+    private static boolean isNullPointerConstant(Exp e) {
+        return switch (e) {
+            case ConstInt(int i) -> i == 0;
+            case ConstLong(long l) -> l == 0L;
+            case ConstUInt(int i) -> i == 0;
+            case ConstULong(long l) -> l == 0;
+            default -> false;
         };
     }
 
@@ -601,7 +645,7 @@ public class SemanticAnalysis {
         @SuppressWarnings("unchecked") T r = (T) switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right, Type type) ->
-                    left instanceof Var v ? new Assignment(resolveExp(v, identifierMap), resolveExp(right, identifierMap), type) : fail("Invalid lvalue");
+                    isLvalue(left) ? new Assignment(resolveExp(left, identifierMap), resolveExp(right, identifierMap), type) : fail("Invalid lvalue");
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
                     new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap), type);
             case Constant constant -> constant;
