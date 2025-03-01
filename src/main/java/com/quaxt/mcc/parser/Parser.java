@@ -338,9 +338,9 @@ public class Parser {
 
     private static Function parseRestOfFunction(ArrayList<String> paramNames, List<Type> paramTypes, List<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
 
-        List<Identifier> params = new ArrayList<>();
+        List<Var> params = new ArrayList<>();
         for (int i = 0; i < paramNames.size(); i++) {
-            params.add(new Identifier(paramNames.get(i), paramTypes.get(i)));
+            params.add(new Var(paramNames.get(i), paramTypes.get(i)));
         }
 
         Block block;
@@ -412,9 +412,9 @@ public class Parser {
             case BITWISE_NOT ->
                     new UnaryOp(UnaryOperator.BITWISE_NOT, parseFactor(tokens), null);
             case AMPERSAND ->
-                    new UnaryOp(UnaryOperator.ADDRESS, parseFactor(tokens), null);
+                    new AddrOf(parseFactor(tokens), null);
             case IMUL ->
-                    new UnaryOp(UnaryOperator.DEREFERENCE, parseFactor(tokens), null);
+                    new Dereference(parseFactor(tokens), null);
             case NOT ->
                     new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
             case OPEN_PAREN -> {
@@ -454,7 +454,7 @@ public class Parser {
                 if (t != null) {
                     yield parseConst(value.substring(0, len), t);
                 }
-                Identifier id = new Identifier(value, null);
+                Var id = new Var(value, null);
                 if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
                     tokens.removeFirst();
                     Token current = tokens.getFirst();

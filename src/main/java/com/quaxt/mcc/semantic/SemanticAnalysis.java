@@ -238,15 +238,15 @@ public class SemanticAnalysis {
         Block typeCheckedBody;
         if (decl.body() != null) {
             for (int i = 0; i < decl.parameters().size(); i++) {
-                Identifier param = decl.parameters().get(i);
+                Var param = decl.parameters().get(i);
                 SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(decl.funType().params().get(i), LOCAL_ATTR));
             }
             typeCheckedBody = typeCheckBlock(decl.body(), decl);
         } else typeCheckedBody = null;
-        List<Identifier> declParams = decl.parameters();
+        List<Var> declParams = decl.parameters();
         for (int i = 0; i < declParams.size(); i++) {
-            Identifier oldParam = declParams.get(i);
-            declParams.set(i, new Identifier(oldParam.name(), decl.funType().params().get(i)));
+            Var oldParam = declParams.get(i);
+            declParams.set(i, new Var(oldParam.name(), decl.funType().params().get(i)));
         }
         return new Function(decl.name(), decl.parameters(), typeCheckedBody, decl.funType(), decl.storageClass());
     }
@@ -335,9 +335,7 @@ public class SemanticAnalysis {
         } else {
             SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
             Exp typeCheckedInit = (decl.init() != null) ? typeCheckExpression(decl.init()) : null;
-            return new VarDecl(decl.name(),
-                    convertTo(typeCheckedInit, decl.varType()),
-                    decl.varType(), decl.storageClass());
+            return new VarDecl(decl.name(), convertTo(typeCheckedInit, decl.varType()), decl.varType(), decl.storageClass());
         }
     }
 
@@ -392,7 +390,7 @@ public class SemanticAnalysis {
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
             case Constant constant -> constant;
-            case FunctionCall(Identifier name, List<Exp> args, Type type) -> {
+            case FunctionCall(Var name, List<Exp> args, Type type) -> {
                 Type fType = SYMBOL_TABLE.get(name.name()).type();
                 yield switch (fType) {
                     case FunType(List<Type> params, Type ret) -> {
@@ -410,13 +408,12 @@ public class SemanticAnalysis {
                     default ->
                             fail("variable " + name.name() + " used as function");
                 };
-
             }
-            case Identifier(String name, Type type) -> {
+            case Var(String name, Type type) -> {
                 Type t = SYMBOL_TABLE.get(name).type();
                 if (t instanceof FunType)
                     fail("Function " + name + " used as a variable");
-                yield new Identifier(name, t);
+                yield new Var(name, t);
             }
             case UnaryOp(UnaryOperator op, Exp inner, Type type) -> {
                 Exp typedInner = typeCheckExpression(inner);
@@ -429,19 +426,37 @@ public class SemanticAnalysis {
                 };
 
             }
+            case Dereference(Exp inner, Type type) -> {
+                Exp typedInner = typeCheckExpression(inner);
+                yield switch (typedInner.type()) {
+                    case Pointer(Type referenced) ->
+                            new Dereference(inner, referenced);
+                    default -> fail("Cannot dereference non-pointer");
+                };
+
+            }
+            case AddrOf(Exp inner, Type type) -> {
+                if (isLvalue(inner)) {
+                    Exp typedInner = typeCheckExpression(inner);
+                    Type referenced_t = typedInner.type();
+                    yield new AddrOf(typedInner, new Pointer(referenced_t));
+                } else {
+                    yield fail("Cannot take address of non-lvalue");
+                }
+
+            }
         };
     }
 
-    private static Type getCommonType(Type t1, Type t2) {
-        return t1 == t2 ? t1
-                : t1 == DOUBLE || t2 == DOUBLE ? DOUBLE
-                : t1.size() == t2.size() ? (t1.isSigned() ? t2 : t1)
-                : t1.size() > t2.size() ? t1
-                : t2;
+    private static boolean isLvalue(Exp exp) {
+        return exp instanceof Dereference || exp instanceof Var;
     }
 
-    record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {
+    private static Type getCommonType(Type t1, Type t2) {
+        return t1 == t2 ? t1 : t1 == DOUBLE || t2 == DOUBLE ? DOUBLE : t1.size() == t2.size() ? (t1.isSigned() ? t2 : t1) : t1.size() > t2.size() ? t1 : t2;
     }
+
+    record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}
 
     public static Program resolveProgram(Program program) {
         Map<String, Entry> identifierMap = new HashMap<>();
@@ -487,21 +502,21 @@ public class SemanticAnalysis {
         identifierMap.put(name, new Entry(name, true, true));
         Map<String, Entry> innerMap = copyIdentifierMap(identifierMap);
 
-        List<Identifier> newArgs = resolveParams(function.parameters(), innerMap);
+        List<Var> newArgs = resolveParams(function.parameters(), innerMap);
 
         Block newBody = function.body() instanceof Block block ? resolveBlock(block, innerMap) : null;
         return new Function(function.name(), newArgs, newBody, function.funType(), function.storageClass());
     }
 
-    private static List<Identifier> resolveParams(List<Identifier> parameters, Map<String, Entry> identifierMap) {
-        List<Identifier> newParams = new ArrayList<>();
-        for (Identifier d : parameters) {
+    private static List<Var> resolveParams(List<Var> parameters, Map<String, Entry> identifierMap) {
+        List<Var> newParams = new ArrayList<>();
+        for (Var d : parameters) {
             if (identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
                 fail("Duplicate variable declaration");
             }
             String uniqueName = Mcc.makeTemporary(d.name() + ".");
             identifierMap.put(d.name(), new Entry(uniqueName, true, false));
-            newParams.add(new Identifier(uniqueName, d.type()));
+            newParams.add(new Var(uniqueName, d.type()));
         }
         return newParams;
     }
@@ -580,23 +595,26 @@ public class SemanticAnalysis {
     }
 
     private static <T extends Exp> T resolveExp(T exp, Map<String, Entry> identifierMap) {
-        @SuppressWarnings("unchecked")
-        T r = (T) switch (exp) {
+        @SuppressWarnings("unchecked") T r = (T) switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right, Type type) ->
-                    left instanceof Identifier v ? new Assignment(resolveExp(v, identifierMap), resolveExp(right, identifierMap), type) : fail("Invalid lvalue");
+                    left instanceof Var v ? new Assignment(resolveExp(v, identifierMap), resolveExp(right, identifierMap), type) : fail("Invalid lvalue");
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
                     new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap), type);
             case Constant constant -> constant;
             case UnaryOp(UnaryOperator op, Exp arg, Type type) ->
                     new UnaryOp(op, resolveExp(arg, identifierMap), type);
-            case Identifier(String name, Type type) ->
-                    identifierMap.get(name) instanceof Entry e ? new Identifier(e.name(), type) : fail("Undeclared variable:" + exp);
+            case AddrOf(Exp arg, Type type) ->
+                    new AddrOf(resolveExp(arg, identifierMap), type);
+            case Dereference(Exp arg, Type type) ->
+                    new Dereference(resolveExp(arg, identifierMap), type);
+            case Var(String name, Type type) ->
+                    identifierMap.get(name) instanceof Entry e ? new Var(e.name(), type) : fail("Undeclared variable:" + exp);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type) ->
                     new Conditional(resolveExp(condition, identifierMap), resolveExp(ifTrue, identifierMap), resolveExp(ifFalse, identifierMap), type);
-            case FunctionCall(Identifier name, List<Exp> args, Type type) ->
-                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Identifier(newFunctionName.name(), type), resolveArgs(identifierMap, args), type) : fail("Undeclared function:" + name);
+            case FunctionCall(Var name, List<Exp> args, Type type) ->
+                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, args), type) : fail("Undeclared function:" + name);
             case Cast(Type type, Exp e) ->
                     new Cast(type, resolveExp(e, identifierMap));
         };
