@@ -1,6 +1,7 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.UnaryOperator.NOT;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
@@ -137,6 +139,9 @@ public class SemanticAnalysis {
                     decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
             default -> throw new RuntimeException("Non constant initializer");
         };
+        if (decl.varType() instanceof Pointer && decl.init() instanceof Constant c && !isNullPointerConstant(c)) {
+            throw new RuntimeException("Cannot convert type for assignment");
+        }
         boolean global = decl.storageClass() != STATIC;
         if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry oldDecl) {
             if (oldDecl.type() != decl.varType())
@@ -156,6 +161,7 @@ public class SemanticAnalysis {
                     initialValue = TENTATIVE;
             }
         }
+
         StaticAttributes attrs = new StaticAttributes(initialValue, global);
         SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), attrs));
         return decl;
@@ -386,9 +392,10 @@ public class SemanticAnalysis {
                 }
                 Type t1 = typedE1.type();
                 Type t2 = typedE2.type();
-                if (op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE)) {
+                if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE))
+                        || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
                     fail("invalid operands to binary % (have ‘" + t1 + "’ and ‘" + t2 + "’");
-                }
+
                 Type commonType = getCommonType(t1, t2);
                 Exp convertedE1 = convertTo(typedE1, commonType);
                 Exp convertedE2 = convertTo(typedE2, commonType);
@@ -400,8 +407,10 @@ public class SemanticAnalysis {
 
             }
             case Cast(Type type, Exp inner) -> {
-                //MR-TODO check illegal cast pointer<->double
                 Exp typedInner = typeCheckExpression(inner);
+                Type innerType = typedInner.type();
+                if (type instanceof Pointer && innerType == DOUBLE || innerType instanceof Pointer && type == DOUBLE)
+                    throw new RuntimeException("illegal cast:" + innerType + "->" + type);
                 yield new Cast(type, typedInner);
             }
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
@@ -444,6 +453,9 @@ public class SemanticAnalysis {
                 Exp typedInner = typeCheckExpression(inner);
                 if (op == UnaryOperator.BITWISE_NOT && typedInner.type() == DOUBLE) {
                     fail("can't apply ~ to double");
+                }
+                if (typedInner.type() instanceof Pointer && op != NOT) {
+                    fail("Can't apply " + op + " to pointer");
                 }
                 yield switch (op) {
                     case NOT -> new UnaryOp(op, typedInner, INT);
