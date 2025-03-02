@@ -164,7 +164,7 @@ public class SemanticAnalysis {
         }
 
         StaticAttributes attrs = new StaticAttributes(initialValue, global);
-        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), attrs));
+        SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), attrs));
         return decl;
     }
 
@@ -318,7 +318,7 @@ public class SemanticAnalysis {
                     fail("inconsistent variable redefenition");
 
             } else {
-                SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(INT, new StaticAttributes(NO_INITIALIZER, true)));
+                SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(INT, new StaticAttributes(NO_INITIALIZER, true)));
             }
             return decl;
         } else if (decl.storageClass() == STATIC) {
@@ -333,7 +333,7 @@ public class SemanticAnalysis {
                         throw new RuntimeException("Non-constant initializer on local static variable");
             };
             initialValue = convertConst(initialValue, decl.varType());
-            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
             return new VarDecl(decl.name(), switch (initialValue) {
                 case IntInit(int i) -> new ConstInt(i);
                 case LongInit(long l) -> new ConstLong(l);
@@ -342,7 +342,7 @@ public class SemanticAnalysis {
                 default -> null;
             }, decl.varType(), decl.storageClass());
         } else {
-            SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
             Exp init = decl.init() != null ? convertByAssignment(typeCheckExpression(decl.init()), decl.varType()) : null;
             return new VarDecl(decl.name(), init, decl.varType(), decl.storageClass());
         }
@@ -536,9 +536,9 @@ public class SemanticAnalysis {
 
     private static Declaration resolveFileScopeVariableDeclaration(VarDecl varDecl, Map<String, Entry> identifierMap) {
         return switch (varDecl) {
-            case VarDecl(String name, Exp init, Type varType,
+            case VarDecl(Var name, Exp init, Type varType,
                          StorageClass storageClass) -> {
-                identifierMap.put(name, new Entry(name, true, true));
+                identifierMap.put(name.name(), new Entry(name.name(), true, true));
                 yield varDecl;
             }
         };
@@ -645,13 +645,13 @@ public class SemanticAnalysis {
 
         }
         if (decl.storageClass() == EXTERN) {
-            identifierMap.put(decl.name(), new Entry(decl.name(), true, true));
+            identifierMap.put(decl.name().name(), new Entry(decl.name().name(), true, true));
             return decl;
         }
-        String uniqueName = Mcc.makeTemporary(decl.name() + ".");
-        identifierMap.put(decl.name(), new Entry(uniqueName, true, false));
+        String uniqueName = Mcc.makeTemporary(decl.name().name() + ".");
+        identifierMap.put(decl.name().name(), new Entry(uniqueName, true, false));
         Exp init = decl.init();
-        return new VarDecl(uniqueName, resolveExp(init, identifierMap), decl.varType(), decl.storageClass());
+        return new VarDecl(new Var(uniqueName, null), resolveExp(init, identifierMap), decl.varType(), decl.storageClass());
     }
 
     private static <T extends Exp> T resolveExp(T exp, Map<String, Entry> identifierMap) {

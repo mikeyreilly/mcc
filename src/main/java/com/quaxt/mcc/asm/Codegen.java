@@ -578,8 +578,8 @@ public class Codegen {
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
                     Type dstType = valToType(dst);
                     if (dstType == Primitive.INT) {
-                        ins.add(new Cvttsd2si(QUADWORD, toOperand(src), Reg.AX));
-                        ins.add(new Mov(LONGWORD, Reg.AX, toOperand(dst)));
+                        ins.add(new Cvttsd2si(QUADWORD, toOperand(src), AX));
+                        ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
                     } else {
                         //p.335
                         LabelIr label1 = newLabel("aub");
@@ -593,8 +593,8 @@ public class Codegen {
                         ins.add(new Mov(DOUBLE, toOperand(src), XMM0));
                         ins.add(new Binary(DOUBLE_SUB, DOUBLE, UPPER_BOUND, XMM0));
                         ins.add(new Cvttsd2si(QUADWORD, XMM0, toOperand(dst)));
-                        ins.add(new Mov(TypeAsm.QUADWORD, UPPER_BOUND_LONG_IMMEDIATE, AX));
-                        ins.add(new Binary(ADD, TypeAsm.QUADWORD, AX, toOperand(dst)));
+                        ins.add(new Mov(QUADWORD, UPPER_BOUND_LONG_IMMEDIATE, AX));
+                        ins.add(new Binary(ADD, QUADWORD, AX, toOperand(dst)));
                         ins.add(label2);
                     }
 
@@ -604,7 +604,7 @@ public class Codegen {
                     var dst = toOperand(dstV);
                     Type dstType = valToType(dstV);
                     if (dstType == Primitive.INT) {
-                        ins.add(new MovZeroExtend(src, Reg.AX));
+                        ins.add(new MovZeroExtend(src, AX));
                         ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
                     } else {
                         LabelIr label1 = newLabel("outOfRange");
@@ -626,6 +626,8 @@ public class Codegen {
                         ins.add(label2);
                     }
                 }
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + inst);
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), ins);
