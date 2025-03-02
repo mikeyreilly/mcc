@@ -5,4 +5,4 @@ else
     mccdir=./
 fi
 
-java -cp "${mccdir}target/classes" com.quaxt.mcc.Mcc "$@"
+java --enable-preview -cp "${mccdir}target/classes" com.quaxt.mcc.Mcc "$@"
