@@ -63,7 +63,7 @@ public class IrGen {
             case Function function -> {
                 if (function.body() != null) compileFunction(function);
             }
-            case VarDecl(Var name, Exp init, Type varType,
+            case VarDecl(Var name, Exp init, Type _,
                          StorageClass storageClass) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
@@ -80,9 +80,7 @@ public class IrGen {
             switch (i) {
 
                 case Declaration d -> compileDeclaration(d, instructions);
-                case Statement statement -> {
-                    compileStatement(statement, instructions);
-                }
+                case Statement statement -> compileStatement(statement, instructions);
             }
         }
     }
@@ -130,13 +128,8 @@ public class IrGen {
             }
             case Block b -> compileBlock(b, instructions);
 
-            case Break aBreak -> {
-                instructions.add(new Jump(breakLabel(aBreak.label)));
-            }
-            case Continue aContinue -> {
-                instructions.add(new Jump(continueLabel(aContinue.label)));
-
-            }
+            case Break aBreak -> instructions.add(new Jump(breakLabel(aBreak.label)));
+            case Continue aContinue -> instructions.add(new Jump(continueLabel(aContinue.label)));
             case DoWhile(Statement body, Exp condition, String label) -> {
                 LabelIr start = newLabel("start");
                 instructions.add(start);
@@ -234,7 +227,7 @@ public class IrGen {
                 instructions.add(new UnaryIr(op, src, dst));
                 return new PlainOperand(dst);
             }
-            case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type):
+            case BinaryOp(BinaryOperator op, Exp left, Exp right, Type _):
                 switch (op) {
                     case AND -> {
                         VarIr result = makeTemporary("tmp.", INT);
@@ -282,9 +275,9 @@ public class IrGen {
                         return new PlainOperand(dstName);
                     }
                 }
-            case Assignment(Exp left, Exp right, Type type):
+            case Assignment(Exp left, Exp right, Type _):
                 return assign(left, right, instructions);
-            case Var(String name, Type type):
+            case Var(String name, Type _):
                 return new PlainOperand(new VarIr(name));
             case FunctionCall(Var name, List<Exp> args, Type type): {
                 VarIr result = makeTemporary("tmp.", type);
@@ -301,7 +294,7 @@ public class IrGen {
                 // for the purposes of casting we treat pointers exactly like unsigned long (p. 375)
                 if (t instanceof Pointer) t = ULONG;
                 if (innerType instanceof Pointer) innerType = ULONG;
-                if (t == inner.type()) {
+                if (t == innerType) {
                     return new PlainOperand(result);
                 }
                 VarIr dst = makeTemporary("dst", t);
@@ -320,15 +313,15 @@ public class IrGen {
                 }
                 return new PlainOperand(dst);
             }
-            case Dereference(Exp exp, Type type): {
+            case Dereference(Exp exp, Type _): {
                 ValIr result = emitTackyAndConvert(exp, instructions);
                 return new DereferencedPointer(result);
             }
-            case AddrOf(Exp exp, Type type): {
-                ExpResult v = emitTacky(exp, instructions);
+            case AddrOf(Exp inner, Type _): {
+                ExpResult v = emitTacky(inner, instructions);
                 return switch (v) {
                     case PlainOperand(ValIr obj) -> {
-                        VarIr dst = makeTemporary("addr", exp.type());
+                        VarIr dst = makeTemporary("addr.", expr.type());
                         instructions.add(new GetAddress(obj, dst));
                         yield new PlainOperand(dst);
                     }
