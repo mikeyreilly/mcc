@@ -232,7 +232,7 @@ public class Parser {
                 throw new IllegalArgumentException("Expected ; or =, got " + token);
         }
 
-        return new VarDecl(name, exp, type, typeAndStorageClass.storageClass());
+        return new VarDecl(new Var(name, type), exp, type, typeAndStorageClass.storageClass());
     }
 
 
