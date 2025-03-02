@@ -25,7 +25,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case SetCC _ -> reg.b;
                 default -> reg.d;
             };
-            case Stack(int offset) -> offset + "(%rbp)";
+            case Memory(Reg reg, int offset) -> offset + "(%" + reg.q + ")";
             case Data data -> {
                 boolean isConstant = BACKEND_SYMBOL_TABLE.get(data.identifier()) instanceof ObjEntry e && e.isConstant();
                 yield (isConstant ? ".L" + data.identifier() : data.identifier()) + "(%rip)";
@@ -107,7 +107,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case LongInit _ -> 8;
                 case UIntInit _ -> 4;
                 case ULongInit _ -> 8;
-                case DoubleInit _ -> throw new AssertionError("init is set to non zero for DoubleInit");
+                case DoubleInit _ ->
+                        throw new AssertionError("init is set to non zero for DoubleInit");
             });
         } else {
             String name = v.name();
@@ -116,10 +117,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             out.println("                .balign " + v.alignment());
             out.println(name + ":");
             out.println(switch (v.init()) {
-                case IntInit _, UIntInit _ -> "                .long "+ init;
-                case LongInit _, ULongInit _ -> "                .quad "+ init;
-                case DoubleInit(double d) -> "                .quad "+ Double.doubleToLongBits(d);
-            } );
+                case IntInit _, UIntInit _ -> "                .long " + init;
+                case LongInit _, ULongInit _ -> "                .quad " + init;
+                case DoubleInit(double d) ->
+                        "                .quad " + Double.doubleToLongBits(d);
+            });
 
         }
 
@@ -138,7 +140,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             String s = switch (instruction) {
                 case Mov(TypeAsm t, Operand src, Operand dst) ->
                         instruction.format(t) + formatOperand(t, instruction, src) + ", " + formatOperand(t, instruction, dst);
-
+                case Lea(Operand src, Operand dst) ->
+                        "leaq\t" + formatOperand(QUADWORD, instruction, src) + ", " + formatOperand(QUADWORD, instruction, dst);
                 case Push(Operand arg) ->
                         "pushq\t" + formatOperand(instruction, arg);
 
@@ -151,29 +154,20 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                         instruction.format(t) + formatOperand(t, instruction, operand);
                 case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
                         instruction.format(t) + formatOperand(t, instruction, subtrahend) + ", " + formatOperand(t, instruction, minuend);
-                case Binary(
-                        ArithmeticOperator op, TypeAsm t, Operand src,
-                        Operand dst
-                ) -> {
+                case Binary(ArithmeticOperator op, TypeAsm t, Operand src,
+                            Operand dst) -> {
                     String srcF = formatOperand(t, instruction, src);
                     String dstF = formatOperand(t, instruction, dst);
                     yield instruction.format(t) + srcF + ", " + dstF;
                 }
                 case Jump(String label) -> "jmp\t" + label;
                 case LabelIr(String label) -> label + ":";
-                case SetCC(
-                        CmpOperator cmpOperator,
-                        boolean unsigned,
-                        Operand o
-                ) -> "set" + (unsigned ? cmpOperator.unsignedCode
-                        : cmpOperator.code) + "\t"
-                        + formatOperand(instruction, o);
-                case JmpCC(
-                        CmpOperator cmpOperator,
-                        boolean unsigned,
-                        String label
-                ) -> "j" + (unsigned ? cmpOperator.unsignedCode
-                        : cmpOperator.code) + "\t" + label;
+                case SetCC(CmpOperator cmpOperator, boolean unsigned,
+                           Operand o) ->
+                        "set" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + formatOperand(instruction, o);
+                case JmpCC(CmpOperator cmpOperator, boolean unsigned,
+                           String label) ->
+                        "j" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + label;
                 case Call(String functionName) ->
                         "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
                 case Cdq(TypeAsm t) -> instruction.format(t);
@@ -187,12 +181,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
                     String srcF = formatOperand(DOUBLE, instruction, src);
                     String dstF = formatOperand(dstType, instruction, dst);
-                    yield (dstType==QUADWORD?"cvttsd2siq\t":"cvttsd2sil\t") + srcF + ", " + dstF;
+                    yield (dstType == QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF + ", " + dstF;
                 }
                 case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
                     String srcF = formatOperand(srcType, instruction, src);
                     String dstF = formatOperand(DOUBLE, instruction, dst);
-                    yield (srcType==QUADWORD?"cvtsi2sdq\t":"cvtsi2sdl\t") + srcF + ", " + dstF;
+                    yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
                 }
             };
             if (instruction instanceof LabelIr) {
