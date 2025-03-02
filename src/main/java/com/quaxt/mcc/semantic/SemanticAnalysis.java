@@ -143,15 +143,16 @@ public class SemanticAnalysis {
             throw new RuntimeException("Cannot convert type for assignment");
         }
         boolean global = decl.storageClass() != STATIC;
-        if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry oldDecl) {
-            if (oldDecl.type() != decl.varType())
+        if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(Type type,
+                                                                      IdentifierAttributes attrs)) {
+            if (type != decl.varType())
                 fail("variable declared with inconsistent type");
             if (decl.storageClass() == EXTERN)
-                global = oldDecl.attrs().global();
-            else if (oldDecl.attrs().global() != global)
+                global = attrs.global();
+            else if (attrs.global() != global)
                 fail("conflicting variable linkage");
 
-            if (oldDecl.attrs() instanceof StaticAttributes(
+            if (attrs instanceof StaticAttributes(
                     InitialValue oldInit, boolean _)) {
                 if (oldInit instanceof StaticInit oldInitialConstant) {
                     if (initialValue instanceof StaticInit)
