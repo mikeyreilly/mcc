@@ -2,10 +2,8 @@ package com.quaxt.mcc.parser;
 
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.semantic.FunType;
-import com.quaxt.mcc.semantic.Pointer;
-import com.quaxt.mcc.semantic.Primitive;
-import com.quaxt.mcc.semantic.Type;
+import com.quaxt.mcc.asm.Todo;
+import com.quaxt.mcc.semantic.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -85,11 +83,14 @@ public class Parser {
         return new DoWhile(body, condition, null);
     }
 
-    sealed interface Declarator permits Ident, PointerDeclarator, FunDeclarator {}
+    sealed interface Declarator permits ArrayDeclarator, FunDeclarator, Ident, PointerDeclarator {}
 
     record Ident(String identifier) implements Declarator {}
 
     record PointerDeclarator(Declarator declarator) implements Declarator {}
+
+    record ArrayDeclarator(Declarator declarator,
+                           Constant size) implements Declarator {}
 
     record FunDeclarator(List<ParamInfo> params,
                          Declarator declarator) implements Declarator {}
@@ -100,7 +101,7 @@ public class Parser {
     record NameDeclTypeParams(String name, Type type,
                               ArrayList<String> paramNames) {}
 
-    sealed interface AbstractDeclarator permits AbstractBase, AbstractPointer, DirectAbstractDeclarator {}
+    sealed interface AbstractDeclarator permits AbstractArrayDeclarator, AbstractBase, AbstractPointer, DirectAbstractDeclarator {}
 
     record AbstractBase() implements AbstractDeclarator {}
 
@@ -111,22 +112,45 @@ public class Parser {
             AbstractDeclarator declarator) implements AbstractDeclarator {}
 
     private static AbstractDeclarator parseAbstractDeclarator(List<Token> tokens) {
-        if (tokens.isEmpty()) {
-            return new AbstractBase();
+        // <abstract-declarator> ::= "*" [ <abstract-declarator> ]
+        //                         | <direct-abstract-declarator>
+        if (tokens.getFirst() == OPEN_PAREN || tokens.getFirst() == OPEN_BRACKET)
+            return parseDirectAbstractDeclarator(tokens);
+        if (tokens.getFirst() == IMUL) {
+            tokens.removeFirst();
+            return new AbstractPointer(parseAbstractDeclarator(tokens));
         }
-        return switch (tokens.getFirst()) {
-            case IMUL -> {
+        return new AbstractBase();
+    }
+
+    private static AbstractDeclarator parseDirectAbstractDeclarator(List<Token> tokens) {
+        // <direct-abstract-declarator> ::= "(" <abstract-declarator> ")" { "[" <const> "]" }
+        //                                | { "[" <const> "]" }+
+        AbstractDeclarator d = null;
+        if (tokens.getFirst() == OPEN_PAREN) {
+            tokens.removeFirst();
+            d = parseAbstractDeclarator(tokens);
+            expect(CLOSE_PAREN, tokens);
+        }
+        if (tokens.getFirst() == OPEN_BRACKET) {
+            if (d == null) d = new AbstractBase();
+            while (tokens.getFirst() == OPEN_BRACKET) {
                 tokens.removeFirst();
-                yield new AbstractPointer(parseAbstractDeclarator(tokens));
+                Constant c = parseConst(tokens);
+                d = new AbstractArrayDeclarator(d, c);
+                expect(CLOSE_BRACKET, tokens);
             }
-            case OPEN_PAREN -> {
-                tokens.removeFirst();
-                AbstractDeclarator d = new DirectAbstractDeclarator(parseAbstractDeclarator(tokens));
-                expect(CLOSE_PAREN, tokens);
-                yield d;
-            }
-            default -> new AbstractBase();
-        };
+            return d;
+        }
+        return d;
+
+    }
+
+    record AbstractArrayDeclarator(AbstractDeclarator abstractDeclarator,
+                                   Constant arraySize) implements AbstractDeclarator {}
+
+    public static String debugTokens(List<Token> tokens) {
+        return tokens.stream().map(Object::toString).collect(Collectors.joining(" "));
     }
 
     private static Declarator parseDeclarator(List<Token> tokens) {
@@ -171,6 +195,16 @@ public class Parser {
 
             }
             return new FunDeclarator(params, d);
+        } else {
+            while (tokens.getFirst() == OPEN_BRACKET) {
+                tokens.removeFirst();
+                var c = parseConst(tokens);
+                if (c instanceof ConstDouble) {
+                    throw new RuntimeException("illegal non-integer array size");
+                }
+                d = new ArrayDeclarator(d, c);
+                expect(CLOSE_BRACKET, tokens);
+            }
         }
         return d;
     }
@@ -202,6 +236,10 @@ public class Parser {
                             throw new RuntimeException("Can't apply additional derivations to a function type");
                 }, derivedType, paramNames);
             }
+            case ArrayDeclarator(Declarator inner, Constant size) -> {
+                Array derivedType = new Array(baseType, size);
+                yield processDeclarator(inner, derivedType);
+            }
         };
     }
 
@@ -218,21 +256,54 @@ public class Parser {
             return parseRestOfFunction(paramNames, paramTypes1, tokens, name, ret, typeAndStorageClass.storageClass());
         }
         Token token = tokens.removeFirst();
-        Exp exp;
+        Exp init;
         switch (token.type()) {
             case BECOMES:
-                Exp init = parseExp(tokens, 0);
+                init = switch (parseInitializer(tokens)) {
+                    case CompoundInit compoundInit -> null;//MR-TODO
+                    case SingleInit(Exp exp) -> exp;
+                };
                 expect(SEMICOLON, tokens);
-                exp = init;
                 break;
             case SEMICOLON:
-                exp = null;
+                init = null;
                 break;
             default:
                 throw new IllegalArgumentException("Expected ; or =, got " + token);
         }
 
-        return new VarDecl(new Var(name, type), exp, type, typeAndStorageClass.storageClass());
+        return new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass());
+    }
+
+    private static Initializer parseInitializer(List<Token> tokens) {
+        Token token = tokens.getFirst();
+        if (token == OPEN_BRACE) {
+            tokens.removeFirst();
+            boolean done = false;
+            ArrayList<Initializer> inits = new ArrayList<>();
+
+            while (!done) {
+                Initializer init = parseInitializer(tokens);
+                inits.add(init);
+                Token t = tokens.removeFirst();
+                done = switch (t) {
+                    case COMMA -> {
+                        boolean trailingComma = !tokens.isEmpty() && tokens.getFirst() == CLOSE_BRACE;
+                        if (trailingComma) {
+                            tokens.removeFirst();//remove close brace
+                        }
+                        yield trailingComma;
+                    }
+                    case CLOSE_BRACE -> true;
+                    default ->
+                            throw new IllegalStateException("Unexpected value: " + tokens.removeFirst());
+                };
+            }
+            return new CompoundInit(inits);
+
+        }
+        return new SingleInit(parseExp(tokens, 0));
+
     }
 
 
@@ -404,20 +475,48 @@ public class Parser {
         else return new ConstULong(v);
     }
 
-    private static Exp parseFactor(List<Token> tokens) {
-        Token token = tokens.removeFirst();
-        return switch (token) {
-            case SUB ->
-                    new UnaryOp(UnaryOperator.UNARY_MINUS, parseFactor(tokens), null);
-            case BITWISE_NOT ->
-                    new UnaryOp(UnaryOperator.BITWISE_NOT, parseFactor(tokens), null);
-            case AMPERSAND ->
-                    new AddrOf(parseFactor(tokens), null);
-            case IMUL ->
-                    new Dereference(parseFactor(tokens), null);
-            case NOT ->
-                    new UnaryOp(UnaryOperator.NOT, parseFactor(tokens), null);
+    private static Type processAbstractDeclarator(AbstractDeclarator abstractDeclarator, Type type) {
+        return switch (abstractDeclarator) {
+            case AbstractBase _ -> type;
+            case AbstractPointer(AbstractDeclarator declarator) ->
+                    new Pointer(processAbstractDeclarator(declarator, type));
+            case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
+                    processAbstractDeclarator(declarator, type);
+            case AbstractArrayDeclarator(AbstractDeclarator declarator,
+                                         Constant arraySize) ->
+                    new Array(processAbstractDeclarator(declarator, type), arraySize);
+        };
+    }
+
+
+    private static Exp parseUnaryExp(List<Token> tokens) {
+        // <unary-exp> ::= <unop> <unary-exp>
+        //               | "(" { <type-specifier> }+ [ <abstract-declarator> ] ")" <unary-exp>
+        //               | <postfix-exp>
+
+        return switch (tokens.getFirst()) {
+            case SUB -> {
+                tokens.removeFirst();
+                yield new UnaryOp(UnaryOperator.UNARY_MINUS, parseUnaryExp(tokens), null);
+            }
+            case BITWISE_NOT -> {
+                tokens.removeFirst();
+                yield new UnaryOp(UnaryOperator.BITWISE_NOT, parseUnaryExp(tokens), null);
+            }
+            case AMPERSAND -> {
+                tokens.removeFirst();
+                yield new AddrOf(parseUnaryExp(tokens), null);
+            }
+            case IMUL -> {
+                tokens.removeFirst();
+                yield new Dereference(parseUnaryExp(tokens), null);
+            }
+            case NOT -> {
+                tokens.removeFirst();
+                yield new UnaryOp(UnaryOperator.NOT, parseUnaryExp(tokens), null);
+            }
             case OPEN_PAREN -> {
+                tokens.removeFirst();
                 TypeAndStorageClass typeSpecifierAndStorageClass = parseTypeAndStorageClass(tokens, false);
                 if (typeSpecifierAndStorageClass != null) {
                     if (typeSpecifierAndStorageClass.storageClass() != null) {
@@ -429,11 +528,7 @@ public class Parser {
                         type = processAbstractDeclarator(abstractDeclarator, type);
                     }
                     expect(CLOSE_PAREN, tokens);
-
-                    // We use parseFactor so (int)x=y is not parsed as (int)(x=y)
-                    // Could use parseExp(tokens, 60) which would do the same
-                    // thing but more slowly
-                    Exp inner = parseFactor(tokens);
+                    Exp inner = parseUnaryExp(tokens);
                     if (inner instanceof Assignment) {
                         fail("lvalue required as left operand of assignment");
                     }
@@ -445,63 +540,104 @@ public class Parser {
                     yield r;
                 }
             }
-            case TokenWithValue(TokenType tokenType, String value) -> {
-                Type t = Primitive.fromTokenType(tokenType);
-                int len = value.length() - (t == null ? 0 : switch (t) {
-                    case Primitive.LONG, UINT -> 1;
-                    case ULONG -> 2;
-                    default -> 0;
-                });
-                if (t != null) {
-                    yield parseConst(value.substring(0, len), t);
-                }
-                Var id = new Var(value, null);
-                if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
-                    tokens.removeFirst();
-                    Token current = tokens.getFirst();
-                    if (current == CLOSE_PAREN) {
-                        tokens.removeFirst();
-                        yield new FunctionCall(id, Collections.emptyList(), null);
-                    }
-                    List<Exp> args = new ArrayList<>();
+            default -> parsePostfixExp(tokens);
+        };
+    }
 
-                    while (true) {
-                        Exp e = parseExp(tokens, 0);
-                        args.add(e);
-                        current = tokens.removeFirst();
-                        if (current == COMMA) {
-                            continue;
-                        }
-                        if (current == CLOSE_PAREN) {
-                            break;
-                        } else
-                            throw new IllegalArgumentException("unexpected token while parsing function call: " + current);
+    private static Exp parsePostfixExp(List<Token> tokens) {
+        // <postfix-exp> ::= <primary-exp> { "[" <exp> "]" }
+        Exp exp = parsePrimaryExp(tokens);
+        while (tokens.getFirst() == OPEN_BRACKET) {
+            tokens.removeFirst();
+            Exp subscript = parseExp(tokens, 0);
+            expect(CLOSE_BRACKET, tokens);
+            exp = new Subscript(exp, subscript, null);
+        }
+        return exp;
+    }
 
-                    }
-                    yield new FunctionCall(id, args, null);
+    private static Constant parseConst(List<Token> tokens) {
+        Token token = tokens.getFirst();
+        if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
+                                                        String value)) {
+            tokens.removeFirst();
+            switch (token.type()) {
+                case INT_LITERAL:
+                case DOUBLE_LITERAL:
+                case LONG_LITERAL:
+                case UNSIGNED_LONG_LITERAL:
+                case UNSIGNED_INT_LITERAL:
+                    Type t = Primitive.fromTokenType((TokenType) tokenType);
+                    int len = value.length() - (t == null ? 0 : switch (t) {
+                        case Primitive.LONG, UINT -> 1;
+                        case ULONG -> 2;
+                        default -> 0;
+                    });
 
-                }
-                yield id;
+                    return parseConst(value.substring(0, len), t);
+                default:
+                    break;
             }
-
-            default ->
-                    throw new IllegalArgumentException("Expected exp, got " + token);
-
-        };
+        }
+        throw new IllegalStateException("expected const, found: " + token);
     }
 
-    private static Type processAbstractDeclarator(AbstractDeclarator abstractDeclarator, Type type) {
-        return switch (abstractDeclarator) {
-            case AbstractBase _ -> type;
-            case AbstractPointer(AbstractDeclarator declarator) -> new Pointer(processAbstractDeclarator(declarator, type));
-            case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
-                    processAbstractDeclarator(declarator, type);
+
+    private static Exp parsePrimaryExp(List<Token> tokens) {
+        // <primary-exp> ::= <const> | <identifier> | "(" <exp> ")"
+        //                 | <identifier> "(" [ <argument-list> ] ")"
+        return switch (tokens.getFirst()) {
+            case OPEN_BRACKET -> {
+                Exp exp = parseExp(tokens, 0);
+                expect(CLOSE_BRACKET, tokens);
+                yield exp;
+            }
+            case TokenWithValue(Token tokenType, String value) -> {
+
+                yield switch (tokenType) {
+                    case IDENTIFIER -> {
+                        tokens.removeFirst();
+
+                        Var id = new Var(value, null);
+                        if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
+                            tokens.removeFirst();
+                            Token current = tokens.getFirst();
+                            if (current == CLOSE_PAREN) {
+                                tokens.removeFirst();
+                                yield new FunctionCall(id, Collections.emptyList(), null);
+                            }
+                            List<Exp> args = new ArrayList<>();
+
+                            while (true) {
+                                Exp e = parseExp(tokens, 0);
+                                args.add(e);
+                                current = tokens.removeFirst();
+                                if (current == COMMA) {
+                                    continue;
+                                }
+                                if (current == CLOSE_PAREN) {
+                                    break;
+                                } else
+                                    throw new IllegalArgumentException("unexpected token while parsing function call: " + current);
+
+                            }
+                            yield new FunctionCall(id, args, null);
+
+                        }
+                        yield id;
+
+                    }
+                    default -> parseConst(tokens);
+                };
+            }
+            default -> throw new Todo("can't handle:" + tokens.getFirst());
         };
     }
-
 
     private static Exp parseExp(List<Token> tokens, int minPrecedence) {
-        Exp left = parseFactor(tokens);
+        // <exp> ::= <unary-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":" <exp>
+        Exp left = parseUnaryExp(tokens);
+        // now peek to see if there is "binop <exp>" or "? <exp> : <exp>
 
         while (!tokens.isEmpty()) {
             Token token = tokens.getFirst();

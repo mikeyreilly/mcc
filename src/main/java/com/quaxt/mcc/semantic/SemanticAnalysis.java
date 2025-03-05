@@ -483,6 +483,7 @@ public class SemanticAnalysis {
                 }
 
             }
+            case Subscript subscript -> throw new Todo("mr-todo typecheck subscript");
         };
     }
 
@@ -674,6 +675,7 @@ public class SemanticAnalysis {
                     identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, args), type) : fail("Undeclared function:" + name);
             case Cast(Type type, Exp e) ->
                     new Cast(type, resolveExp(e, identifierMap));
+            case Subscript subscript -> throw new Todo("mr-todo resolveExp for subscript");
         };
         return r;
     }
