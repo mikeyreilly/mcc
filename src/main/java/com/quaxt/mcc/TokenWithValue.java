@@ -13,4 +13,8 @@ public record TokenWithValue(Token type,
     public Pattern regex() {
         throw new UnsupportedOperationException();
     }
+
+    public String toString() {
+        return value;
+    }
 }

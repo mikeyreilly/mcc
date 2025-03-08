@@ -45,4 +45,47 @@ public enum TokenType implements Token {
     public int group() {
         return group;
     }
+    public String toString() {
+        return switch(this) {
+        case IDENTIFIER -> "identifier";
+        case OPEN_PAREN -> "(";
+        case CLOSE_PAREN -> ")";
+        case OPEN_BRACE -> "{";
+        case CLOSE_BRACE -> "}";
+        case DOUBLE_LITERAL -> "double_literal";
+        case UNSIGNED_LONG_LITERAL -> "unsigned_long_literal";
+        case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";
+        case LONG_LITERAL -> "long_literal";
+        case INT_LITERAL -> "int_literal";
+        case SEMICOLON -> ";";
+        case SINGLE_LINE_COMMENT -> "single_line_comment";
+        case MULTILINE_COMMENT -> "multiline_comment";
+        case UNSIGNED -> "unsigned";
+        case SIGNED -> "signed";
+        case DOUBLE -> "double";
+        case LONG -> "long";
+        case INT -> "int";
+        case RETURN -> "return";
+        case VOID -> "void";
+        case ELSE -> "else";
+        case IF -> "if";
+        case BREAK -> "break";
+        case CONTINUE -> "continue";
+        case WHILE -> "while";
+        case DO -> "do";
+        case FOR -> "for";
+        case EXTERN -> "extern";
+        case STATIC -> "static";
+        case DECREMENT -> "decrement";
+        case INCREMENT -> "increment";
+        case BITWISE_NOT -> "bitwise_not";
+        case NOT -> "not";
+        case QUESTION_MARK -> "?";
+        case COLON -> ":";
+        case COMMA -> ",";
+        case AMPERSAND -> "&";
+        case OPEN_BRACKET -> "[";
+        case CLOSE_BRACKET -> "]";
+        };
+    }
 }
