@@ -31,6 +31,8 @@ public enum ArithmeticOperator implements BinaryOperator {
     public String toString() {
         return switch(this){
             case ADD -> "+";
+            case IMUL -> "*";
+            case OR -> "|";
             default -> regex.pattern();
         };
     }

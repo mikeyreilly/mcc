@@ -167,7 +167,7 @@ public class Parser {
                                 String name) when type == IDENTIFIER ->
                     new Ident(name);
             default ->
-                    throw new RuntimeException("while parsing declarator found unexpected token :" + t);
+                    throw new Err("while parsing declarator found unexpected token :" + t);
         };
         if (tokens.getFirst() == OPEN_PAREN) {
             tokens.removeFirst();
@@ -201,7 +201,7 @@ public class Parser {
                 tokens.removeFirst();
                 var c = parseConst(tokens);
                 if (c instanceof ConstDouble) {
-                    throw new RuntimeException("illegal non-integer array size");
+                    throw new Err("illegal non-integer array size");
                 }
                 d = new ArrayDeclarator(d, c);
                 expect(CLOSE_BRACKET, tokens);
@@ -226,7 +226,7 @@ public class Parser {
                     String name = decl.name();
                     Type type = pi.type();
                     if (type instanceof FunType)
-                        throw new RuntimeException("function pointers are not supported");
+                        throw new Err("function pointers are not supported");
                     paramNames.add(name);
                     paramTypes.add(type);
                 }
@@ -234,7 +234,7 @@ public class Parser {
                 yield new NameDeclTypeParams(switch (d) {
                     case Ident(String name) -> name;
                     default ->
-                            throw new RuntimeException("Can't apply additional derivations to a function type");
+                            throw new Err("Can't apply additional derivations to a function type");
                 }, derivedType, paramNames);
             }
             case ArrayDeclarator(Declarator inner, Constant size) -> {
@@ -257,13 +257,10 @@ public class Parser {
             return parseRestOfFunction(paramNames, paramTypes1, tokens, name, ret, typeAndStorageClass.storageClass());
         }
         Token token = tokens.removeFirst();
-        Exp init;
+        Initializer init;
         switch (token.type()) {
             case BECOMES:
-                init = switch (parseInitializer(tokens)) {
-                    case CompoundInit compoundInit -> null;//MR-TODO
-                    case SingleInit(Exp exp) -> exp;
-                };
+                init = parseInitializer(tokens);
                 expect(SEMICOLON, tokens);
                 break;
             case SEMICOLON:
@@ -337,7 +334,9 @@ public class Parser {
         StorageClass storageClass = storageClasses.isEmpty() ? null : storageClasses.getFirst();
         return type == null ? null : new TypeAndStorageClass(type, storageClass);
     }
-static int parseTypeCount = 0;
+
+    static int parseTypeCount = 0;
+
     private static Type parseType(List<Token> types, boolean throwExceptionIfNoType) {
         parseTypeCount++;
         boolean foundDouble = false;
@@ -382,8 +381,7 @@ static int parseTypeCount = 0;
         else if (foundInt) return foundUnsigned ? UINT : Primitive.INT;
         else if (foundSigned) return Primitive.INT;
         else if (foundUnsigned) return UINT;
-        if (throwExceptionIfNoType)
-            throw new RuntimeException("invalid type specifier");
+        if (throwExceptionIfNoType) throw new Err("invalid type specifier");
         return null;
     }
 
@@ -481,12 +479,12 @@ static int parseTypeCount = 0;
         return switch (abstractDeclarator) {
             case AbstractBase _ -> type;
             case AbstractPointer(AbstractDeclarator declarator) ->
-                    new Pointer(processAbstractDeclarator(declarator, type));
+                    processAbstractDeclarator(declarator, new Pointer(type));
             case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
                     processAbstractDeclarator(declarator, type);
             case AbstractArrayDeclarator(AbstractDeclarator declarator,
                                          Constant arraySize) ->
-                    new Array(processAbstractDeclarator(declarator, type), arraySize);
+                    processAbstractDeclarator(declarator, new Array(type,arraySize));
         };
     }
 
@@ -706,7 +704,7 @@ static int parseTypeCount = 0;
     }
 
     private static Exp fail(String s) {
-        throw new RuntimeException(s);
+        throw new Err(s);
     }
 
     public record TypeAndStorageClass(Type type, StorageClass storageClass) {}

@@ -9,4 +9,8 @@ public record ConstDouble(double d) implements Constant {
     public Type type() {
         return DOUBLE;
     }
+
+    public int toInt() {
+        return (int)d;
+    }
 }

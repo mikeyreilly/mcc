@@ -9,4 +9,8 @@ public record ConstInt(int i) implements Constant {
     public Type type() {
         return INT;
     }
+
+    public int toInt() {
+        return i;
+    }
 }

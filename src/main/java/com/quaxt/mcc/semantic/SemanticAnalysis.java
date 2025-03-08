@@ -10,8 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
-import static com.quaxt.mcc.CmpOperator.EQUALS;
-import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
+import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
@@ -75,7 +74,7 @@ public class SemanticAnalysis {
                 yield (T) new DoWhile(loopLabelStatement(body, newLabel), condition, newLabel);
 
             }
-            case Exp exp -> statement;
+            case Exp _ -> statement;
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String _) -> {
                 String newLabel = Mcc.makeTemporary("for");
@@ -94,7 +93,7 @@ public class SemanticAnalysis {
             }
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
                     (T) new If(condition, loopLabelStatement(ifTrue, currentLabel), loopLabelStatement(ifFalse, currentLabel));
-            case NullStatement nullStatement -> statement;
+            case NullStatement _ -> statement;
             case Return(Exp exp) ->
                     (T) new Return(loopLabelStatement(exp, currentLabel));
             case While(Exp condition, Statement body, String _) -> {
@@ -106,8 +105,20 @@ public class SemanticAnalysis {
     }
 
     private static VarDecl loopLabelVarDecl(VarDecl declaration, String currentLabel) {
-        Exp init = declaration.init();
-        return new VarDecl(declaration.name(), loopLabelStatement(init, currentLabel), declaration.varType(), declaration.storageClass());
+        Initializer init = declaration.init();
+        return new VarDecl(declaration.name(), loopLabelInitializer(init, currentLabel), declaration.varType(), declaration.storageClass());
+    }
+
+    private static Initializer loopLabelInitializer(Initializer init, String currentLabel) {
+        return switch (init) {
+            case CompoundInit(ArrayList<Initializer> inits) -> {
+                inits.replaceAll(i -> loopLabelInitializer(i, currentLabel));
+                yield new CompoundInit(inits);
+            }
+            case SingleInit(Exp exp) ->
+                    new SingleInit(loopLabelStatement(exp, currentLabel));
+            case null -> null;
+        };
     }
 
     public static void typeCheckProgram(Program program) {
@@ -123,50 +134,115 @@ public class SemanticAnalysis {
         }
     }
 
+    private static ZeroInit createZeroInit(Type targetType) {
+        int size = 1;
+        out:
+        while (true) switch (targetType) {
+            case Array(Type element, Constant arraySize) -> {
+                size *= arraySize.toInt();
+                targetType = element;
+            }
+            case FunType funType ->
+                    throw new Err("Can't zero initialize function");
+            case Pointer pointer -> {
+                size *= 8;
+                break out;
+            }
+            case Primitive primitive -> {
+                size *= primitive.size();
+                break out;
+            }
+        }
+        return new ZeroInit(size);
+    }
+
+    private static void convertCompoundInitializerToStaticInitList(Initializer init, Type targetType, List<StaticInit> acc) {
+        switch (init) {
+            case null -> acc.add(createZeroInit(targetType));
+            case CompoundInit(ArrayList<Initializer> inits) -> {
+                switch (targetType) {
+                    case Array(Type inner, Constant arraySize) -> {
+                        int declaredLength = arraySize.toInt();
+                        if (declaredLength < inits.size()) {
+                            throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
+                        }
+                        inits.forEach(i -> convertCompoundInitializerToStaticInitList(i, inner, acc));
+                        if (declaredLength < inits.size()) {
+                            throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
+                        }
+                        if (declaredLength > inits.size()) {
+                            acc.add(createZeroInit(new Array(inner, new ConstInt(inits.size() - declaredLength))));
+                        }
+                    }
+
+                    case Pointer _, FunType _, Primitive _ ->
+                            throw new Err("illegal compound initializer for scalar type:" + targetType);
+                }
+                ;
+
+            }
+            case SingleInit(Exp exp) -> {
+                if (targetType instanceof Array) {
+                    throw new Err("Can't initialize static array with a scalar");
+                }
+                acc.add(switch (exp) {
+                    case ConstInt(int i) ->
+                            convertConst(new IntInit(i), targetType);
+                    case ConstLong(long i) ->
+                            convertConst(new LongInit(i), targetType);
+                    case ConstUInt(int i) ->
+                            convertConst(new UIntInit(i), targetType);
+                    case ConstULong(long i) ->
+                            convertConst(new ULongInit(i), targetType);
+                    case ConstDouble(double d) ->
+                            convertConst(new DoubleInit(d), targetType);
+                    default -> throw new Err("Non constant initializer");
+                });
+            }
+        }
+        ;
+    }
+
     private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
-        InitialValue initialValue = switch (decl.init()) {
-            case ConstInt(int i) ->
-                    convertConst(new IntInit(i), decl.varType());
-            case ConstLong(long i) ->
-                    convertConst(new LongInit(i), decl.varType());
-            case ConstUInt(int i) ->
-                    convertConst(new UIntInit(i), decl.varType());
-            case ConstULong(long i) ->
-                    convertConst(new ULongInit(i), decl.varType());
-            case ConstDouble(double d) ->
-                    convertConst(new DoubleInit(d), decl.varType());
-            case null ->
-                    decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
-            default -> throw new RuntimeException("Non constant initializer");
-        };
-        if (decl.varType() instanceof Pointer && decl.init() instanceof Constant c && !isNullPointerConstant(c)) {
-            throw new RuntimeException("Cannot convert type for assignment");
+        InitialValue initialValue;
+        var varType = decl.varType();
+        if (decl.init() == null)
+            initialValue = decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
+        else {
+            ArrayList<StaticInit> staticInits = new ArrayList<>();
+            convertCompoundInitializerToStaticInitList(decl.init(), varType, staticInits);
+            initialValue = new Initial(staticInits);
+        }
+        if (varType instanceof Pointer && decl.init() instanceof SingleInit(
+                Exp exp) && exp instanceof Constant c && !isNullPointerConstant(c)) {
+            throw new Err("Cannot convert type for assignment");
         }
         boolean global = decl.storageClass() != STATIC;
-        if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(Type type,
-                                                                      IdentifierAttributes attrs)) {
-            if (type != decl.varType())
+        if (SYMBOL_TABLE.get(decl.name().name()) instanceof SymbolTableEntry(
+                Type type, IdentifierAttributes attrs)) {
+            if (!type.looseEquals(varType))
                 fail("variable declared with inconsistent type");
-            if (decl.storageClass() == EXTERN)
-                global = attrs.global();
+            if (decl.storageClass() == EXTERN) global = attrs.global();
             else if (attrs.global() != global)
                 fail("conflicting variable linkage");
 
-            if (attrs instanceof StaticAttributes(
-                    InitialValue oldInit, boolean _)) {
-                if (oldInit instanceof StaticInit oldInitialConstant) {
-                    if (initialValue instanceof StaticInit)
+            if (attrs instanceof StaticAttributes(InitialValue oldInit,
+                                                  boolean _)) {
+
+                if (oldInit instanceof Initial oldInitialConstant) {
+                    if (initialValue instanceof Initial)
                         fail("Conflicting file scope variable definitions");
                     else initialValue = oldInitialConstant;
-                } else if (!(initialValue instanceof StaticInit) && oldInit == TENTATIVE)
+                } else if (!(initialValue instanceof Initial) && oldInit == TENTATIVE)
                     initialValue = TENTATIVE;
             }
         }
 
         StaticAttributes attrs = new StaticAttributes(initialValue, global);
-        SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), attrs));
+        SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType, attrs));
         return decl;
     }
+
 
     private static double unsignedLongToDouble(long ul) {
         if (ul>0) return (double) ul;
@@ -184,7 +260,7 @@ public class SemanticAnalysis {
         return (long) d;
     }
 
-    private static InitialValue convertConst(InitialValue init, Type type) {
+    private static StaticInit convertConst(StaticInit init, Type type) {
         if (init instanceof DoubleInit(double d)) {
             return switch (type) {
                 case DOUBLE -> init;
@@ -221,6 +297,14 @@ public class SemanticAnalysis {
 
 
     private static Function typeCheckFunctionDeclaration(Function decl, boolean blockScope) {
+        if (decl.funType().ret() instanceof Array) {
+            fail("A function cannot return an array");
+        }
+        List<Type> oldParams = decl.funType().params();
+        ArrayList<Type> adjustedParams = new ArrayList<>(oldParams.size());
+        for (Type p : oldParams) {
+            adjustedParams.add(arrayToPointer(p));
+        }
         if (blockScope && decl.storageClass() == STATIC) {
             fail("invalid storage class for block scope function declaration ‘" + decl.name() + "’");
         }
@@ -228,9 +312,10 @@ public class SemanticAnalysis {
         boolean global = decl.storageClass() != STATIC;
         SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
         boolean alreadyDefined = false;
+        FunType funType = new FunType(adjustedParams, decl.funType().ret());
         if (oldEntry instanceof SymbolTableEntry(Type oldType,
-                                                 IdentifierAttributes attrs)) {
-            if (oldType instanceof FunType(List<Type> params, Type ret)) {
+                                                 IdentifierAttributes _)) {
+            if (oldType instanceof FunType) {
                 alreadyDefined = oldEntry.attrs().defined();
                 if (alreadyDefined && defined)
                     fail("already defined: " + decl.name());
@@ -238,30 +323,37 @@ public class SemanticAnalysis {
                 if (oldEntry.attrs().global() && decl.storageClass() == STATIC)
                     fail("Static function declaration follows non-static");
                 global = oldEntry.attrs().global();
-                if (!decl.funType().equals(oldType))
+                if (!funType.equals(oldType))
                     fail("Incompatible function declarations for " + decl.name());
             } else {
                 fail("Incompatible function declarations for " + decl.name());
             }
         }
         FunAttributes attrs = new FunAttributes(alreadyDefined || decl.body() != null, global);
-        FunType funType = decl.funType();
+
         SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
 
         Block typeCheckedBody;
         if (decl.body() != null) {
             for (int i = 0; i < decl.parameters().size(); i++) {
                 Var param = decl.parameters().get(i);
-                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(decl.funType().params().get(i), LOCAL_ATTR));
+                SYMBOL_TABLE.put(param.name(), new SymbolTableEntry(adjustedParams.get(i), LOCAL_ATTR));
             }
             typeCheckedBody = typeCheckBlock(decl.body(), decl);
         } else typeCheckedBody = null;
         List<Var> declParams = decl.parameters();
         for (int i = 0; i < declParams.size(); i++) {
             Var oldParam = declParams.get(i);
-            declParams.set(i, new Var(oldParam.name(), decl.funType().params().get(i)));
+            declParams.set(i, new Var(oldParam.name(), adjustedParams.get(i)));
         }
-        return new Function(decl.name(), decl.parameters(), typeCheckedBody, decl.funType(), decl.storageClass());
+        return new Function(decl.name(), decl.parameters(), typeCheckedBody, funType, decl.storageClass());
+    }
+
+    private static Type arrayToPointer(Type p) {
+        return switch (p) {
+            case Array(Type t, Constant _) -> new Pointer(t);
+            default -> p;
+        };
     }
 
     private static Block typeCheckBlock(Block body, Function enclosingFunction) {
@@ -276,32 +368,32 @@ public class SemanticAnalysis {
         return switch (blockItem) {
             case VarDecl declaration ->
                     typeCheckLocalVariableDeclaration(declaration);
-            case Exp exp -> typeCheckExpression(exp);
+            case Exp exp -> typeCheckAndConvert(exp);
             case Function function -> {
                 if (function.body() != null)
-                    throw new RuntimeException("nested function definition not allowed");
+                    throw new Err("nested function definition not allowed");
                 else yield typeCheckFunctionDeclaration(function, true);
             }
             case Block block -> typeCheckBlock(block, enclosingFunction);
             case DoWhile(Statement whileBody, Exp condition, String label) ->
-                    new DoWhile((Statement) typeCheckBlockItem(whileBody, enclosingFunction), typeCheckExpression(condition), label);
+                    new DoWhile((Statement) typeCheckBlockItem(whileBody, enclosingFunction), typeCheckAndConvert(condition), label);
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String label) -> new For(switch (init) {
                 case null -> null;
-                case Exp exp -> typeCheckExpression(exp);
+                case Exp exp -> typeCheckAndConvert(exp);
                 case VarDecl varDecl ->
                         typeCheckLocalVariableDeclaration(varDecl);
-            }, typeCheckExpression(condition), typeCheckExpression(post), (Statement) typeCheckBlockItem(body, enclosingFunction), label);
+            }, typeCheckAndConvert(condition), typeCheckAndConvert(post), (Statement) typeCheckBlockItem(body, enclosingFunction), label);
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
-                    new If(typeCheckExpression(condition), (Statement) typeCheckBlockItem(ifTrue, enclosingFunction), (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
+                    new If(typeCheckAndConvert(condition), (Statement) typeCheckBlockItem(ifTrue, enclosingFunction), (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
 
             case Return(Exp exp) -> {
                 Type returnType = enclosingFunction.funType().ret();
-                yield new Return(convertByAssignment(typeCheckExpression(exp), returnType));
+                yield new Return(convertByAssignment(typeCheckAndConvert(exp), returnType));
 
             }
             case While(Exp condition, Statement whileBody, String label) ->
-                    new While(typeCheckExpression(condition), (Statement) typeCheckBlockItem(whileBody, enclosingFunction), label);
+                    new While(typeCheckAndConvert(condition), (Statement) typeCheckBlockItem(whileBody, enclosingFunction), label);
             case NullStatement _, Continue _, Break _ -> blockItem;
             case null -> null;
 
@@ -312,40 +404,74 @@ public class SemanticAnalysis {
         if (decl.storageClass() == EXTERN) {
             if (decl.init() != null)
                 fail("Initializer on local extern variable declaration");
-            if (SYMBOL_TABLE.get(decl.name()) instanceof SymbolTableEntry(
-                    Type oldType, IdentifierAttributes oldAttrs)) {
-                if (oldType != decl.varType())
-                    fail("inconsistent variable redefenition");
+            if (SYMBOL_TABLE.get(decl.name().name()) instanceof SymbolTableEntry(
+                    Type oldType, IdentifierAttributes _)) {
+                if (!oldType.looseEquals(decl.varType()))
+                    fail("inconsistent variable redefinition");
 
             } else {
                 SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(INT, new StaticAttributes(NO_INITIALIZER, true)));
             }
             return decl;
         } else if (decl.storageClass() == STATIC) {
-            InitialValue initialValue = switch (decl.init()) {
-                case ConstInt(int i) -> new IntInit(i);
-                case ConstDouble(double d) -> new DoubleInit(d);
-                case ConstLong(long l) -> new LongInit(l);
-                case ConstUInt(int i) -> new UIntInit(i);
-                case ConstULong(long l) -> new ULongInit(l);
-                case null -> new IntInit(0);
-                default ->
-                        throw new RuntimeException("Non-constant initializer on local static variable");
-            };
-            initialValue = convertConst(initialValue, decl.varType());
+            InitialValue initialValue;
+            ArrayList<StaticInit> staticInits = new ArrayList<>();
+            convertCompoundInitializerToStaticInitList(decl.init(), decl.varType(), staticInits);
+            initialValue = new Initial(staticInits);
+
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
-            return new VarDecl(decl.name(), switch (initialValue) {
-                case IntInit(int i) -> new ConstInt(i);
-                case LongInit(long l) -> new ConstLong(l);
-                case UIntInit(int i) -> new ConstUInt(i);
-                case ULongInit(long l) -> new ConstULong(l);
-                default -> null;
-            }, decl.varType(), decl.storageClass());
+            //MR-TODO this looks questionable
+            Math.copySign(1, -0.0d);
+            return new VarDecl(decl.name(), decl.init(), decl.varType(), decl.storageClass());
         } else {
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
-            Exp init = decl.init() != null ? convertByAssignment(typeCheckExpression(decl.init()), decl.varType()) : null;
+            var init = decl.init() != null ? typeCheckInit(decl.init(), decl.varType()) : null;
             return new VarDecl(decl.name(), init, decl.varType(), decl.storageClass());
         }
+    }
+
+    private static Initializer typeCheckInit(Initializer init, Type targetType) {
+        return switch (init) {
+            case SingleInit(Exp exp) -> {
+                var typeCheckedExp = typeCheckAndConvert(exp);
+                yield new SingleInit(convertByAssignment(typeCheckedExp, targetType));
+            }
+            case CompoundInit(ArrayList<Initializer> inits) -> {
+                if (targetType instanceof Array(Type elementType,
+                                                Constant arraySize)) {
+                    int l = arraySize.toInt();
+                    if (inits.size() > l) {
+                        throw new Err("wrong number of values in initializer");
+                    }
+                    inits.replaceAll(i -> typeCheckInit(i, elementType));
+                    long zerosToAdd = l - inits.size();
+                    for (long i = 0; i < zerosToAdd; i++) {
+                        inits.add(zeroInitializer(elementType));
+                    }
+                } else {
+                    throw new Err("Can't use compound initializer to initialize scalar type: " + targetType);
+                }
+                yield init;
+            }
+
+        };
+    }
+
+    private static Initializer zeroInitializer(Type elementType) {
+        return switch (elementType) {
+            case Array(Type element, Constant arraySize) -> {
+                int len = arraySize.toInt();
+                ArrayList<Initializer> zeros = new ArrayList<>(len);
+                var zero = zeroInitializer(element);
+                for (int i = 0; i < len; i++) {
+                    zeros.add(zero);
+                }
+                yield new CompoundInit(zeros);
+            }
+            case Primitive primitive -> primitive.zeroInitializer;
+            default -> throw new Todo();
+        };
+
     }
 
     private static Exp convertTo(Exp e, Type t) {
@@ -355,32 +481,41 @@ public class SemanticAnalysis {
 
     private static Exp convertByAssignment(Exp e, Type targetType) {
         Type t = e.type();
-        if (t.equals(targetType)) return e;
+        if (t.looseEquals(targetType)) return e;
         if ((isArithmeticType(t) && isArithmeticType(targetType)) || (isNullPointerConstant(e) && targetType instanceof Pointer))
             return convertTo(e, targetType);
-        throw new RuntimeException("Cannot convert type for assignment");
+        throw new Err("Cannot convert type for assignment");
     }
 
     private static boolean isArithmeticType(Type t) {
         return t instanceof Primitive;
     }
 
+    private static Exp typeCheckAndConvert(Exp exp) {
+        var typedE = typeCheckExpression(exp);
+        return switch (typedE.type()) {
+            case Array(Type element, _) ->
+                    new AddrOf(typedE, new Pointer(element));
+            default -> typedE;
+        };
+    }
+
     private static Exp typeCheckExpression(Exp exp) {
         return switch (exp) {
             case null -> null;
-            case Assignment(Exp left, Exp right, Type type) -> {
-                if (!isLvalue(left))
-                    throw new RuntimeException("cannot assign to non-lvalue");
-                Exp typedLeft = typeCheckExpression(left);
-                Exp typedRight = typeCheckExpression(right);
+            case Assignment(Exp left, Exp right, Type _) -> {
+                Exp typedLeft = typeCheckAndConvert(left);
+                if (!isLvalue(typedLeft))
+                    throw new Err("cannot assign to non-lvalue");
+                Exp typedRight = typeCheckAndConvert(right);
                 Type leftType = typedLeft.type();
                 Exp convertedRight = convertByAssignment(typedRight, leftType);
                 yield new Assignment(typedLeft, convertedRight, leftType);
             }
             case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
-                          Type type) when op == EQUALS || op == NOT_EQUALS -> {
-                Exp typedE1 = typeCheckExpression(e1);
-                Exp typedE2 = typeCheckExpression(e2);
+                          Type _) when op == EQUALS || op == NOT_EQUALS -> {
+                Exp typedE1 = typeCheckAndConvert(e1);
+                Exp typedE2 = typeCheckAndConvert(e2);
                 Type t1 = typedE1.type();
                 Type t2 = typedE2.type();
                 Type commonType = t1 instanceof Pointer || t2 instanceof Pointer ? getCommonPointerType(typedE1, typedE2) : getCommonType(t1, t2);
@@ -388,21 +523,71 @@ public class SemanticAnalysis {
                 Exp convertedE2 = convertTo(typedE2, commonType);
                 yield new BinaryOp(op, convertedE1, convertedE2, INT);
             }
-            case BinaryOp(BinaryOperator op, Exp e1, Exp e2, Type type) -> {
-                Exp typedE1 = typeCheckExpression(e1);
-                Exp typedE2 = typeCheckExpression(e2);
+            case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
+                          Type _) when op == ADD -> {
+                Exp typedE1 = typeCheckAndConvert(e1);
+                Exp typedE2 = typeCheckAndConvert(e2);
+
+                Type t1 = typedE1.type();
+                Type t2 = typedE2.type();
+                if (isArithmeticType(t1) && isArithmeticType(t2)) {
+                    Type commonType = getCommonType(t1, t2);
+                    Exp convertedE1 = convertTo(typedE1, commonType);
+                    Exp convertedE2 = convertTo(typedE2, commonType);
+
+                    yield new BinaryOp(op, convertedE1, convertedE2, commonType);
+                } else if (t1 instanceof Pointer && t2.isInteger()) {
+                    var convertedE2 = convertTo(typedE2, LONG);
+                    yield new BinaryOp(ADD, typedE1, convertedE2, t1);
+                } else if (t1.isInteger() && t2 instanceof Pointer) {
+                    var convertedE1 = convertTo(typedE1, LONG);
+                    yield new BinaryOp(ADD, convertedE1, typedE2, t2);
+                } else throw new Err("Invalid operands for addition");
+            }
+            case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
+                          Type _) when op == SUB -> {
+                Exp typedE1 = typeCheckAndConvert(e1);
+                Exp typedE2 = typeCheckAndConvert(e2);
+
+                Type t1 = typedE1.type();
+                Type t2 = typedE2.type();
+                if (isArithmeticType(t1) && isArithmeticType(t2)) {
+                    Type commonType = getCommonType(t1, t2);
+                    Exp convertedE1 = convertTo(typedE1, commonType);
+                    Exp convertedE2 = convertTo(typedE2, commonType);
+                    yield new BinaryOp(op, convertedE1, convertedE2, commonType);
+                } else if (t1 instanceof Pointer && t2.isInteger()) {
+                    var convertedE2 = convertTo(typedE2, LONG);
+                    yield new BinaryOp(SUB, typedE1, convertedE2, t1);
+                } else if (t1 instanceof Pointer && t1.equals(t2)) {
+                    yield new BinaryOp(SUB, typedE1, typedE2, LONG);
+                } else throw new Err("Invalid operands for subtraction");
+            }
+            case BinaryOp(BinaryOperator op, Exp e1, Exp e2, Type _) -> {
+                Exp typedE1 = typeCheckAndConvert(e1);
+                Exp typedE2 = typeCheckAndConvert(e2);
                 if (op == AND || op == OR) {
                     yield new BinaryOp(op, typedE1, typedE2, INT);
                 }
                 Type t1 = typedE1.type();
                 Type t2 = typedE2.type();
-                if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE))
-                        || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
+                if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE)) || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
                     fail("invalid operands to binary % (have ‘" + t1 + "’ and ‘" + t2 + "’");
+
+                if ((t1 instanceof Pointer || t2 instanceof Pointer) && switch (op) {
+                    case LESS_THAN_OR_EQUAL, GREATER_THAN_OR_EQUAL, LESS_THAN,
+                         GREATER_THAN -> true;
+                    default -> false;
+                }) {
+                    if (!t1.equals(t2))
+                        throw new Err("can't apply " + op + " to " + t1 + " and " + t2);
+                    yield new BinaryOp(op, typedE1, typedE2, INT);
+                }
 
                 Type commonType = getCommonType(t1, t2);
                 Exp convertedE1 = convertTo(typedE1, commonType);
                 Exp convertedE2 = convertTo(typedE2, commonType);
+
 
                 yield new BinaryOp(op, convertedE1, convertedE2, switch (op) {
                     case SUB, ADD, IMUL, DIVIDE, REMAINDER -> commonType;
@@ -411,24 +596,24 @@ public class SemanticAnalysis {
 
             }
             case Cast(Type type, Exp inner) -> {
-                Exp typedInner = typeCheckExpression(inner);
+                Exp typedInner = typeCheckAndConvert(inner);
                 Type innerType = typedInner.type();
-                if (type instanceof Pointer && innerType == DOUBLE || innerType instanceof Pointer && type == DOUBLE)
-                    throw new RuntimeException("illegal cast:" + innerType + "->" + type);
+                if ((type instanceof Array) || (type instanceof Pointer && innerType == DOUBLE || innerType instanceof Pointer && type == DOUBLE))
+                    throw new Err("illegal cast:" + innerType + "->" + type);
                 yield new Cast(type, typedInner);
             }
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
-                             Type type) -> {
-                Exp typedCondition = typeCheckExpression(condition);
-                Exp typedIfTrue = typeCheckExpression(ifTrue);
-                Exp typedIfFalse = typeCheckExpression(ifFalse);
+                             Type _) -> {
+                Exp typedCondition = typeCheckAndConvert(condition);
+                Exp typedIfTrue = typeCheckAndConvert(ifTrue);
+                Exp typedIfFalse = typeCheckAndConvert(ifFalse);
                 Type t1 = typedIfTrue.type();
                 Type t2 = typedIfFalse.type();
                 Type commonType = t1 instanceof Pointer || t2 instanceof Pointer ? getCommonPointerType(typedIfTrue, typedIfFalse) : getCommonType(t1, t2);
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
             case Constant constant -> constant;
-            case FunctionCall(Var name, List<Exp> args, Type type) -> {
+            case FunctionCall(Var name, List<Exp> args, Type _) -> {
                 Type fType = SYMBOL_TABLE.get(name.name()).type();
                 yield switch (fType) {
                     case FunType(List<Type> params, Type ret) -> {
@@ -438,7 +623,7 @@ public class SemanticAnalysis {
                         for (int i = 0; i < params.size(); i++) {
                             Exp arg = args.get(i);
                             Type paramType = params.get(i);
-                            Exp typedArg = typeCheckExpression(arg);
+                            Exp typedArg = typeCheckAndConvert(arg);
                             convertedArgs.add(convertByAssignment(typedArg, paramType));
                         }
                         yield new FunctionCall(name, convertedArgs, ret);
@@ -447,14 +632,14 @@ public class SemanticAnalysis {
                             fail("variable " + name.name() + " used as function");
                 };
             }
-            case Var(String name, Type type) -> {
+            case Var(String name, Type _) -> {
                 Type t = SYMBOL_TABLE.get(name).type();
                 if (t instanceof FunType)
                     fail("Function " + name + " used as a variable");
                 yield new Var(name, t);
             }
-            case UnaryOp(UnaryOperator op, Exp inner, Type type) -> {
-                Exp typedInner = typeCheckExpression(inner);
+            case UnaryOp(UnaryOperator op, Exp inner, Type _) -> {
+                Exp typedInner = typeCheckAndConvert(inner);
                 if (op == UnaryOperator.BITWISE_NOT && typedInner.type() == DOUBLE) {
                     fail("can't apply ~ to double");
                 }
@@ -467,8 +652,8 @@ public class SemanticAnalysis {
                 };
 
             }
-            case Dereference(Exp inner, Type type) -> {
-                Exp typedInner = typeCheckExpression(inner);
+            case Dereference(Exp inner, Type _) -> {
+                Exp typedInner = typeCheckAndConvert(inner);
                 yield switch (typedInner.type()) {
                     case Pointer(Type referenced) ->
                             new Dereference(typedInner, referenced);
@@ -476,7 +661,7 @@ public class SemanticAnalysis {
                 };
 
             }
-            case AddrOf(Exp inner, Type type) -> {
+            case AddrOf(Exp inner, Type _) -> {
                 if (isLvalue(inner)) {
                     Exp typedInner = typeCheckExpression(inner);
                     Type referencedType = typedInner.type();
@@ -486,7 +671,22 @@ public class SemanticAnalysis {
                 }
 
             }
-            case Subscript subscript -> throw new Todo("mr-todo typecheck subscript");
+            case Subscript(Exp e1, Exp e2, Type _) -> {
+                var typedE1 = typeCheckAndConvert(e1);
+                var typedE2 = typeCheckAndConvert(e2);
+                var t1 = typedE1.type();
+                var t2 = typedE2.type();
+                Pointer ptrType;
+                if (t1 instanceof Pointer p && t2.isInteger()) {
+                    ptrType = p;
+                    typedE2 = convertTo(typedE2, LONG);
+                } else if (t1.isInteger() && t2 instanceof Pointer p) {
+                    ptrType = p;
+                    typedE1 = convertTo(typedE2, LONG);
+                } else
+                    throw new Err("Subscript must have integer and pointer operands");
+                yield new Subscript(typedE1, typedE2, ptrType.referenced());
+            }
         };
     }
 
@@ -496,7 +696,7 @@ public class SemanticAnalysis {
         if (t1.equals(t2)) return t1;
         if (isNullPointerConstant(e1)) return t2;
         if (isNullPointerConstant(e2)) return t1;
-        throw new RuntimeException("Expressions have incompatible types");
+        throw new Err("Expressions have incompatible types");
     }
 
     private static boolean isNullPointerConstant(Exp e) {
@@ -510,7 +710,7 @@ public class SemanticAnalysis {
     }
 
     private static boolean isLvalue(Exp exp) {
-        return exp instanceof Dereference || exp instanceof Var;
+        return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript;
     }
 
     private static Type getCommonType(Type t1, Type t2) {
@@ -537,8 +737,7 @@ public class SemanticAnalysis {
 
     private static Declaration resolveFileScopeVariableDeclaration(VarDecl varDecl, Map<String, Entry> identifierMap) {
         return switch (varDecl) {
-            case VarDecl(Var name, Exp init, Type varType,
-                         StorageClass storageClass) -> {
+            case VarDecl(Var name, Initializer _, Type _, StorageClass _) -> {
                 identifierMap.put(name.name(), new Entry(name.name(), true, true));
                 yield varDecl;
             }
@@ -557,7 +756,7 @@ public class SemanticAnalysis {
         String name = function.name();
         if (identifierMap.get(name) instanceof Entry previousEntry) {
             if (previousEntry.fromCurrentScope() && !previousEntry.hasLinkage()) {
-                throw new RuntimeException("Duplicate declaration: " + name);
+                throw new Err("Duplicate declaration: " + name);
             }
         }
         identifierMap.put(name, new Entry(name, true, true));
@@ -637,7 +836,7 @@ public class SemanticAnalysis {
     }
 
     private static VarDecl resolveLocalIdentifierDeclaration(VarDecl decl, Map<String, Entry> identifierMap) {
-        if (identifierMap.get(decl.name()) instanceof Entry prevEntry) {
+        if (identifierMap.get(decl.name().name()) instanceof Entry prevEntry) {
             if (prevEntry.fromCurrentScope()) {
                 if (!(prevEntry.hasLinkage() && decl.storageClass() == EXTERN)) {
                     fail("Conflicting local declaration");
@@ -651,8 +850,21 @@ public class SemanticAnalysis {
         }
         String uniqueName = Mcc.makeTemporary(decl.name().name() + ".");
         identifierMap.put(decl.name().name(), new Entry(uniqueName, true, false));
-        Exp init = decl.init();
-        return new VarDecl(new Var(uniqueName, null), resolveExp(init, identifierMap), decl.varType(), decl.storageClass());
+        var init = decl.init();
+        return new VarDecl(new Var(uniqueName, null), resolveInitializer(init, identifierMap), decl.varType(), decl.storageClass());
+    }
+
+    private static Initializer resolveInitializer(Initializer init, Map<String, Entry> identifierMap) {
+        return switch (init) {
+            case null -> null;
+            case CompoundInit(ArrayList<Initializer> inits) -> {
+                inits.replaceAll(i -> resolveInitializer(i, identifierMap));
+                yield new CompoundInit(inits);
+            }
+            case SingleInit(Exp exp) ->
+                    new SingleInit(resolveExp(exp, identifierMap));
+        };
+
     }
 
     private static <T extends Exp> T resolveExp(T exp, Map<String, Entry> identifierMap) {
@@ -678,7 +890,8 @@ public class SemanticAnalysis {
                     identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, args), type) : fail("Undeclared function:" + name);
             case Cast(Type type, Exp e) ->
                     new Cast(type, resolveExp(e, identifierMap));
-            case Subscript subscript -> throw new Todo("mr-todo resolveExp for subscript");
+            case Subscript(Exp array, Exp index, Type type) ->
+                    new Subscript(resolveExp(array, identifierMap), resolveExp(index, identifierMap), type);
         };
         return r;
     }
@@ -692,6 +905,6 @@ public class SemanticAnalysis {
     }
 
     private static Exp fail(String s) {
-        throw new RuntimeException(s);
+        throw new Err(s);
     }
 }

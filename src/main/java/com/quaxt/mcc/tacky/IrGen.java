@@ -37,11 +37,13 @@ public class IrGen {
             SymbolTableEntry value = e.getValue();
             if (value.attrs() instanceof StaticAttributes(InitialValue init,
                                                           boolean global)) {
-                if (init instanceof StaticInit staticInit) {
-                    tackyDefs.add(new StaticVariable(name, global, value.type(), staticInit));
-                } else if (init instanceof InitialValue.Tentative) {
-                    tackyDefs.add(new StaticVariable(name, global, value.type(), value.type().zero()));
-                }
+                throw new Todo();
+
+//                if (init instanceof StaticInit staticInit) {
+//                    tackyDefs.add(new StaticVariable(name, global, value.type(), staticInit));
+//                } else if (init instanceof InitialValue.Tentative) {
+//                    tackyDefs.add(new StaticVariable(name, global, value.type(), value.type().zero()));
+//                }
             }
         }
     }
@@ -64,7 +66,7 @@ public class IrGen {
             case Function function -> {
                 if (function.body() != null) compileFunction(function);
             }
-            case VarDecl(Var name, Exp init, Type _,
+            case VarDecl(Var name, Initializer init, Type _,
                          StorageClass storageClass) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
@@ -74,6 +76,14 @@ public class IrGen {
                 emitTacky(init, instructions);
             }
         }
+    }
+
+    private static void emitTacky(Initializer init, List<InstructionIr> instructions) {
+        throw new Todo();
+    }
+
+    private static void assign(Var name, Initializer init, List<InstructionIr> instructions) {
+        throw new Todo();
     }
 
     private static void compileBlockItems(List<BlockItem> blockItems, List<InstructionIr> instructions) {

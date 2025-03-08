@@ -14,4 +14,9 @@ public record ConstUInt(int i) implements Constant {
     public String toString() {
         return "ConstUInt[i=" + Integer.toUnsignedString(i) + "]";
     }
+
+
+    public int toInt() {
+        return i;
+    }
 }
