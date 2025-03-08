@@ -14,4 +14,9 @@ public record ConstULong(long l) implements Constant {
     public String toString() {
         return "ConstULong[l=" + Long.toUnsignedString(l) + "]";
     }
+
+
+    public int toInt() {
+        return (int)l;
+    }
 }

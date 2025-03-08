@@ -9,4 +9,9 @@ public record ConstLong(long l) implements Constant {
     public Type type() {
         return LONG;
     }
+
+
+    public int toInt() {
+        return (int)l;
+    }
 }

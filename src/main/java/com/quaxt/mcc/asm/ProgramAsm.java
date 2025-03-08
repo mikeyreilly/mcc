@@ -93,6 +93,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case UIntInit(int i) -> i;
             case ULongInit(long l) -> l;
             case DoubleInit(double d) -> -1;
+            case ZeroInit zeroInit -> throw new Todo();
         };
 
         boolean global = v.global();
@@ -109,6 +110,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case ULongInit _ -> 8;
                 case DoubleInit _ ->
                         throw new AssertionError("init is set to non zero for DoubleInit");
+                case ZeroInit zeroInit -> throw new Todo();
             });
         } else {
             String name = v.name();
@@ -121,6 +123,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case LongInit _, ULongInit _ -> "                .quad " + init;
                 case DoubleInit(double d) ->
                         "                .quad " + Double.doubleToLongBits(d);
+                case ZeroInit zeroInit -> throw new Todo();
             });
 
         }
@@ -177,7 +180,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     yield "movslq\t" + srcF + ", " + dstF;
                 }
                 case MovZeroExtend movZeroExtend ->
-                        throw new RuntimeException("can't happen because movZeroExtend is removed in fixup");
+                        throw new AssertionError("can't happen because movZeroExtend is removed in fixup");
                 case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
                     String srcF = formatOperand(DOUBLE, instruction, src);
                     String dstF = formatOperand(dstType, instruction, dst);

@@ -1,19 +1,25 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.parser.*;
 
 public enum Primitive implements Type {
-    INT(new IntInit(0)), UINT(new UIntInit(0)), LONG(new LongInit(0)),
-    ULONG(new ULongInit(0)), DOUBLE(new DoubleInit(0));
+    INT(new IntInit(0), new ConstInt(0)), UINT(new UIntInit(0), new ConstUInt(0)), LONG(new LongInit(0), new ConstLong(0L)),
+    ULONG(new ULongInit(0), new ConstULong(0L)), DOUBLE(new DoubleInit(0), new ConstDouble(0d));
 
     private final StaticInit zero;
+    private final Constant zeroConstant;
+    public final SingleInit zeroInitializer;
 
-    Primitive(StaticInit zero) {
+    Primitive(StaticInit zero, Constant zeroConstant) {
         this.zero = zero;
+        this.zeroConstant = zeroConstant;
+        this.zeroInitializer = new SingleInit(zeroConstant);
     }
     public StaticInit zero() {
         return zero;
     }
+
     public static Type fromTokenType(TokenType tokenType) {
         return switch (tokenType) {
             case DOUBLE_LITERAL -> DOUBLE;
