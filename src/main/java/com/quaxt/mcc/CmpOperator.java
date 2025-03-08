@@ -23,4 +23,8 @@ public enum CmpOperator implements BinaryOperator {
     public Pattern regex() {
         return regex;
     }
+
+    public String toString() {
+        return regex.pattern();
+    }
 }

@@ -27,4 +27,11 @@ public enum ArithmeticOperator implements BinaryOperator {
     public Pattern regex() {
         return regex;
     }
+
+    public String toString() {
+        return switch(this){
+            case ADD -> "+";
+            default -> regex.pattern();
+        };
+    }
 }

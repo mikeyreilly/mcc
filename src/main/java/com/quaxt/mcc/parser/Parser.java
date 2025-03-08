@@ -8,6 +8,7 @@ import com.quaxt.mcc.semantic.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
@@ -336,8 +337,9 @@ public class Parser {
         StorageClass storageClass = storageClasses.isEmpty() ? null : storageClasses.getFirst();
         return type == null ? null : new TypeAndStorageClass(type, storageClass);
     }
-
+static int parseTypeCount = 0;
     private static Type parseType(List<Token> types, boolean throwExceptionIfNoType) {
+        parseTypeCount++;
         boolean foundDouble = false;
         boolean foundInt = false;
         boolean foundLong = false;
