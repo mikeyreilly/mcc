@@ -14,9 +14,12 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
 
     default int size() {
         return switch (this) {
-            case LONG, ULONG -> 8;
+            case LONG, ULONG, DOUBLE -> 8;
             case INT, UINT -> 4;
-            default -> -1;
+            case Array(Type element, Constant arraySize) ->
+                    element.size() * arraySize.toInt();
+            case Pointer _ -> 8;
+            default -> throw new AssertionError("don't know the size in this case");
         };
     }
 

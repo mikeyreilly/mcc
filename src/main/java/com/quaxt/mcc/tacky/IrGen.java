@@ -5,12 +5,12 @@ import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.quaxt.mcc.ArithmeticOperator.AND;
-import static com.quaxt.mcc.ArithmeticOperator.OR;
+import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
@@ -21,6 +21,7 @@ import com.quaxt.mcc.semantic.Pointer;
 import com.quaxt.mcc.semantic.Type;
 
 public class IrGen {
+
     public static ProgramIr programIr(Program program) {
         List<TopLevel> tackyDefs = new ArrayList<>();
         for (Function function : program.functions()) {
@@ -37,13 +38,12 @@ public class IrGen {
             SymbolTableEntry value = e.getValue();
             if (value.attrs() instanceof StaticAttributes(InitialValue init,
                                                           boolean global)) {
-                throw new Todo();
 
-//                if (init instanceof StaticInit staticInit) {
-//                    tackyDefs.add(new StaticVariable(name, global, value.type(), staticInit));
-//                } else if (init instanceof InitialValue.Tentative) {
-//                    tackyDefs.add(new StaticVariable(name, global, value.type(), value.type().zero()));
-//                }
+                if (init instanceof InitialValue.Tentative) {
+                    tackyDefs.add(new StaticVariable(name, global, value.type(), Collections.singletonList(new ZeroInit(value.type().size()))));
+                } else if (init instanceof Initial(List<StaticInit> initList)) {
+                    tackyDefs.add(new StaticVariable(name, global, value.type(), initList));
+                }
             }
         }
     }
@@ -70,28 +70,58 @@ public class IrGen {
                          StorageClass storageClass) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
-                    assign(name, init, instructions);
+                    assign(name, init, instructions, 0);
                     return;
                 }
-                emitTacky(init, instructions);
+                emitTacky(null, instructions);
             }
         }
     }
 
-    private static void emitTacky(Initializer init, List<InstructionIr> instructions) {
-        throw new Todo();
+    private static int assign(Var name, Initializer init, List<InstructionIr> instructions, int offset) {
+        switch (init) {
+            case CompoundInit(ArrayList<Initializer> inits) -> {
+
+                ExpResult lval = emitTacky(name, instructions);
+                switch (lval) {
+                    case PlainOperand(VarIr dst) -> {
+
+                        for (Initializer innerInit : inits) {
+                            switch (innerInit) {
+                                case CompoundInit _ ->
+                                        offset = assign(name, innerInit, instructions, offset);
+                                case SingleInit(Exp exp) -> {
+                                    var val = emitTackyAndConvert(exp, instructions);
+                                    instructions.add(new CopyToOffset(val, dst, offset));
+                                    offset += exp.type().size();
+                                }
+                            }
+                        }
+
+                    }
+                    default ->
+                            throw new IllegalStateException("Unexpected value: " + lval);
+                }
+                ;
+
+
+            }
+            case SingleInit(Exp exp) -> {
+                ExpResult r = assign(name, exp, instructions);
+                offset += exp.type().size();
+            }
+        }
+        return offset;
     }
 
-    private static void assign(Var name, Initializer init, List<InstructionIr> instructions) {
-        throw new Todo();
-    }
 
     private static void compileBlockItems(List<BlockItem> blockItems, List<InstructionIr> instructions) {
         for (BlockItem i : blockItems) {
             switch (i) {
 
                 case Declaration d -> compileDeclaration(d, instructions);
-                case Statement statement -> compileStatement(statement, instructions);
+                case Statement statement ->
+                        compileStatement(statement, instructions);
             }
         }
     }
@@ -139,8 +169,10 @@ public class IrGen {
             }
             case Block b -> compileBlock(b, instructions);
 
-            case Break aBreak -> instructions.add(new Jump(breakLabel(aBreak.label)));
-            case Continue aContinue -> instructions.add(new Jump(continueLabel(aContinue.label)));
+            case Break aBreak ->
+                    instructions.add(new Jump(breakLabel(aBreak.label)));
+            case Continue aContinue ->
+                    instructions.add(new Jump(continueLabel(aContinue.label)));
             case DoWhile(Statement body, Exp condition, String label) -> {
                 LabelIr start = newLabel("start");
                 instructions.add(start);
@@ -282,7 +314,43 @@ public class IrGen {
                         ValIr v1 = emitTackyAndConvert(left, instructions);
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         VarIr dstName = makeTemporary("tmp.", expr.type());
-                        instructions.add(new BinaryIr(op, v1, v2, dstName));
+                        ValIr ptr = null;
+                        ValIr other = null;
+                        int scale = 0;
+                        if (left.type() instanceof Pointer(Type referenced)) {
+                            ptr = v1;
+                            other = v2;
+                            scale = referenced.size();
+                        } else if (right.type() instanceof Pointer(
+                                Type referenced)) {
+                            ptr = v2;
+                            other = v1;
+                            scale = referenced.size();
+                        }
+                        if (scale != 0) {
+                            switch (op) {
+                                case SUB -> {
+                                    if (right.type() instanceof Pointer) {
+                                        // ptr - ptr (left has to be pointer because type checker doesn't allow non-ptr - ptr)
+                                        var diff = makeTemporary("tmp.", expr.type());
+                                        instructions.add(new BinaryIr(SUB, ptr, other, diff));
+                                        instructions.add(new BinaryIr(DIVIDE, diff, new ConstInt(scale), dstName));
+                                    } else { // ptr - int
+                                        var j = makeTemporary("tmp.", expr.type());
+                                        instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, other, j));
+                                        instructions.add(new BinaryIr(SUB, ptr, j, dstName));
+                                    }
+                                }
+                                case ADD ->
+                                        instructions.add(new AddPtr(ptr, other, scale, dstName));
+
+                                case CmpOperator _ ->
+                                        instructions.add(new BinaryIr(op, v1, v2, dstName));
+                                default ->
+                                        throw new IllegalStateException("Unexpected value: " + op);
+                            }
+                        } else
+                            instructions.add(new BinaryIr(op, v1, v2, dstName));
                         return new PlainOperand(dstName);
                     }
                 }
@@ -340,8 +408,34 @@ public class IrGen {
                             new PlainOperand(ptr);
                 };
             }
-            default:
-                throw new IllegalStateException("Unexpected exp: " + expr);
+
+            case Subscript(Exp left, Exp right, Type type): {
+                ValIr v1 = emitTackyAndConvert(left, instructions);
+                ValIr v2 = emitTackyAndConvert(right, instructions);
+                VarIr dstName = makeTemporary("tmp.", expr.type());
+                ValIr ptr;
+                ValIr other;
+                int scale;
+                // type checker ensures either left or right will be pointer
+                // but it could also swap the left and right when they are in the
+                // "wrong" (index-first) order and it would make this code simpler.
+                // On the other hand,  it's not all that complicated and it is nice
+                // having the AST closely resemble the corresponding code
+                if (left.type() instanceof Pointer(Type referenced)) {
+                    ptr = v1;
+                    other = v2;
+                    scale = referenced.size();
+                } else if (right.type() instanceof Pointer(
+                        Type referenced)) { // else condition just for pattern match
+                    ptr = v2;
+                    other = v1;
+                    scale = referenced.size();
+                } else throw new AssertionError("");
+                instructions.add(new AddPtr(ptr, other, scale, dstName));
+                return new DereferencedPointer(dstName);
+            }
+
+
         }
     }
 
@@ -360,7 +454,7 @@ public class IrGen {
 
     private static ExpResult assign(Exp left, Exp right, List<InstructionIr> instructions) {
         ExpResult lval = emitTacky(left, instructions);
-        var rval = emitTackyAndConvert(right, instructions);
+        ValIr rval = emitTackyAndConvert(right, instructions);
         return switch (lval) {
             case PlainOperand(VarIr obj) -> {
                 instructions.add(new Copy(rval, obj));

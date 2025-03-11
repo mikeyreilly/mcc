@@ -41,34 +41,35 @@ public class Codegen {
     }
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
-        ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
-        for (TopLevel topLevel : programIr.topLevels()) {
-            switch (topLevel) {
-                case FunctionIr f -> topLevels.add(generateAssembly(f));
-
-                case StaticVariable(String name, boolean global, Type t,
-                                    StaticInit init) -> {
-                    int alignment = switch (t) {
-                        case Primitive.UINT, Primitive.INT -> 4;
-                        default -> 8;
-                    };
-                    topLevels.add(new StaticVariableAsm(name, global, alignment, init));
-                }
-            }
-        }
-        topLevels.addAll(CONSTANT_TABLE.values());
-        generateBackendSymbolTable();
-
-        for (TopLevelAsm topLevelAsm : topLevels) {
-            if (topLevelAsm instanceof FunctionAsm functionAsm) {
-
-                List<Instruction> instructionAsms = functionAsm.instructions();
-                AtomicInteger offset = replacePseudoRegisters(instructionAsms);
-                fixUpInstructions(offset, instructionAsms);
-            }
-        }
-
-        return new ProgramAsm(topLevels);
+        throw new Todo();
+//        ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
+//        for (TopLevel topLevel : programIr.topLevels()) {
+//            switch (topLevel) {
+//                case FunctionIr f -> topLevels.add(generateAssembly(f));
+//
+//                case StaticVariable(String name, boolean global, Type t,
+//                                    StaticInit init) -> {
+//                    int alignment = switch (t) {
+//                        case Primitive.UINT, Primitive.INT -> 4;
+//                        default -> 8;
+//                    };
+//                    topLevels.add(new StaticVariableAsm(name, global, alignment, init));
+//                }
+//            }
+//        }
+//        topLevels.addAll(CONSTANT_TABLE.values());
+//        generateBackendSymbolTable();
+//
+//        for (TopLevelAsm topLevelAsm : topLevels) {
+//            if (topLevelAsm instanceof FunctionAsm functionAsm) {
+//
+//                List<Instruction> instructionAsms = functionAsm.instructions();
+//                AtomicInteger offset = replacePseudoRegisters(instructionAsms);
+//                fixUpInstructions(offset, instructionAsms);
+//            }
+//        }
+//
+//        return new ProgramAsm(topLevels);
     }
 
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE = new HashMap<>();
@@ -635,6 +636,8 @@ public class Codegen {
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     ins.add(new Mov(toTypeAsm(valToType(srcV)), src, new Memory(AX, 0)));
                 }
+                case AddPtr _-> throw new Todo();
+                case CopyToOffset _-> throw new Todo();
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), ins);
