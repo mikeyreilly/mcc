@@ -492,6 +492,7 @@ public class SemanticAnalysis {
     }
 
     private static Exp typeCheckAndConvert(Exp exp) {
+        if (exp == null) return null;
         var typedE = typeCheckExpression(exp);
         return switch (typedE.type()) {
             case Array(Type element, _) ->
