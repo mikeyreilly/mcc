@@ -2,8 +2,8 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.ArithmeticOperator;
 
-import static com.quaxt.mcc.asm.TypeAsm.LONGWORD;
-import static com.quaxt.mcc.asm.TypeAsm.QUADWORD;
+import static com.quaxt.mcc.asm.PrimitiveTypeAsm.LONGWORD;
+import static com.quaxt.mcc.asm.PrimitiveTypeAsm.QUADWORD;
 
 public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
                      Operand dst) implements Instruction {

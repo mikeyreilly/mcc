@@ -1,15 +1,8 @@
 package com.quaxt.mcc.asm;
 
-public enum TypeAsm {
-    LONGWORD(4), QUADWORD(8), DOUBLE(8);
+public sealed interface TypeAsm permits PrimitiveTypeAsm, ByteArray {
 
-    private final int size;
-
-    TypeAsm(int size) {
-        this.size = size;
-    }
-
-    public int size() {
-        return size;
-    }
+    int size();
 }
+
+

@@ -1,5 +1,7 @@
 package com.quaxt.mcc.asm;
 
+import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
+
 public record Cmp(TypeAsm type, Operand subtrahend,
                   Operand minuend) implements Instruction {
     public Cmp(TypeAsm type, Operand subtrahend, Operand minuend) {
@@ -14,6 +16,8 @@ public record Cmp(TypeAsm type, Operand subtrahend,
             case LONGWORD -> "cmpl	";
             case QUADWORD -> "cmpq	";
             case DOUBLE -> "comisd	";
+            case ByteArray byteArray ->
+                    throw new IllegalArgumentException("Can't handle " + byteArray);
         };
     }
 }
