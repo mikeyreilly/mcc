@@ -2,9 +2,7 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.*;
-import com.quaxt.mcc.semantic.Pointer;
-import com.quaxt.mcc.semantic.Primitive;
-import com.quaxt.mcc.semantic.Type;
+import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
@@ -41,35 +39,34 @@ public class Codegen {
     }
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
-        throw new Todo();
-//        ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
-//        for (TopLevel topLevel : programIr.topLevels()) {
-//            switch (topLevel) {
-//                case FunctionIr f -> topLevels.add(generateAssembly(f));
-//
-//                case StaticVariable(String name, boolean global, Type t,
-//                                    StaticInit init) -> {
-//                    int alignment = switch (t) {
-//                        case Primitive.UINT, Primitive.INT -> 4;
-//                        default -> 8;
-//                    };
-//                    topLevels.add(new StaticVariableAsm(name, global, alignment, init));
-//                }
-//            }
-//        }
-//        topLevels.addAll(CONSTANT_TABLE.values());
-//        generateBackendSymbolTable();
-//
-//        for (TopLevelAsm topLevelAsm : topLevels) {
-//            if (topLevelAsm instanceof FunctionAsm functionAsm) {
-//
-//                List<Instruction> instructionAsms = functionAsm.instructions();
-//                AtomicInteger offset = replacePseudoRegisters(instructionAsms);
-//                fixUpInstructions(offset, instructionAsms);
-//            }
-//        }
-//
-//        return new ProgramAsm(topLevels);
+        ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
+        for (TopLevel topLevel : programIr.topLevels()) {
+            switch (topLevel) {
+                case FunctionIr f -> topLevels.add(generateAssembly(f));
+
+                case StaticVariable(String name, boolean global, Type t,
+                                    List<StaticInit> init) -> {
+                    int alignment = switch (t) {
+                        case Primitive.UINT, Primitive.INT -> 4;
+                        default -> 8;
+                    };
+                    topLevels.add(new StaticVariableAsm(name, global, alignment, init));
+                }
+            }
+        }
+        topLevels.addAll(CONSTANT_TABLE.values());
+        generateBackendSymbolTable();
+
+        for (TopLevelAsm topLevelAsm : topLevels) {
+            if (topLevelAsm instanceof FunctionAsm functionAsm) {
+
+                List<Instruction> instructionAsms = functionAsm.instructions();
+                AtomicInteger offset = replacePseudoRegisters(instructionAsms);
+                fixUpInstructions(offset, instructionAsms);
+            }
+        }
+
+        return new ProgramAsm(topLevels);
     }
 
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE = new HashMap<>();
@@ -313,6 +310,11 @@ public class Codegen {
             case Primitive.LONG, Primitive.ULONG -> QUADWORD;
             case Primitive.DOUBLE -> DOUBLE;
             case Pointer _ -> QUADWORD;
+            case Array array -> {
+                int size = array.size();
+                int alignment = size < 16 && array.element().isScalar() ? array.element().size() : 16;
+                yield new ByteArray(size, alignment);
+            }
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
         };
@@ -333,11 +335,21 @@ public class Codegen {
     private static Operand toOperand(ValIr val) {
         return switch (val) {
             case ConstInt(int i) -> new Imm(i);
-            case VarIr(String identifier) -> new Pseudo(identifier);
+            case VarIr(String identifier) ->
+                    valToType(val) instanceof Array ? new PseudoMem(identifier, 0) : new Pseudo(identifier);
             case ConstLong(long l) -> new Imm(l);
             case ConstUInt(int i) -> new Imm(i);
             case ConstULong(long l) -> new Imm(l);
             case ConstDouble(double d) -> resolveConstant(d);
+        };
+    }
+
+    private static Operand toOperand(ValIr val, int offset) {
+        return switch (val) {
+            case VarIr(
+                    String identifier) when valToType(val) instanceof Array ->
+                    new PseudoMem(identifier, offset);
+            default -> throw new AssertionError(val);
         };
     }
 
@@ -369,7 +381,7 @@ public class Codegen {
                 } else throw new IllegalArgumentException(identifier);
 
             }
-            default -> throw new Todo();
+            default -> in; // MR-TODO see p. 417
         };
     }
 
@@ -473,7 +485,7 @@ public class Codegen {
                         } else {
                             ins.add(new Cmp(typeAsm, new Imm(0), src1));
                             ins.add(new Mov(typeAsm, new Imm(0), dst1));
-                            ins.add(new SetCC(EQUALS, type.unsignedOrDouble(), dst1));
+                            ins.add(new SetCC(EQUALS, type.unsignedOrDoubleOrPointer(), dst1));
                         }
                     } else if (op1 == UnaryOperator.UNARY_MINUS && typeAsm == DOUBLE) {
                         ins.add(new Mov(typeAsm, src1, dst1));
@@ -525,7 +537,7 @@ public class Codegen {
                     ins.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
                     // dstName will hold the result of the comparison, which is always a LONGWORD
                     ins.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
-                    ins.add(new SetCC(op1, type.unsignedOrDouble(), toOperand(dstName)));
+                    ins.add(new SetCC(op1, type.unsignedOrDoubleOrPointer(), toOperand(dstName)));
                 }
                 case Copy(ValIr val, VarIr dst1) -> {
                     TypeAsm typeAsm = valToAsmType(val);
@@ -542,7 +554,7 @@ public class Codegen {
                     } else {
                         ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
                     }
-                    ins.add(new JmpCC(NOT_EQUALS, type.unsignedOrDouble(), label));
+                    ins.add(new JmpCC(NOT_EQUALS, type.unsignedOrDoubleOrPointer(), label));
                 }
                 case JumpIfZero(ValIr v, String label) -> {
                     Type type = valToType(v);
@@ -553,7 +565,7 @@ public class Codegen {
                     } else {
                         ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
                     }
-                    ins.add(new JmpCC(EQUALS, type.unsignedOrDouble(), label));
+                    ins.add(new JmpCC(EQUALS, type.unsignedOrDoubleOrPointer(), label));
 
                 }
                 case LabelIr labelIr -> ins.add(labelIr);
@@ -637,8 +649,28 @@ public class Codegen {
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     ins.add(new Mov(toTypeAsm(valToType(srcV)), src, new Memory(AX, 0)));
                 }
-                case AddPtr _-> throw new Todo();
-                case CopyToOffset _-> throw new Todo();
+                case AddPtr(ValIr ptrV, ValIr indexV, int scale,
+                            ValIr dstV) -> {
+                    Operand ptr = toOperand(ptrV);
+                    Operand index = toOperand(indexV);
+                    Operand dst = toOperand(dstV);
+                    ins.add(new Mov(QUADWORD, ptr, AX));
+                    ins.add(new Mov(QUADWORD, index, DX));
+                    switch (scale) {
+                        case 1, 2, 4, 8 -> ins.add(new Lea(new Indexed(AX, DX, scale), dst));
+                        default -> {
+                            // MR-TODO we can save an instruction when index is a constant. See table 15-2 p. 416
+                            ins.add(new Binary(IMUL, QUADWORD, new Imm(scale), DX));
+                            ins.add(new Lea(new Indexed(AX, DX, 1), dst));
+                        }
+                    }
+                }
+                case CopyToOffset(ValIr srcV, VarIr dstV, int offset) -> {
+                    Operand src = toOperand(srcV);
+                    Operand dst = toOperand(dstV, offset);
+                    TypeAsm typeAsm = valToAsmType(dstV);
+                    ins.add(new Mov(typeAsm, src, dst));
+                }
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), ins);

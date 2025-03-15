@@ -23,8 +23,8 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
         };
     }
 
-    default boolean unsignedOrDouble() {
-        return this == UINT || this == ULONG | this == DOUBLE;
+    default boolean unsignedOrDoubleOrPointer() {
+        return this == UINT || this == ULONG | this == DOUBLE || this instanceof Pointer;
     }
 
     default boolean isSigned() {
@@ -42,14 +42,10 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
      * are of different type then return true.
      */
     default boolean looseEquals(Type other) {
-        return other.equals(this)
-            || this instanceof Array(Type element1, Constant arraySize1)
-               && other instanceof Array(Type element2, Constant arraySize2)
-               && arraySize1.toInt() == arraySize2.toInt() && element1.looseEquals(element2)
+        return false;
+    }
 
-            || this instanceof Pointer(Type element1)
-               && other instanceof Pointer(Type element2)
-               && element1.looseEquals(element2);
-
+    default boolean isScalar(){
+        return this == INT || this == LONG || this == UINT || this == ULONG || this instanceof Pointer;
     }
 }
