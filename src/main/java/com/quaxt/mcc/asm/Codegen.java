@@ -17,7 +17,7 @@ import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.Reg.*;
-import static com.quaxt.mcc.asm.TypeAsm.*;
+import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
 import static com.quaxt.mcc.UnaryOperator.SHR;
 

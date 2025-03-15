@@ -8,7 +8,7 @@ import java.io.PrintWriter;
 import java.util.List;
 
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
-import static com.quaxt.mcc.asm.TypeAsm.*;
+import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private static void printIndent(PrintWriter out, String s) {
