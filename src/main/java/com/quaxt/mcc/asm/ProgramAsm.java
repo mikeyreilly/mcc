@@ -31,6 +31,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield (isConstant ? ".L" + data.identifier() : data.identifier()) + "(%rip)";
             }
             case DoubleReg reg -> reg.toString();
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + o);
         };
     }
 
@@ -86,47 +88,47 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     }
 
     private void emitStaticVariableAsm(PrintWriter out, StaticVariableAsm v) {
-
-        long init = switch (v.init()) {
-            case IntInit(int i) -> i;
-            case LongInit(long l) -> l;
-            case UIntInit(int i) -> i;
-            case ULongInit(long l) -> l;
-            case DoubleInit(double d) -> -1;
-            case ZeroInit zeroInit -> throw new Todo();
-        };
-
-        boolean global = v.global();
-        if (init == 0) {
-            String name = v.name();
-            if (global) out.println("                .globl	" + name);
-            out.println("                .bss");
-            out.println("                .balign " + v.alignment());
-            out.println(name + ":");
-            out.println("                .zero " + switch (v.init()) {
-                case IntInit _ -> 4;
-                case LongInit _ -> 8;
-                case UIntInit _ -> 4;
-                case ULongInit _ -> 8;
-                case DoubleInit _ ->
-                        throw new AssertionError("init is set to non zero for DoubleInit");
-                case ZeroInit zeroInit -> throw new Todo();
-            });
-        } else {
-            String name = v.name();
-            if (global) out.println("                .globl	" + name);
-            out.println("                .data");
-            out.println("                .balign " + v.alignment());
-            out.println(name + ":");
-            out.println(switch (v.init()) {
-                case IntInit _, UIntInit _ -> "                .long " + init;
-                case LongInit _, ULongInit _ -> "                .quad " + init;
-                case DoubleInit(double d) ->
-                        "                .quad " + Double.doubleToLongBits(d);
-                case ZeroInit zeroInit -> throw new Todo();
-            });
-
-        }
+        throw new Todo();
+//        long init = switch (v.init()) {
+//            case IntInit(int i) -> i;
+//            case LongInit(long l) -> l;
+//            case UIntInit(int i) -> i;
+//            case ULongInit(long l) -> l;
+//            case DoubleInit(double d) -> -1;
+//            case ZeroInit zeroInit -> throw new Todo();
+//        };
+//
+//        boolean global = v.global();
+//        if (init == 0) {
+//            String name = v.name();
+//            if (global) out.println("                .globl	" + name);
+//            out.println("                .bss");
+//            out.println("                .balign " + v.alignment());
+//            out.println(name + ":");
+//            out.println("                .zero " + switch (v.init()) {
+//                case IntInit _ -> 4;
+//                case LongInit _ -> 8;
+//                case UIntInit _ -> 4;
+//                case ULongInit _ -> 8;
+//                case DoubleInit _ ->
+//                        throw new AssertionError("init is set to non zero for DoubleInit");
+//                case ZeroInit zeroInit -> throw new Todo();
+//            });
+//        } else {
+//            String name = v.name();
+//            if (global) out.println("                .globl	" + name);
+//            out.println("                .data");
+//            out.println("                .balign " + v.alignment());
+//            out.println(name + ":");
+//            out.println(switch (v.init()) {
+//                case IntInit _, UIntInit _ -> "                .long " + init;
+//                case LongInit _, ULongInit _ -> "                .quad " + init;
+//                case DoubleInit(double d) ->
+//                        "                .quad " + Double.doubleToLongBits(d);
+//                case ZeroInit zeroInit -> throw new Todo();
+//            });
+//
+//        }
 
     }
 

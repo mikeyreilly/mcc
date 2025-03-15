@@ -369,6 +369,7 @@ public class Codegen {
                 } else throw new IllegalArgumentException(identifier);
 
             }
+            default -> throw new Todo();
         };
     }
 
