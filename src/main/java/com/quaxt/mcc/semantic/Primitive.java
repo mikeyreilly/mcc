@@ -20,6 +20,11 @@ public enum Primitive implements Type {
         return zero;
     }
 
+    @Override
+    public boolean looseEquals(Type other) {
+        return other==this;
+    }
+
     public static Type fromTokenType(TokenType tokenType) {
         return switch (tokenType) {
             case DOUBLE_LITERAL -> DOUBLE;
