@@ -18,6 +18,7 @@ import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
 
 import com.quaxt.mcc.semantic.Pointer;
+import com.quaxt.mcc.semantic.Primitive;
 import com.quaxt.mcc.semantic.Type;
 
 public class IrGen {
@@ -332,13 +333,13 @@ public class IrGen {
                                 case SUB -> {
                                     if (right.type() instanceof Pointer) {
                                         // ptr - ptr (left has to be pointer because type checker doesn't allow non-ptr - ptr)
-                                        var diff = makeTemporary("tmp.", expr.type());
+                                        var diff = makeTemporary("tmp.", LONG);
                                         instructions.add(new BinaryIr(SUB, ptr, other, diff));
                                         instructions.add(new BinaryIr(DIVIDE, diff, new ConstInt(scale), dstName));
                                     } else { // ptr - int
-                                        var j = makeTemporary("tmp.", expr.type());
+                                        var j = makeTemporary("tmp.", LONG);
                                         instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, other, j));
-                                        instructions.add(new BinaryIr(SUB, ptr, j, dstName));
+                                        instructions.add(new AddPtr( ptr, j, scale, dstName));
                                     }
                                 }
                                 case ADD ->
@@ -400,6 +401,7 @@ public class IrGen {
                 ExpResult v = emitTacky(inner, instructions);
                 return switch (v) {
                     case PlainOperand(ValIr obj) -> {
+                        assert(expr.type() instanceof Pointer);
                         VarIr dst = makeTemporary("addr.", expr.type());
                         instructions.add(new GetAddress(obj, dst));
                         yield new PlainOperand(dst);
@@ -412,7 +414,7 @@ public class IrGen {
             case Subscript(Exp left, Exp right, Type type): {
                 ValIr v1 = emitTackyAndConvert(left, instructions);
                 ValIr v2 = emitTackyAndConvert(right, instructions);
-                VarIr dstName = makeTemporary("tmp.", expr.type());
+                VarIr dstName = makeTemporary("tmp.", new Pointer(expr.type()));
                 ValIr ptr;
                 ValIr other;
                 int scale;

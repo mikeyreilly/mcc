@@ -171,7 +171,7 @@ public class SemanticAnalysis {
                             throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
                         }
                         if (declaredLength > inits.size()) {
-                            acc.add(createZeroInit(new Array(inner, new ConstInt(inits.size() - declaredLength))));
+                            acc.add(createZeroInit(new Array(inner, new ConstInt(declaredLength - inits.size()))));
                         }
                     }
 
@@ -290,7 +290,7 @@ public class SemanticAnalysis {
             case INT -> new IntInit((int) initL);
             case ULONG -> new ULongInit(initL);
             case UINT -> new UIntInit((int) initL);
-            case Pointer _ -> new UIntInit((int) initL);
+            case Pointer _ -> new ULongInit((int) initL);
             default -> null;
         };
     }
@@ -683,7 +683,7 @@ public class SemanticAnalysis {
                     typedE2 = convertTo(typedE2, LONG);
                 } else if (t1.isInteger() && t2 instanceof Pointer p) {
                     ptrType = p;
-                    typedE1 = convertTo(typedE2, LONG);
+                    typedE1 = convertTo(typedE1, LONG);
                 } else
                     throw new Err("Subscript must have integer and pointer operands");
                 yield new Subscript(typedE1, typedE2, ptrType.referenced());

@@ -1,3 +1,2 @@
 layout reg src
 focus cmd
-display $xmm15.v2_double

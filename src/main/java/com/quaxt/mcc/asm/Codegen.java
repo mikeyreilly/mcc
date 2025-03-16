@@ -321,7 +321,7 @@ public class Codegen {
     }
 
     private static boolean isRam(Operand src) {
-        return src instanceof Memory || src instanceof Data;
+        return src instanceof Memory || src instanceof Indexed || src instanceof Data;
     }
 
     private final static Reg[] INTEGER_REGISTERS = new Reg[]{DI, SI, DX, CX, R8, R9};
@@ -682,7 +682,7 @@ public class Codegen {
                 case CopyToOffset(ValIr srcV, VarIr dstV, int offset) -> {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV, offset);
-                    TypeAsm typeAsm = valToAsmType(dstV);
+                    TypeAsm typeAsm = valToAsmType(srcV);
                     ins.add(new Mov(typeAsm, src, dst));
                 }
             }

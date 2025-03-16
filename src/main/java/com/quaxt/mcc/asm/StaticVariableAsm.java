@@ -4,5 +4,6 @@ import com.quaxt.mcc.StaticInit;
 
 import java.util.List;
 
-public record StaticVariableAsm(String name, boolean global, int alignment, List<StaticInit> init) implements TopLevelAsm {
+public record StaticVariableAsm(String name, boolean global, int alignment,
+                                List<StaticInit> init) implements TopLevelAsm {
 }
