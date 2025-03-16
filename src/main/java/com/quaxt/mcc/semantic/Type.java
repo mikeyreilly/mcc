@@ -41,9 +41,7 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
      * arrays and they have the same type and length (even though the lengths
      * are of different type then return true.
      */
-    default boolean looseEquals(Type other) {
-        return false;
-    }
+    boolean looseEquals(Type other);
 
     default boolean isScalar(){
         return this == INT || this == LONG || this == UINT || this == ULONG || this instanceof Pointer;

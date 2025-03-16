@@ -7,4 +7,9 @@ public record FunType(List<Type> params, Type ret) implements Type {
         this.params = params;
         this.ret = ret;
     }
+
+    @Override
+    public boolean looseEquals(Type other) {
+        return other.equals(this);
+    }
 }

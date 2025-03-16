@@ -12,4 +12,9 @@ public record Pointer(Type referenced) implements Type {
     public StaticInit zero() {
         return ULONG.zero();
     }
+
+    @Override
+    public boolean looseEquals(Type other) {
+        return other instanceof Pointer(Type otherReferenced) && referenced.looseEquals(otherReferenced);
+    }
 }
