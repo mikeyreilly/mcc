@@ -353,36 +353,49 @@ public class Codegen {
         };
     }
 
+    private static Operand dePseudo(Operand in, Map<String, Integer> varTable, AtomicInteger offsetA) {
+        int offsetFromStartOfArray;
+        String identifier;
+        switch (in) {
+            case Imm _, Reg _, Memory _, DoubleReg _, Data _, Indexed _:
+                return in;
+            case Pseudo(String pIdentifier):
+                identifier = pIdentifier;
+                offsetFromStartOfArray = 0;
+                break;
+            case PseudoMem(String pIdentifier, int pOffsetFromStartOfArray):
+                identifier = pIdentifier;
+                offsetFromStartOfArray = pOffsetFromStartOfArray;
+               break;
+            default:
+                throw new IllegalArgumentException();
+        }
+        if (BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry(
+                TypeAsm type, boolean isStatic, boolean _)) {
+            int size = type.size();
+            int alignment = type.alignment();
 
-    private static Operand dePseudo(Operand in, Map<String, Integer> varTable, AtomicInteger offset) {
-        return switch (in) {
-            case Imm _, Reg _, Memory _, DoubleReg _, Data _ -> in;
-            case Pseudo(String identifier) -> {
-                if (BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry(
-                        TypeAsm type, boolean isStatic, boolean _)) {
-                    if (isStatic) yield new Data(identifier);
 
-                    Integer varOffset = varTable.get(identifier);
-                    if (varOffset == null) {
-                        // it starts ar -8 - we can use this for the first var
-                        // when that var is written it will update bytes stack-8 to stack-1
-                        int size = type.size();
-                        varOffset = offset.get();
-                        varOffset -= size;
-                        int remainder = varOffset % size;
-                        if (remainder != 0) {
-                            varOffset -= (size + remainder);
-                        }
-                        varTable.put(identifier, varOffset);
-                        //System.out.println(identifier+"\t"+size+"\t"+varOffset+"\t"+remainder);
-                        offset.set(varOffset);
-                    }
-                    yield new Memory(BP, varOffset);
-                } else throw new IllegalArgumentException(identifier);
+            if (isStatic) return new Data(identifier);
 
+            Integer varOffset = varTable.get(identifier);
+            if (varOffset == null) {
+                // it starts ar -8 - we can use this for the first var
+                // when that var is written it will update bytes stack-8 to stack-1
+                varOffset = offsetA.get();
+                varOffset -= size;
+                int remainder = varOffset % alignment;
+                if (remainder != 0) {
+                    varOffset -= (alignment + remainder);
+                }
+                varTable.put(identifier, varOffset);
+                //System.out.println(identifier+"\t"+size+"\t"+varOffset+"\t"+remainder);
+                offsetA.set(varOffset);
             }
-            default -> in; // MR-TODO see p. 417
-        };
+            return new Memory(BP, varOffset + offsetFromStartOfArray);
+
+
+        } else throw new IllegalArgumentException(identifier);
     }
 
     private static void codegenFunCall(FunCall funCall, List<Instruction> instructionAsms) {
@@ -657,7 +670,8 @@ public class Codegen {
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     ins.add(new Mov(QUADWORD, index, DX));
                     switch (scale) {
-                        case 1, 2, 4, 8 -> ins.add(new Lea(new Indexed(AX, DX, scale), dst));
+                        case 1, 2, 4, 8 ->
+                                ins.add(new Lea(new Indexed(AX, DX, scale), dst));
                         default -> {
                             // MR-TODO we can save an instruction when index is a constant. See table 15-2 p. 416
                             ins.add(new Binary(IMUL, QUADWORD, new Imm(scale), DX));
