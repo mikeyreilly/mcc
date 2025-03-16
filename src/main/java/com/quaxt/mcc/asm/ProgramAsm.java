@@ -31,6 +31,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield (isConstant ? ".L" + data.identifier() : data.identifier()) + "(%rip)";
             }
             case DoubleReg reg -> reg.toString();
+            case Indexed(Reg base, Reg index, int scale) ->
+                    "(%" + base.q + ",%" + index.q + "," + scale + ")";
             default ->
                     throw new IllegalStateException("Unexpected value: " + o);
         };
@@ -41,6 +43,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             return "%" + switch (t) {
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
+                case ByteArray _ -> reg.q;
                 default ->
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
             };
@@ -88,48 +91,34 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     }
 
     private void emitStaticVariableAsm(PrintWriter out, StaticVariableAsm v) {
-        throw new Todo();
-//        long init = switch (v.init()) {
-//            case IntInit(int i) -> i;
-//            case LongInit(long l) -> l;
-//            case UIntInit(int i) -> i;
-//            case ULongInit(long l) -> l;
-//            case DoubleInit(double d) -> -1;
-//            case ZeroInit zeroInit -> throw new Todo();
-//        };
-//
-//        boolean global = v.global();
-//        if (init == 0) {
-//            String name = v.name();
-//            if (global) out.println("                .globl	" + name);
-//            out.println("                .bss");
-//            out.println("                .balign " + v.alignment());
-//            out.println(name + ":");
-//            out.println("                .zero " + switch (v.init()) {
-//                case IntInit _ -> 4;
-//                case LongInit _ -> 8;
-//                case UIntInit _ -> 4;
-//                case ULongInit _ -> 8;
-//                case DoubleInit _ ->
-//                        throw new AssertionError("init is set to non zero for DoubleInit");
-//                case ZeroInit zeroInit -> throw new Todo();
-//            });
-//        } else {
-//            String name = v.name();
-//            if (global) out.println("                .globl	" + name);
-//            out.println("                .data");
-//            out.println("                .balign " + v.alignment());
-//            out.println(name + ":");
-//            out.println(switch (v.init()) {
-//                case IntInit _, UIntInit _ -> "                .long " + init;
-//                case LongInit _, ULongInit _ -> "                .quad " + init;
-//                case DoubleInit(double d) ->
-//                        "                .quad " + Double.doubleToLongBits(d);
-//                case ZeroInit zeroInit -> throw new Todo();
-//            });
-//
-//        }
-
+        boolean global = v.global();
+        if (v.init().size() == 1 && v.init().getFirst() instanceof ZeroInit(
+                int bytes)) {
+            String name = v.name();
+            if (global) out.println("                .globl	" + name);
+            out.println("                .bss");
+            out.println("                .balign " + v.alignment());
+            out.println(name + ":");
+            out.println("                .zero " + bytes);
+        } else {
+            String name = v.name();
+            if (global) out.println("                .globl	" + name);
+            out.println("                .data");
+            out.println("                .balign " + v.alignment());
+            out.println(name + ":");
+            for (var x : v.init()) {
+                out.println(switch (x) {
+                    case DoubleInit(double d) ->
+                            "                .quad " + Double.doubleToLongBits(d);
+                    case IntInit(int l) -> "                .long " + l;
+                    case LongInit(long l) -> "                .quad " + l;
+                    case UIntInit(int l) -> "                .long " + l;
+                    case ULongInit(long l) -> "                .quad " + l;
+                    case ZeroInit(int bytes) ->
+                            "                .zero " + bytes;
+                });
+            }
+        }
     }
 
     private void emitFunctionAsm(PrintWriter out, FunctionAsm functionAsm) {
