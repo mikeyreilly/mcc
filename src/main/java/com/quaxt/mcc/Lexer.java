@@ -13,7 +13,7 @@ public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
     static final Token[] TOKEN_TYPES_TO_MATCH =
             new Token[]{IDENTIFIER, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
-                    DOUBLE_LITERAL,
+                    CHAR_LITERAL, STRING_LITERAL, DOUBLE_LITERAL,
                     UNSIGNED_LONG_LITERAL, UNSIGNED_INT_LITERAL,
                     CLOSE_BRACE, LONG_LITERAL, INT_LITERAL, SEMICOLON,
                     SINGLE_LINE_COMMENT, MULTILINE_COMMENT, DECREMENT,
@@ -42,29 +42,34 @@ public class Lexer {
                 matcher.usePattern(tokenType.regex());
                 if (matcher.lookingAt()) {
                     int end = matcher.end(tokenType.group());
-                    if (tokenType != TokenType.SINGLE_LINE_COMMENT && tokenType != TokenType.MULTILINE_COMMENT) {
-                        if (tokenType == IDENTIFIER || tokenType == TokenType.DOUBLE_LITERAL ||
-                                tokenType == TokenType.INT_LITERAL || tokenType == LONG_LITERAL
-                                || tokenType == UNSIGNED_INT_LITERAL || tokenType == UNSIGNED_LONG_LITERAL) {
+                    if (tokenType != SINGLE_LINE_COMMENT && tokenType != MULTILINE_COMMENT) {
+                        if (tokenType == IDENTIFIER || tokenType == CHAR_LITERAL
+                                || tokenType == STRING_LITERAL
+                                || tokenType == DOUBLE_LITERAL
+                                || tokenType == INT_LITERAL
+                                || tokenType == LONG_LITERAL
+                                || tokenType == UNSIGNED_INT_LITERAL
+                                || tokenType == UNSIGNED_LONG_LITERAL) {
                             int start = matcher.start();
                             String value = src.substring(start, end);
                             Token token = switch (value) {
-                                case "break" -> TokenType.BREAK;
-                                case "continue" -> TokenType.CONTINUE;
-                                case "do" -> TokenType.DO;
-                                case "double" -> TokenType.DOUBLE;
-                                case "else" -> TokenType.ELSE;
-                                case "extern" -> TokenType.EXTERN;
-                                case "for" -> TokenType.FOR;
-                                case "if" -> TokenType.IF;
-                                case "int" -> TokenType.INT;
-                                case "long" -> TokenType.LONG;
-                                case "return" -> TokenType.RETURN;
-                                case "signed" -> TokenType.SIGNED;
-                                case "static" -> TokenType.STATIC;
-                                case "unsigned" -> TokenType.UNSIGNED;
-                                case "void" -> TokenType.VOID;
-                                case "while" -> TokenType.WHILE;
+                                case "break" -> BREAK;
+                                case "char" -> CHAR;
+                                case "continue" -> CONTINUE;
+                                case "do" -> DO;
+                                case "double" -> DOUBLE;
+                                case "else" -> ELSE;
+                                case "extern" -> EXTERN;
+                                case "for" -> FOR;
+                                case "if" -> IF;
+                                case "int" -> INT;
+                                case "long" -> LONG;
+                                case "return" -> RETURN;
+                                case "signed" -> SIGNED;
+                                case "static" -> STATIC;
+                                case "unsigned" -> UNSIGNED;
+                                case "void" -> VOID;
+                                case "while" -> WHILE;
                                 default -> new TokenWithValue(tokenType, value);
                             };
                             tokens.add(token);

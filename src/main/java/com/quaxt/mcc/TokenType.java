@@ -5,6 +5,8 @@ import java.util.regex.Pattern;
 public enum TokenType implements Token {
     IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"),
+    CHAR_LITERAL("'([^'\\\\\n]|\\\\['\"\\\\?abfnrtv])'"),
+    STRING_LITERAL("\"([^\"\\\\\n]|\\\\['\"\\\\?abfnrtv])*\""),
     DOUBLE_LITERAL(
             "(([0-9]*\\.[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)[^\\w.]", 1),
     UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]))[^\\w.]", 1),
@@ -12,6 +14,7 @@ public enum TokenType implements Token {
     LONG_LITERAL("([0-9]+[lL])[^\\w.]", 1), INT_LITERAL("([0-9]+)[^\\w.]", 1), SEMICOLON(";"),
     SINGLE_LINE_COMMENT("//.*"), MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/",
             Pattern.DOTALL), 0), UNSIGNED(), SIGNED(),
+    CHAR(),
     DOUBLE(), LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
     BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
     DECREMENT("--"), INCREMENT("\\+\\+"), BITWISE_NOT("~"),
@@ -52,6 +55,8 @@ public enum TokenType implements Token {
         case CLOSE_PAREN -> ")";
         case OPEN_BRACE -> "{";
         case CLOSE_BRACE -> "}";
+        case CHAR_LITERAL -> "char_literal";
+        case STRING_LITERAL -> "string_literal";
         case DOUBLE_LITERAL -> "double_literal";
         case UNSIGNED_LONG_LITERAL -> "unsigned_long_literal";
         case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";
@@ -62,6 +67,7 @@ public enum TokenType implements Token {
         case MULTILINE_COMMENT -> "multiline_comment";
         case UNSIGNED -> "unsigned";
         case SIGNED -> "signed";
+        case CHAR -> "char";
         case DOUBLE -> "double";
         case LONG -> "long";
         case INT -> "int";
