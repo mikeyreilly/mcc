@@ -14,8 +14,6 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.TokenType.*;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
-import static com.quaxt.mcc.semantic.Primitive.UINT;
-import static com.quaxt.mcc.semantic.Primitive.ULONG;
 
 public class Parser {
     public static Token expect(Token expected, List<Token> tokens) {
@@ -26,7 +24,7 @@ public class Parser {
         return token;
     }
 
-    static Statement parseStatement(List<Token> tokens) {
+    static Statement parseStatement(ArrayList<Token> tokens) {
         Token token = tokens.getFirst();
         if (RETURN == token.type()) {
             tokens.removeFirst();
@@ -73,7 +71,7 @@ public class Parser {
         return exp;
     }
 
-    private static DoWhile parseDoWhile(List<Token> tokens) {
+    private static DoWhile parseDoWhile(ArrayList<Token> tokens) {
         expect(DO, tokens);
         Statement body = parseStatement(tokens);
         expect(WHILE, tokens);
@@ -244,7 +242,7 @@ public class Parser {
         };
     }
 
-    private static Declaration parseDeclaration(List<Token> tokens, boolean throwExceptionIfNoType) {
+    private static Declaration parseDeclaration(ArrayList<Token> tokens, boolean throwExceptionIfNoType) {
         // parse int i; or int i=5; or int foo(void);
         TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
         if (typeAndStorageClass == null) return null;
@@ -273,7 +271,7 @@ public class Parser {
         return new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass());
     }
 
-    private static Initializer parseInitializer(List<Token> tokens) {
+    private static Initializer parseInitializer(ArrayList<Token> tokens) {
         Token token = tokens.getFirst();
         if (token == OPEN_BRACE) {
             tokens.removeFirst();
@@ -344,6 +342,7 @@ public class Parser {
         boolean foundLong = false;
         boolean foundSigned = false;
         boolean foundUnsigned = false;
+        boolean foundChar = false;
         for (Token t : types) {
             switch (t) {
                 case DOUBLE -> {
@@ -351,11 +350,16 @@ public class Parser {
                     else foundDouble = true;
                 }
                 case INT -> {
-                    if (foundInt) fail("invalid type specifier");
+                    if (foundInt || foundChar) fail("invalid type specifier");
                     else foundInt = true;
                 }
+                case CHAR -> {
+                    if (foundChar || foundInt || foundLong)
+                        fail("invalid type specifier");
+                    else foundChar = true;
+                }
                 case LONG -> {
-                    if (foundLong) fail("invalid type specifier");
+                    if (foundLong || foundChar) fail("invalid type specifier");
                     else foundLong = true;
                 }
                 case SIGNED -> {
@@ -377,16 +381,21 @@ public class Parser {
             }
             return Primitive.DOUBLE;
         }
-        if (foundLong) return foundUnsigned ? ULONG : Primitive.LONG;
-        else if (foundInt) return foundUnsigned ? UINT : Primitive.INT;
+        if (foundChar)
+            return foundSigned ? Primitive.SCHAR : foundUnsigned ? Primitive.UCHAR : Primitive.CHAR;
+        else if (foundLong)
+            return foundUnsigned ? Primitive.ULONG : Primitive.LONG;
+        else if (foundInt)
+            return foundUnsigned ? Primitive.UINT : Primitive.INT;
         else if (foundSigned) return Primitive.INT;
-        else if (foundUnsigned) return UINT;
-        if (throwExceptionIfNoType) throw new Err("invalid type specifier");
+        else if (foundUnsigned) return Primitive.UINT;
+        if (throwExceptionIfNoType)
+            throw new Err("invalid type specifier: " + types);
         return null;
     }
 
 
-    public static Program parseProgram(List<Token> tokens) {
+    public static Program parseProgram(ArrayList<Token> tokens) {
         Declaration declaration;
         ArrayList<Declaration> declarations = new ArrayList<>();
         while ((declaration = parseDeclaration(tokens, true)) != null) {
@@ -404,10 +413,10 @@ public class Parser {
     }
 
     private static boolean isTypeSpecifier(Token type) {
-        return INT == type || LONG == type || UNSIGNED == type || SIGNED == type || DOUBLE == type;
+        return CHAR == type || INT == type || LONG == type || UNSIGNED == type || SIGNED == type || DOUBLE == type;
     }
 
-    private static Function parseRestOfFunction(ArrayList<String> paramNames, List<Type> paramTypes, List<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
+    private static Function parseRestOfFunction(ArrayList<String> paramNames, List<Type> paramTypes, ArrayList<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
 
         List<Var> params = new ArrayList<>();
         for (int i = 0; i < paramNames.size(); i++) {
@@ -434,7 +443,7 @@ public class Parser {
         throw new IllegalArgumentException("Expected IDENTIFIER got " + token);
     }
 
-    private static Block parseBlock(List<Token> tokens) {
+    private static Block parseBlock(ArrayList<Token> tokens) {
         expect(OPEN_BRACE, tokens);
 
         ArrayList<BlockItem> blockItems = new ArrayList<>();
@@ -445,7 +454,7 @@ public class Parser {
         return new Block(blockItems);
     }
 
-    private static While parseWhile(List<Token> tokens) {
+    private static While parseWhile(ArrayList<Token> tokens) {
         expect(WHILE, tokens);
         expect(OPEN_PAREN, tokens);
         Exp condition = parseExp(tokens, 0);
@@ -455,7 +464,7 @@ public class Parser {
     }
 
 
-    private static BlockItem parseBlockItem(List<Token> tokens) {
+    private static BlockItem parseBlockItem(ArrayList<Token> tokens) {
         Token t = tokens.getFirst();
         return t == EXTERN || t == STATIC || isTypeSpecifier(t) ? parseDeclaration(tokens, false) : parseStatement(tokens);
     }
@@ -484,12 +493,12 @@ public class Parser {
                     processAbstractDeclarator(declarator, type);
             case AbstractArrayDeclarator(AbstractDeclarator declarator,
                                          Constant arraySize) ->
-                    processAbstractDeclarator(declarator, new Array(type,arraySize));
+                    processAbstractDeclarator(declarator, new Array(type, arraySize));
         };
     }
 
 
-    private static Exp parseUnaryExp(List<Token> tokens) {
+    private static Exp parseUnaryExp(ArrayList<Token> tokens) {
         // <unary-exp> ::= <unop> <unary-exp>
         //               | "(" { <type-specifier> }+ [ <abstract-declarator> ] ")" <unary-exp>
         //               | <postfix-exp>
@@ -544,7 +553,7 @@ public class Parser {
         };
     }
 
-    private static Exp parsePostfixExp(List<Token> tokens) {
+    private static Exp parsePostfixExp(ArrayList<Token> tokens) {
         // <postfix-exp> ::= <primary-exp> { "[" <exp> "]" }
         Exp exp = parsePrimaryExp(tokens);
         while (tokens.getFirst() == OPEN_BRACKET) {
@@ -566,15 +575,19 @@ public class Parser {
                 case DOUBLE_LITERAL:
                 case LONG_LITERAL:
                 case UNSIGNED_LONG_LITERAL:
-                case UNSIGNED_INT_LITERAL:
+                case UNSIGNED_INT_LITERAL: {
                     Type t = Primitive.fromTokenType((TokenType) tokenType);
                     int len = value.length() - (t == null ? 0 : switch (t) {
-                        case Primitive.LONG, UINT -> 1;
-                        case ULONG -> 2;
+                        case Primitive.LONG, Primitive.UINT -> 1;
+                        case Primitive.ULONG -> 2;
                         default -> 0;
                     });
 
                     return parseConst(value.substring(0, len), t);
+                }
+                case CHAR_LITERAL: {
+                    return new ConstInt(parseChar(value.substring(1, value.length() - 1)));
+                }
                 default:
                     break;
             }
@@ -582,8 +595,36 @@ public class Parser {
         throw new IllegalStateException("expected const, found: " + token);
     }
 
+    private static int parseChar(String s) {
+        int len = s.length();
+        switch (len) {
+            case 2 -> {
+                assert (s.charAt(0) == '\\');
+                char c = s.charAt(1);
+                return switch (c) {
+                    case '\'' -> '\'';
+                    case '\"' -> '\"';
+                    case '?' -> '?';
+                    case '\\' -> '\\';
+                    case 'a' -> 7;
+                    case 'b' -> '\b';
+                    case 'f' -> '\f';
+                    case 'n' -> '\n';
+                    case 'r' -> '\r';
+                    case 't' -> '\t';
+                    case 'v' -> 11;
+                    default -> throw new AssertionError(c);
+                };
+            }
+            case 1 -> {
+                return s.charAt(0);
+            }
+            default -> throw new AssertionError(len);
+        }
+    }
 
-    private static Exp parsePrimaryExp(List<Token> tokens) {
+
+    private static Exp parsePrimaryExp(ArrayList<Token> tokens) {
         // <primary-exp> ::= <const> | <identifier> | "(" <exp> ")"
         //                 | <identifier> "(" [ <argument-list> ] ")"
         return switch (tokens.getFirst()) {
@@ -595,6 +636,9 @@ public class Parser {
             case TokenWithValue(Token tokenType, String value) -> {
 
                 yield switch (tokenType) {
+                    case STRING_LITERAL -> {
+                        yield new Str(parseStr(tokens), null);
+                    }
                     case IDENTIFIER -> {
                         tokens.removeFirst();
 
@@ -634,7 +678,53 @@ public class Parser {
         };
     }
 
-    private static Exp parseExp(List<Token> tokens, int minPrecedence) {
+    private static String parseStr(ArrayList<Token> tokens) {
+        int cslen = 0;
+        int consecutiveStringCount = 0;
+        for (; ; consecutiveStringCount++) {
+            if (tokens.get(consecutiveStringCount) instanceof TokenWithValue(
+                    Token type, String value) && type == STRING_LITERAL) {
+                cslen += value.length();
+            } else break;
+        }
+
+
+        char[] cs = new char[cslen];
+        int toIndex = 0;
+        for (int current = 0; current < consecutiveStringCount; current++) {
+            TokenWithValue twv = (TokenWithValue) tokens.get(current);
+            String value = twv.value();
+            int slen = value.length();
+            for (int i = 0; i < slen; i++) {
+                char c = value.charAt(i);
+                switch (c) {
+                    case '\\' -> {
+                        char next = value.charAt(++i);
+                        cs[toIndex++] = switch (next) {
+                            case '\'' -> '\'';
+                            case '\"' -> '\"';
+                            case '?' -> '?';
+                            case '\\' -> '\\';
+                            case 'a' -> 7;
+                            case 'b' -> '\b';
+                            case 'f' -> '\f';
+                            case 'n' -> '\n';
+                            case 'r' -> '\r';
+                            case 't' -> '\t';
+                            case 'v' -> 11;
+                            default -> throw new AssertionError(next);
+                        };
+                    }
+                    default -> cs[toIndex++] = value.charAt(i);
+
+                }
+            }
+        }
+        tokens.subList(0, consecutiveStringCount).clear();
+        return new String(cs, 0, toIndex);
+    }
+
+    private static Exp parseExp(ArrayList<Token> tokens, int minPrecedence) {
         // <exp> ::= <unary-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":" <exp>
         Exp left = parseUnaryExp(tokens);
         // now peek to see if there is "binop <exp>" or "? <exp> : <exp>
@@ -681,7 +771,7 @@ public class Parser {
         };
     }
 
-    private static ForInit parseForInit(List<Token> tokens) {
+    private static ForInit parseForInit(ArrayList<Token> tokens) {
         Token t = tokens.getFirst();
         if (isTypeSpecifier(t)) return (ForInit) parseDeclaration(tokens, true);
         Exp r = t == SEMICOLON ? null : parseExp(tokens, 0);
@@ -689,7 +779,7 @@ public class Parser {
         return r;
     }
 
-    private static For parseFor(List<Token> tokens) {
+    private static For parseFor(ArrayList<Token> tokens) {
         expect(FOR, tokens);
         expect(OPEN_PAREN, tokens);
         ForInit init = parseForInit(tokens);

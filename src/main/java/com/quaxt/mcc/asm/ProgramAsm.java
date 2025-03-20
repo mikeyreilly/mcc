@@ -1,8 +1,10 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.tacky.CharInit;
 import com.quaxt.mcc.tacky.Jump;
 import com.quaxt.mcc.tacky.LabelIr;
+import com.quaxt.mcc.tacky.UCharInit;
 
 import java.io.PrintWriter;
 import java.util.List;
@@ -116,6 +118,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     case ULongInit(long l) -> "                .quad " + l;
                     case ZeroInit(int bytes) ->
                             "                .zero " + bytes;
+                    default -> throw new Todo("can't handle: " + x);
                 });
             }
         }

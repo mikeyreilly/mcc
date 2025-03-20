@@ -341,6 +341,7 @@ public class Codegen {
             case ConstUInt(int i) -> new Imm(i);
             case ConstULong(long l) -> new Imm(l);
             case ConstDouble(double d) -> resolveConstant(d);
+            default -> throw new Todo("can't yet handle" + val);
         };
     }
 
@@ -366,7 +367,7 @@ public class Codegen {
             case PseudoMem(String pIdentifier, int pOffsetFromStartOfArray):
                 identifier = pIdentifier;
                 offsetFromStartOfArray = pOffsetFromStartOfArray;
-               break;
+                break;
             default:
                 throw new IllegalArgumentException();
         }

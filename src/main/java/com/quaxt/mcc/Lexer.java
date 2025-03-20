@@ -23,9 +23,9 @@ public class Lexer {
                     BECOMES, QUESTION_MARK, COLON, COMMA, AMPERSAND, OPEN_BRACKET,
                     CLOSE_BRACKET};
 
-    public static List<Token> lex(String src) {
+    public static ArrayList<Token> lex(String src) {
         Matcher matcher = IDENTIFIER.regex.matcher(src);
-        List<Token> tokens = new ArrayList<>();
+        ArrayList<Token> tokens = new ArrayList<>();
         outer:
         for (int i = 0; i < src.length(); ) {
             matcher.usePattern(WHITESPACE);
