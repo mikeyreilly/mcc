@@ -1,4 +1,7 @@
 package com.quaxt.mcc;
 
-public sealed interface StaticInit  permits DoubleInit, IntInit, LongInit, UIntInit, ULongInit, ZeroInit {
+import com.quaxt.mcc.tacky.CharInit;
+import com.quaxt.mcc.tacky.UCharInit;
+
+public sealed interface StaticInit permits DoubleInit, IntInit, LongInit, UIntInit, ULongInit, ZeroInit, CharInit, UCharInit {
 }

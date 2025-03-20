@@ -438,6 +438,8 @@ public class IrGen {
             }
 
 
+            default:
+                throw new IllegalStateException("Unexpected value: " + expr);
         }
     }
 

@@ -684,6 +684,8 @@ public class SemanticAnalysis {
                     throw new Err("Subscript must have integer and pointer operands");
                 yield new Subscript(typedE1, typedE2, ptrType.referenced());
             }
+            default ->
+                    throw new Todo("Unexpected value: " + exp);
         };
     }
 
@@ -889,6 +891,8 @@ public class SemanticAnalysis {
                     new Cast(type, resolveExp(e, identifierMap));
             case Subscript(Exp array, Exp index, Type type) ->
                     new Subscript(resolveExp(array, identifierMap), resolveExp(index, identifierMap), type);
+            default ->
+                    throw new Todo("Unexpected value: " + exp);
         };
         return r;
     }

@@ -98,7 +98,7 @@ public class Mcc {
         if (preprocessExitCode != 0) {
             System.exit(preprocessExitCode);
         }
-        List<Token> l = Lexer.lex(Files.readString(intermediateFile));
+        ArrayList<Token> l = Lexer.lex(Files.readString(intermediateFile));
         Files.delete(intermediateFile);
         if (mode == Mode.LEX) {
             return;
