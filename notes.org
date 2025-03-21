@@ -1,0 +1,3 @@
+display array of 3 ints
+
+x/3xw &array_of_pointers

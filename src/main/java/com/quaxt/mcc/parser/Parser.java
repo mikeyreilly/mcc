@@ -586,7 +586,7 @@ public class Parser {
                     return parseConst(value.substring(0, len), t);
                 }
                 case CHAR_LITERAL: {
-                    return new ConstInt(parseChar(value.substring(1, value.length() - 1)));
+                    return new ConstInt(parseChar(value));
                 }
                 default:
                     break;

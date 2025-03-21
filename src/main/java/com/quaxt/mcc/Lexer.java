@@ -43,13 +43,21 @@ public class Lexer {
                 if (matcher.lookingAt()) {
                     int end = matcher.end(tokenType.group());
                     if (tokenType != SINGLE_LINE_COMMENT && tokenType != MULTILINE_COMMENT) {
-                        if (tokenType == IDENTIFIER || tokenType == CHAR_LITERAL
-                                || tokenType == STRING_LITERAL
+
+                        if (tokenType == CHAR_LITERAL    || tokenType == STRING_LITERAL
+                               ){
+                            int start = matcher.start()+1;
+                            String value = src.substring(start, end-1);
+                            Token token = new TokenWithValue(tokenType, value);
+                            tokens.add(token);
+                        }
+                        else if (tokenType == IDENTIFIER
                                 || tokenType == DOUBLE_LITERAL
                                 || tokenType == INT_LITERAL
                                 || tokenType == LONG_LITERAL
                                 || tokenType == UNSIGNED_INT_LITERAL
                                 || tokenType == UNSIGNED_LONG_LITERAL) {
+
                             int start = matcher.start();
                             String value = src.substring(start, end);
                             Token token = switch (value) {

@@ -1,16 +1,16 @@
 * DONE double constants
-* TODO converting doubles and integers
+* DONE converting doubles and integers
 ** DONE convert double to long
-** TODO other conversions
-* TODO handling double function args
+** DONE other conversions
+* DONE handling double function args
 * DONE floating point arithmetic
 ** DONE add, subtract, multiply, divide
 ** DONE negate
-* TODO comparing doubles
+* DONE comparing doubles
 ** DONE greater than works, maybe everything does, will check when functions are done
-* TODO unary instructions, binary instructions and conditional jumps
-* TODO return double
-* TODO handle -lm arg
+* DONE unary instructions, binary instructions and conditional jumps
+* DONE return double
+* DONE handle -lm arg
 
 I'm going to start with just the first two, so that I can make this compile and return the right answer
 
@@ -26,3 +26,12 @@ double multiplication work
 <2025-02-20 Thu 11:13> The above is done - now adding remaining conversions
 <2025-02-20 Thu 13:05> conversions done - now doing function calls
 <2025-02-20 Thu 18:46> function calls with double args done
+
+* DONE <2025-03-21 Fri> ch 16 - the type checker
+
+** DONE char integer promotoions
+** DONE static initializers for char types
+** DONE track whether each string literal should be used directly or converted to pointer
+** DONE track whether each string literal should be null terminated
+
+

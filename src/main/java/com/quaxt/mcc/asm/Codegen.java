@@ -83,6 +83,7 @@ public class Codegen {
                         new ObjEntry(toTypeAsm(v.type()), false, false);
                 case StaticAttributes _ ->
                         new ObjEntry(toTypeAsm(v.type()), true, false);
+                case ConstantAttr constantAttr -> throw new Todo("todo: "+constantAttr);
             });
         }
         for (StaticConstant v : CONSTANT_TABLE.values()) {

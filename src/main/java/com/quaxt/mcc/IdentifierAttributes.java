@@ -1,21 +1,15 @@
 package com.quaxt.mcc;
 
-public sealed interface IdentifierAttributes permits FunAttributes, StaticAttributes, IdentifierAttributes.LocalAttr {
-    boolean defined();
+public sealed interface IdentifierAttributes permits ConstantAttr, FunAttributes, StaticAttributes, IdentifierAttributes.LocalAttr {
+    default boolean defined() {
+        return false;
+    }
 
-    boolean global();
+    default boolean global() {
+        return false;
+    }
 
     enum LocalAttr implements IdentifierAttributes {
         LOCAL_ATTR;
-
-        @Override
-        public boolean defined() {
-            return false;
-        }
-
-        @Override
-        public boolean global() {
-            return false;
-        }
     }
 }
