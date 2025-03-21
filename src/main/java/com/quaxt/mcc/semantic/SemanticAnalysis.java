@@ -3,11 +3,12 @@ package com.quaxt.mcc.semantic;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
+import com.quaxt.mcc.tacky.CharInit;
+import com.quaxt.mcc.tacky.PointerInit;
+import com.quaxt.mcc.tacky.StringInit;
+import com.quaxt.mcc.tacky.UCharInit;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
@@ -15,7 +16,7 @@ import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
-import static com.quaxt.mcc.UnaryOperator.NOT;
+import static com.quaxt.mcc.UnaryOperator.*;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
@@ -182,25 +183,44 @@ public class SemanticAnalysis {
 
             }
             case SingleInit(Exp exp) -> {
-                if (targetType instanceof Array) {
-                    throw new Err("Can't initialize static array with a scalar");
+                if (exp instanceof Str(String s,
+                                       Type _) && targetType instanceof Array(
+                        Type element, Constant arraySize)) {
+                    handleStringLiteral(acc, s, element, arraySize.toInt());
+                } else if (exp instanceof Str(String s,
+                                              Type _) && targetType instanceof Pointer(
+                        Type element)) {
+                    handleStringLiteral(acc, s, element, s.length() + 1);
+                } else {
+                    if (targetType instanceof Array) {
+                        throw new Err("Can't initialize static array with a scalar");
+                    }
+                    acc.add(switch (exp) {
+                        case ConstInt(int i) ->
+                                convertConst(new IntInit(i), targetType);
+                        case ConstLong(long i) ->
+                                convertConst(new LongInit(i), targetType);
+                        case ConstUInt(int i) ->
+                                convertConst(new UIntInit(i), targetType);
+                        case ConstULong(long i) ->
+                                convertConst(new ULongInit(i), targetType);
+                        case ConstDouble(double d) ->
+                                convertConst(new DoubleInit(d), targetType);
+                        default -> throw new Err("Non constant initializer");
+                    });
                 }
-                acc.add(switch (exp) {
-                    case ConstInt(int i) ->
-                            convertConst(new IntInit(i), targetType);
-                    case ConstLong(long i) ->
-                            convertConst(new LongInit(i), targetType);
-                    case ConstUInt(int i) ->
-                            convertConst(new UIntInit(i), targetType);
-                    case ConstULong(long i) ->
-                            convertConst(new ULongInit(i), targetType);
-                    case ConstDouble(double d) ->
-                            convertConst(new DoubleInit(d), targetType);
-                    default -> throw new Err("Non constant initializer");
-                });
             }
         }
-        ;
+    }
+
+    private static void handleStringLiteral(List<StaticInit> acc, String s, Type element, int arrayLen) {
+        if (!element.isCharacter())
+            throw new Err("Can't initialize non-character type with a string literal");
+        if (s.length() > arrayLen)
+            throw new Err("Too many chars in string literal");
+        int zeroCount = arrayLen - s.length();
+        acc.add(new StringInit(s, zeroCount > 0));
+        if (zeroCount > 0) acc.add(new ZeroInit(zeroCount));
     }
 
     private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
@@ -237,6 +257,7 @@ public class SemanticAnalysis {
                     initialValue = TENTATIVE;
             }
         }
+        // when initializing a static pointer with a string
 
         StaticAttributes attrs = new StaticAttributes(initialValue, global);
         SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType, attrs));
@@ -269,6 +290,9 @@ public class SemanticAnalysis {
                 case ULONG -> new ULongInit(doubleToUnsignedLong(d));
                 // casting directly to int would be wrong result for doubles > 2^31
                 case UINT -> new UIntInit((int) (long) d);
+                case CHAR, SCHAR -> new CharInit((int) (long) d & 0xff);
+                case UCHAR ->
+                        new CharInit((int) doubleToUnsignedLong(d) & 0xff);
                 default ->
                         throw new IllegalArgumentException("not a const:" + init);
             };
@@ -290,6 +314,8 @@ public class SemanticAnalysis {
             case INT -> new IntInit((int) initL);
             case ULONG -> new ULongInit(initL);
             case UINT -> new UIntInit((int) initL);
+            case CHAR, SCHAR -> new CharInit((int) initL & 0xff);
+            case UCHAR -> new UCharInit((int) initL & 0xff);
             case Pointer _ -> new ULongInit((int) initL);
             default -> null;
         };
@@ -416,12 +442,23 @@ public class SemanticAnalysis {
         } else if (decl.storageClass() == STATIC) {
             InitialValue initialValue;
             ArrayList<StaticInit> staticInits = new ArrayList<>();
+
             convertCompoundInitializerToStaticInitList(decl.init(), decl.varType(), staticInits);
             initialValue = new Initial(staticInits);
 
-            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
-            //MR-TODO this looks questionable
-            Math.copySign(1, -0.0d);
+            if (isStringLiteralInit(staticInits) && decl.varType() instanceof Pointer(
+                    Type referenced)) {
+                if (referenced == CHAR) {
+                    String uniqueName = Mcc.makeTemporary(decl.name() + ".string.");
+                    /* TODO: this logic is probably not going to handle arrays of char* well*/
+                    SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new ConstInt(strlen(staticInits))), new StaticAttributes(initialValue, false)));
+                    SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false)));
+                } else
+                    throw new Err("Can't initialize pointer to " + referenced + " with string literal");
+            } else
+
+                SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
+            //MR-TODO this looks questionable - just return decl
             return new VarDecl(decl.name(), decl.init(), decl.varType(), decl.storageClass());
         } else {
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
@@ -430,9 +467,40 @@ public class SemanticAnalysis {
         }
     }
 
+    private static boolean isStringLiteralInit(ArrayList<StaticInit> l) {
+        if (l.isEmpty()) {
+            return false;
+        }
+        return l.getFirst() instanceof StringInit;
+    }
+
+    private static int strlen(ArrayList<StaticInit> l) {
+        /*** this logic is probably not going to handle arrays of char* well*/
+        int len = 0;
+        for (StaticInit s : l) {
+            len += switch (s) {
+                case ZeroInit(int bytes) -> bytes;
+                case StringInit(String str, boolean nullTerminated) ->
+                        str.length();
+
+                default -> 0;
+            };
+        }
+        return len;
+    }
+
     private static Initializer typeCheckInit(Initializer init, Type targetType) {
         return switch (init) {
             case SingleInit(Exp exp) -> {
+                if (exp instanceof Str(String s,
+                                       Type _) && targetType instanceof Array(
+                        Type element, Constant arraySize)) {
+                    if (!element.isCharacter())
+                        throw new Err("Can't initialize non-character type with a string literal");
+                    if (s.length() > arraySize.toInt())
+                        throw new Err("Too many chars in string literal");
+                    yield new SingleInit(new Str(s, targetType));
+                }
                 var typeCheckedExp = typeCheckAndConvert(exp);
                 yield new SingleInit(convertByAssignment(typeCheckedExp, targetType));
             }
@@ -469,7 +537,8 @@ public class SemanticAnalysis {
                 yield new CompoundInit(zeros);
             }
             case Primitive primitive -> primitive.zeroInitializer;
-            default -> throw new Todo();
+            case Pointer _ -> ULONG.zeroInitializer;
+            case FunType funType -> throw new AssertionError(funType);
         };
 
     }
@@ -614,6 +683,8 @@ public class SemanticAnalysis {
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
             case Constant constant -> constant;
+            case Str(String s, Type type) ->
+                    new Str(s, new Array(CHAR, new ConstInt(s.length() + 1)));
             case FunctionCall(Var name, List<Exp> args, Type _) -> {
                 Type fType = SYMBOL_TABLE.get(name.name()).type();
                 yield switch (fType) {
@@ -641,11 +712,14 @@ public class SemanticAnalysis {
             }
             case UnaryOp(UnaryOperator op, Exp inner, Type _) -> {
                 Exp typedInner = typeCheckAndConvert(inner);
-                if (op == UnaryOperator.BITWISE_NOT && typedInner.type() == DOUBLE) {
+                if (op == BITWISE_NOT && typedInner.type() == DOUBLE) {
                     fail("can't apply ~ to double");
                 }
                 if (typedInner.type() instanceof Pointer && op != NOT) {
                     fail("Can't apply " + op + " to pointer");
+                }
+                if (op == UNARY_MINUS || op == BITWISE_NOT) {
+                    typedInner = convertTo(typedInner, INT);
                 }
                 yield switch (op) {
                     case NOT -> new UnaryOp(op, typedInner, INT);
@@ -688,8 +762,7 @@ public class SemanticAnalysis {
                     throw new Err("Subscript must have integer and pointer operands");
                 yield new Subscript(typedE1, typedE2, ptrType.referenced());
             }
-            default ->
-                    throw new Todo("Unexpected value: " + exp);
+            default -> throw new Todo("Unexpected value: " + exp);
         };
     }
 
@@ -713,10 +786,12 @@ public class SemanticAnalysis {
     }
 
     private static boolean isLvalue(Exp exp) {
-        return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript;
+        return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript || exp instanceof Str;
     }
 
     private static Type getCommonType(Type t1, Type t2) {
+        if (t1.isCharacter()) t1 = INT;
+        if (t2.isCharacter()) t2 = INT;
         return t1 == t2 ? t1 : t1 == DOUBLE || t2 == DOUBLE ? DOUBLE : t1.size() == t2.size() ? (t1.isSigned() ? t2 : t1) : t1.size() > t2.size() ? t1 : t2;
     }
 
@@ -878,6 +953,7 @@ public class SemanticAnalysis {
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
                     new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap), type);
             case Constant constant -> constant;
+            case Str str -> str;
             case UnaryOp(UnaryOperator op, Exp arg, Type type) ->
                     new UnaryOp(op, resolveExp(arg, identifierMap), type);
             case AddrOf(Exp arg, Type type) ->
@@ -895,8 +971,7 @@ public class SemanticAnalysis {
                     new Cast(type, resolveExp(e, identifierMap));
             case Subscript(Exp array, Exp index, Type type) ->
                     new Subscript(resolveExp(array, identifierMap), resolveExp(index, identifierMap), type);
-            default ->
-                    throw new Todo("Unexpected value: " + exp);
+            default -> throw new Todo("Unexpected value: " + exp);
         };
         return r;
     }
