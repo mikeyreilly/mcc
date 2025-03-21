@@ -16,10 +16,12 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
         return switch (this) {
             case LONG, ULONG, DOUBLE -> 8;
             case INT, UINT -> 4;
+            case CHAR,  UCHAR,  SCHAR -> 1;
             case Array(Type element, Constant arraySize) ->
                     element.size() * arraySize.toInt();
             case Pointer _ -> 8;
-            default -> throw new AssertionError("don't know the size in this case");
+            default ->
+                    throw new AssertionError("don't know the size in this case");
         };
     }
 
@@ -32,7 +34,11 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
     }
 
     default boolean isInteger() {
-        return this == INT || this == LONG || this == UINT || this == ULONG;
+        return this.isCharacter() || this == INT || this == LONG || this == UINT || this == ULONG;
+    }
+
+    default boolean isCharacter() {
+        return this == CHAR || this == UCHAR || this == SCHAR;
     }
 
     /**
@@ -43,7 +49,7 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
      */
     boolean looseEquals(Type other);
 
-    default boolean isScalar(){
-        return this == INT || this == LONG || this == UINT || this == ULONG || this instanceof Pointer;
+    default boolean isScalar() {
+        return this.isInteger() || this instanceof Pointer;
     }
 }

@@ -3,6 +3,8 @@ package com.quaxt.mcc.semantic;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
+import com.quaxt.mcc.tacky.CharInit;
+import com.quaxt.mcc.tacky.UCharInit;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,7 +17,7 @@ import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
-import static com.quaxt.mcc.UnaryOperator.NOT;
+import static com.quaxt.mcc.UnaryOperator.*;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
@@ -265,6 +267,9 @@ public class SemanticAnalysis {
                 case ULONG -> new ULongInit(doubleToUnsignedLong(d));
                 // casting directly to int would be wrong result for doubles > 2^31
                 case UINT -> new UIntInit((int) (long) d);
+                case CHAR, SCHAR -> new CharInit((int) (long) d & 0xff);
+                case UCHAR ->
+                        new CharInit((int) doubleToUnsignedLong(d) & 0xff);
                 default ->
                         throw new IllegalArgumentException("not a const:" + init);
             };
@@ -286,6 +291,8 @@ public class SemanticAnalysis {
             case INT -> new IntInit((int) initL);
             case ULONG -> new ULongInit(initL);
             case UINT -> new UIntInit((int) initL);
+            case CHAR, SCHAR -> new CharInit((int) initL & 0xff);
+            case UCHAR -> new UCharInit((int) initL & 0xff);
             case Pointer _ -> new ULongInit((int) initL);
             default -> null;
         };
@@ -429,6 +436,15 @@ public class SemanticAnalysis {
     private static Initializer typeCheckInit(Initializer init, Type targetType) {
         return switch (init) {
             case SingleInit(Exp exp) -> {
+                if (exp instanceof Str(String s,
+                                       Type _) && targetType instanceof Array(
+                        Type element, Constant arraySize)) {
+                    if (!element.isCharacter())
+                        throw new Err("Can't initialize non-character type with a string literal");
+                    if (s.length() > arraySize.toInt())
+                        throw new Err("Too many chars in string literal");
+                    yield new SingleInit(new Str(s, targetType));
+                }
                 var typeCheckedExp = typeCheckAndConvert(exp);
                 yield new SingleInit(convertByAssignment(typeCheckedExp, targetType));
             }
@@ -610,6 +626,8 @@ public class SemanticAnalysis {
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
             case Constant constant -> constant;
+            case Str(String s, Type type) ->
+                    new Str(s, new Array(CHAR, new ConstInt(s.length() + 1)));
             case FunctionCall(Var name, List<Exp> args, Type _) -> {
                 Type fType = SYMBOL_TABLE.get(name.name()).type();
                 yield switch (fType) {
@@ -637,11 +655,14 @@ public class SemanticAnalysis {
             }
             case UnaryOp(UnaryOperator op, Exp inner, Type _) -> {
                 Exp typedInner = typeCheckAndConvert(inner);
-                if (op == UnaryOperator.BITWISE_NOT && typedInner.type() == DOUBLE) {
+                if (op == BITWISE_NOT && typedInner.type() == DOUBLE) {
                     fail("can't apply ~ to double");
                 }
                 if (typedInner.type() instanceof Pointer && op != NOT) {
                     fail("Can't apply " + op + " to pointer");
+                }
+                if (op == UNARY_MINUS || op == BITWISE_NOT) {
+                    typedInner = convertTo(typedInner, INT);
                 }
                 yield switch (op) {
                     case NOT -> new UnaryOp(op, typedInner, INT);
@@ -684,8 +705,7 @@ public class SemanticAnalysis {
                     throw new Err("Subscript must have integer and pointer operands");
                 yield new Subscript(typedE1, typedE2, ptrType.referenced());
             }
-            default ->
-                    throw new Todo("Unexpected value: " + exp);
+            default -> throw new Todo("Unexpected value: " + exp);
         };
     }
 
@@ -709,10 +729,12 @@ public class SemanticAnalysis {
     }
 
     private static boolean isLvalue(Exp exp) {
-        return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript;
+        return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript || exp instanceof Str;
     }
 
     private static Type getCommonType(Type t1, Type t2) {
+        if (t1.isCharacter()) t1 = INT;
+        if (t2.isCharacter()) t2 = INT;
         return t1 == t2 ? t1 : t1 == DOUBLE || t2 == DOUBLE ? DOUBLE : t1.size() == t2.size() ? (t1.isSigned() ? t2 : t1) : t1.size() > t2.size() ? t1 : t2;
     }
 
@@ -874,6 +896,7 @@ public class SemanticAnalysis {
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
                     new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap), type);
             case Constant constant -> constant;
+            case Str str -> str;
             case UnaryOp(UnaryOperator op, Exp arg, Type type) ->
                     new UnaryOp(op, resolveExp(arg, identifierMap), type);
             case AddrOf(Exp arg, Type type) ->
@@ -891,8 +914,7 @@ public class SemanticAnalysis {
                     new Cast(type, resolveExp(e, identifierMap));
             case Subscript(Exp array, Exp index, Type type) ->
                     new Subscript(resolveExp(array, identifierMap), resolveExp(index, identifierMap), type);
-            default ->
-                    throw new Todo("Unexpected value: " + exp);
+            default -> throw new Todo("Unexpected value: " + exp);
         };
         return r;
     }
