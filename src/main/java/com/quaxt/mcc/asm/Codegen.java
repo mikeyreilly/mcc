@@ -52,6 +52,8 @@ public class Codegen {
                     };
                     topLevels.add(new StaticVariableAsm(name, global, alignment, init));
                 }
+                case com.quaxt.mcc.tacky.StaticConstant sc ->
+                        throw new Todo("StaticConstant");
             }
         }
         topLevels.addAll(CONSTANT_TABLE.values());
@@ -83,7 +85,8 @@ public class Codegen {
                         new ObjEntry(toTypeAsm(v.type()), false, false);
                 case StaticAttributes _ ->
                         new ObjEntry(toTypeAsm(v.type()), true, false);
-                case ConstantAttr constantAttr -> throw new Todo("todo: "+constantAttr);
+                case ConstantAttr constantAttr ->
+                        throw new Todo("todo: " + constantAttr);
             });
         }
         for (StaticConstant v : CONSTANT_TABLE.values()) {
@@ -307,6 +310,7 @@ public class Codegen {
 
     private static TypeAsm toTypeAsm(Type type) {
         return switch (type) {
+            case Primitive.CHAR, Primitive.UCHAR, Primitive.SCHAR -> BYTE;
             case Primitive.INT, Primitive.UINT -> LONGWORD;
             case Primitive.LONG, Primitive.ULONG -> QUADWORD;
             case Primitive.DOUBLE -> DOUBLE;
@@ -335,6 +339,8 @@ public class Codegen {
 
     private static Operand toOperand(ValIr val) {
         return switch (val) {
+            case ConstChar(byte i) -> new Imm(i);
+            case ConstUChar(byte i) -> new Imm(i);
             case ConstInt(int i) -> new Imm(i);
             case VarIr(String identifier) ->
                     valToType(val) instanceof Array ? new PseudoMem(identifier, 0) : new Pseudo(identifier);

@@ -258,9 +258,16 @@ public class SemanticAnalysis {
             }
         }
         // when initializing a static pointer with a string
-
-        StaticAttributes attrs = new StaticAttributes(initialValue, global);
-        SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType, attrs));
+        if (varType instanceof Pointer(Type referenced) && referenced == CHAR) {
+            String uniqueName = Mcc.makeTemporary(decl.name() + ".string.");
+            StringInit stringInit = (StringInit) ((Initial) initialValue).initList().getFirst();
+            SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(CHAR, new ConstInt(stringInit.str().length() + 1)), new ConstantAttr(stringInit)));
+            StaticAttributes attrs = new StaticAttributes(initialValue, global);
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType, attrs));
+        } else {
+            StaticAttributes attrs = new StaticAttributes(initialValue, global);
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType, attrs));
+        }
         return decl;
     }
 
@@ -566,7 +573,7 @@ public class SemanticAnalysis {
         };
     }
 
-    private static Exp typeCheckExpression(Exp exp) {
+    public static Exp typeCheckExpression(Exp exp) {
         return switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right, Type _) -> {
