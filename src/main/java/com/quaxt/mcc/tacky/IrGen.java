@@ -17,9 +17,7 @@ import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
 
-import com.quaxt.mcc.semantic.Pointer;
-import com.quaxt.mcc.semantic.Primitive;
-import com.quaxt.mcc.semantic.Type;
+import com.quaxt.mcc.semantic.*;
 
 public class IrGen {
 
@@ -37,15 +35,22 @@ public class IrGen {
         for (Map.Entry<String, SymbolTableEntry> e : SYMBOL_TABLE.entrySet()) {
             String name = e.getKey();
             SymbolTableEntry value = e.getValue();
-            if (value.attrs() instanceof StaticAttributes(InitialValue init,
-                                                          boolean global)) {
+           switch(value.attrs()){
+               case ConstantAttr(StaticInit init)  -> {
+                   tackyDefs.add(new StaticConstant(name,  value.type(), init));
+               }
+               case FunAttributes funAttributes -> {}
+               case IdentifierAttributes.LocalAttr localAttr -> {}
+               case StaticAttributes(InitialValue init,
+                                     boolean global) -> {
+                   if (init instanceof InitialValue.Tentative) {
+                       tackyDefs.add(new StaticVariable(name, global, value.type(), Collections.singletonList(new ZeroInit(value.type().size()))));
+                   } else if (init instanceof Initial(List<StaticInit> initList)) {
+                       tackyDefs.add(new StaticVariable(name, global, value.type(), initList));
+                   }
+               }
+           }
 
-                if (init instanceof InitialValue.Tentative) {
-                    tackyDefs.add(new StaticVariable(name, global, value.type(), Collections.singletonList(new ZeroInit(value.type().size()))));
-                } else if (init instanceof Initial(List<StaticInit> initList)) {
-                    tackyDefs.add(new StaticVariable(name, global, value.type(), initList));
-                }
-            }
         }
     }
 
@@ -92,8 +97,15 @@ public class IrGen {
                                 case CompoundInit _ ->
                                         offset = assign(name, innerInit, instructions, offset);
                                 case SingleInit(Exp exp) -> {
-                                    var val = emitTackyAndConvert(exp, instructions);
-                                    instructions.add(new CopyToOffset(val, dst, offset));
+
+                                    if (exp instanceof Str(String s, Type type) && type instanceof Array(
+                                            Type _, Constant arraySize)) {
+                                        initializeArrayWithStringLiteral(name, instructions, offset, s, arraySize);
+                                    } else {
+                                        var val = emitTackyAndConvert(exp, instructions);
+                                        instructions.add(new CopyToOffset(val, dst, offset));
+                                    }
+
                                     offset += exp.type().size();
                                 }
                             }
@@ -108,11 +120,35 @@ public class IrGen {
 
             }
             case SingleInit(Exp exp) -> {
-                ExpResult r = assign(name, exp, instructions);
+                // String literal as array initializer p. 440
+                if (exp instanceof Str(String s, Type type) && type instanceof Array(
+                        Type _, Constant arraySize)) {
+                    initializeArrayWithStringLiteral(name, instructions, offset, s, arraySize);
+                } else {
+                    ExpResult r = assign(name, exp, instructions);
+                }
                 offset += exp.type().size();
             }
         }
         return offset;
+    }
+
+    private static void initializeArrayWithStringLiteral(Var name, List<InstructionIr> instructions, int offset, String s, Constant arraySize) {
+        ExpResult lval = emitTacky(name, instructions);
+        switch (lval) {
+            case PlainOperand(VarIr dst) -> {
+                int arrayLen = arraySize.toInt();
+                int howManyCharsToCopy = Math.min(s.length(), arrayLen);
+                for (int i = 0; i < howManyCharsToCopy; i++) {
+                    instructions.add(new CopyToOffset(new ConstChar((byte) (s.charAt(i) & 0xff)), dst, offset + i));
+                }
+                for (int i = howManyCharsToCopy; i < arrayLen; i++) {
+                    instructions.add(new CopyToOffset(ConstChar.zero(), dst, offset + i));
+                }
+            }
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + lval);
+        }
     }
 
 
@@ -249,6 +285,10 @@ public class IrGen {
                 return new PlainOperand(c);
             case ConstDouble c:
                 return new PlainOperand(c);
+            case ConstChar c:
+                return new PlainOperand(c);
+            case ConstUChar c:
+                return new PlainOperand(c);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
                 ValIr c = emitTackyAndConvert(condition, instructions);
@@ -339,7 +379,7 @@ public class IrGen {
                                     } else { // ptr - int
                                         var j = makeTemporary("tmp.", LONG);
                                         instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, other, j));
-                                        instructions.add(new AddPtr( ptr, j, scale, dstName));
+                                        instructions.add(new AddPtr(ptr, j, scale, dstName));
                                     }
                                 }
                                 case ADD ->
@@ -401,7 +441,7 @@ public class IrGen {
                 ExpResult v = emitTacky(inner, instructions);
                 return switch (v) {
                     case PlainOperand(ValIr obj) -> {
-                        assert(expr.type() instanceof Pointer);
+                        assert (expr.type() instanceof Pointer);
                         VarIr dst = makeTemporary("addr.", expr.type());
                         instructions.add(new GetAddress(obj, dst));
                         yield new PlainOperand(dst);
@@ -437,9 +477,15 @@ public class IrGen {
                 return new DereferencedPointer(dstName);
             }
 
-
+            case Str(String s, Type type): {
+                //string literals in expressions p. 441
+                String uniqueName = Mcc.makeTemporary("string.");
+                SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(type, new ConstantAttr(new StringInit(s, true))));
+                return emitTacky(SemanticAnalysis.typeCheckExpression(new AddrOf(new Var(uniqueName, type), null)), instructions);
+            }
             default:
                 throw new IllegalStateException("Unexpected value: " + expr);
+
         }
     }
 

@@ -13,6 +13,7 @@ public record Cmp(TypeAsm type, Operand subtrahend,
     @Override
     public String format(TypeAsm t) {
         return switch (t) {
+            case BYTE -> "cmpb	";
             case LONGWORD -> "cmpl	";
             case QUADWORD -> "cmpq	";
             case DOUBLE -> "comisd	";
