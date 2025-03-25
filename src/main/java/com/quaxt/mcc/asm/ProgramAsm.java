@@ -84,6 +84,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         long init = switch (v.init()) {
             case DoubleInit(double d) -> Double.doubleToLongBits(d);
             case null -> 0L;
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + v.init());
         };
         String name = v.label();
         out.println("                .section .rodata");
