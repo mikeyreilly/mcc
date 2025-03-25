@@ -46,14 +46,11 @@ public class Codegen {
 
                 case StaticVariable(String name, boolean global, Type t,
                                     List<StaticInit> init) -> {
-                    int alignment = switch (t) {
-                        case Primitive.UINT, Primitive.INT -> 4;
-                        default -> 8;
-                    };
-                    topLevels.add(new StaticVariableAsm(name, global, alignment, init));
+
+                    topLevels.add(new StaticVariableAsm(name, global, alignment(t), init));
                 }
-                case com.quaxt.mcc.tacky.StaticConstant sc ->
-                        throw new Todo("StaticConstant");
+                case com.quaxt.mcc.tacky.StaticConstant(String name, Type t, StaticInit init)  ->
+                        topLevels.add(new StaticConstant(name, alignment(t), init));
             }
         }
         topLevels.addAll(CONSTANT_TABLE.values());
@@ -71,6 +68,24 @@ public class Codegen {
         return new ProgramAsm(topLevels);
     }
 
+    private static int alignment(Type t) {
+        return switch (t) {
+            case Array(Type element, Constant arraySize) -> alignment(element);
+            case FunType _ -> 8;
+            case Pointer _ -> 8;
+            case Primitive primitive -> switch(primitive){
+                case CHAR -> 1;
+                case UCHAR -> 1;
+                case SCHAR -> 1;
+                case INT -> 4;
+                case UINT -> 4;
+                case LONG -> 8;
+                case ULONG -> 8;
+                case DOUBLE -> 8;
+            };
+        };
+    }
+
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE = new HashMap<>();
 
     private static void generateBackendSymbolTable() {
@@ -85,8 +100,8 @@ public class Codegen {
                         new ObjEntry(toTypeAsm(v.type()), false, false);
                 case StaticAttributes _ ->
                         new ObjEntry(toTypeAsm(v.type()), true, false);
-                case ConstantAttr constantAttr ->
-                        throw new Todo("todo: " + constantAttr);
+                case ConstantAttr _ ->
+                        new ObjEntry(toTypeAsm(v.type()), true, true);
             });
         }
         for (StaticConstant v : CONSTANT_TABLE.values()) {
