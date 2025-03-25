@@ -576,11 +576,21 @@ public class Codegen {
                     TypeAsm typeAsm = valToAsmType(srcV);
                     ins.add(new Mov(typeAsm, src, dst));
                 }
-                case DoubleToInt(ValIr src, VarIr dst) ->
-                        ins.add(new Cvttsd2si(toTypeAsm(valToType(dst)), toOperand(src), toOperand(dst)));
+                case DoubleToInt(ValIr src, VarIr dst) -> {
+                    var dstType = valToType(dst);
+                    var dstTypeAsm = toTypeAsm(dstType);
+                    if (dstType == Primitive.CHAR || dstType == Primitive.SCHAR) {
+                        ins.add(new Cvttsd2si(LONGWORD, toOperand(src), AX));
+                        ins.add(new Mov(BYTE, AX, toOperand(dst)));
+                    } else
+                        ins.add(new Cvttsd2si(dstTypeAsm, toOperand(src), toOperand(dst)));
+                }
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
                     Type dstType = valToType(dst);
-                    if (dstType == Primitive.INT) {
+                    if (dstType == Primitive.UCHAR) {
+                        ins.add(new Cvttsd2si(LONGWORD, toOperand(src), AX));
+                        ins.add(new Mov(BYTE, AX, toOperand(dst)));
+                    } else if (dstType == Primitive.INT) {
                         ins.add(new Cvttsd2si(QUADWORD, toOperand(src), AX));
                         ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
                     } else {
@@ -606,8 +616,14 @@ public class Codegen {
                     Operand dst = toOperand(dstV);
                     ins.add(new Lea(src, dst));
                 }
-                case IntToDouble(ValIr src, VarIr dst) ->
+                case IntToDouble(ValIr src, VarIr dst) -> {
+                    Type dstType = valToType(dst);
+                    if (dstType == Primitive.CHAR || dstType == Primitive.SCHAR) {
+                        ins.add(new Movsx(BYTE, LONGWORD, toOperand(src), AX));
+                        ins.add(new Cvtsi2sd(LONGWORD, AX, toOperand(dst)));
+                    } else
                         ins.add(new Cvtsi2sd(toTypeAsm(valToType(src)), toOperand(src), toOperand(dst)));
+                }
                 case Jump jump -> ins.add(jump);
                 case JumpIfNotZero(ValIr v, String label) -> {
                     Type type = valToType(v);
@@ -659,7 +675,10 @@ public class Codegen {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);
                     Type dstType = valToType(dstV);
-                    if (dstType == Primitive.INT) {
+                    if (dstType.isCharacter()) {
+                        ins.add(new MovZeroExtend(BYTE, LONGWORD, src, AX));
+                        ins.add(new Cvtsi2sd(LONGWORD, AX, dst));
+                    } else if (dstType == Primitive.INT) {
                         ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
                         ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
                     } else {
