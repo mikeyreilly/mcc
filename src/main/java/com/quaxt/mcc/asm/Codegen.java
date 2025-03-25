@@ -179,11 +179,15 @@ public class Codegen {
             switch (oldInst) {
                 case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
                                    Operand src, Operand dst) -> {
+                    if (src instanceof Imm(long i1)) {
+                        if (srcType == BYTE) src = new Imm(i1 & 0xff);
+                        else if (srcType == LONGWORD) src = new Imm((int) i1);
+                    }
                     if (dst instanceof Reg) {
-                        instructions.set(i, new Mov(LONGWORD, src, dst));
+                        instructions.set(i, new Mov(srcType, src, dst));
                     } else {
-                        instructions.set(i, new Mov(LONGWORD, src, dstReg(QUADWORD)));
-                        instructions.add(i + 1, new Mov(QUADWORD, dstReg(QUADWORD), dst));
+                        instructions.set(i, new Mov(srcType, src, dstReg(dstType)));
+                        instructions.add(i + 1, new Mov(dstType, dstReg(dstType), dst));
                     }
                 }
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
