@@ -49,7 +49,8 @@ public class Codegen {
 
                     topLevels.add(new StaticVariableAsm(name, global, alignment(t), init));
                 }
-                case com.quaxt.mcc.tacky.StaticConstant(String name, Type t, StaticInit init)  ->
+                case com.quaxt.mcc.tacky.StaticConstant(String name, Type t,
+                                                        StaticInit init) ->
                         topLevels.add(new StaticConstant(name, alignment(t), init));
             }
         }
@@ -73,7 +74,7 @@ public class Codegen {
             case Array(Type element, Constant arraySize) -> alignment(element);
             case FunType _ -> 8;
             case Pointer _ -> 8;
-            case Primitive primitive -> switch(primitive){
+            case Primitive primitive -> switch (primitive) {
                 case CHAR -> 1;
                 case UCHAR -> 1;
                 case SCHAR -> 1;
@@ -144,10 +145,12 @@ public class Codegen {
                         new SetCC(cmpOperator, signed, dePseudo(operand, varTable, offset));
                 case Push(Operand operand) ->
                         new Push(dePseudo(operand, varTable, offset));
-                case Movsx(Operand src, Operand dst) ->
-                        new Movsx(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
-                case MovZeroExtend(Operand src, Operand dst) ->
-                        new MovZeroExtend(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
+                case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
+                           Operand dst) ->
+                        new Movsx(srcType, dstType, dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
+                case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
+                                   Operand src, Operand dst) ->
+                        new MovZeroExtend(srcType, dstType, dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
                 case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) ->
                         new Cvttsd2si(dstType, dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
                 case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) ->
@@ -174,7 +177,8 @@ public class Codegen {
         for (int i = instructions.size() - 1; i >= 0; i--) {
             Instruction oldInst = instructions.get(i);
             switch (oldInst) {
-                case MovZeroExtend(Operand src, Operand dst) -> {
+                case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
+                                   Operand src, Operand dst) -> {
                     if (dst instanceof Reg) {
                         instructions.set(i, new Mov(LONGWORD, src, dst));
                     } else {
@@ -260,18 +264,18 @@ public class Codegen {
                         instructions.add(i + 1, new Cmp(typeAsm, srcReg(typeAsm), dst));
                     }
                 }
-                case Movsx(Operand src, Operand dst) -> {
+                case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                     if (src instanceof Imm) {
                         instructions.set(i, new Mov(LONGWORD, src, R10));
                         if (isRam(dst)) {
-                            instructions.add(i + 1, new Movsx(R10, R11));
+                            instructions.add(i + 1, new Movsx(srcType, dstType, R10, R11));
                             instructions.add(i + 2, new Mov(QUADWORD, R11, dst));
                         } else {
-                            instructions.add(i + 1, new Movsx(R10, dst));
+                            instructions.add(i + 1, new Movsx(srcType, dstType, R10, dst));
                         }
                     } else {
                         if (isRam(dst)) {
-                            instructions.set(i, new Movsx(src, R11));
+                            instructions.set(i, new Movsx(srcType, dstType, src, R11));
                             instructions.add(i + 1, new Mov(QUADWORD, R11, dst));
                         }
                     }
@@ -607,11 +611,11 @@ public class Codegen {
                 case LabelIr labelIr -> ins.add(labelIr);
                 case FunCall funCall -> codegenFunCall(funCall, ins);
                 case SignExtendIr(ValIr src, VarIr dst) ->
-                        ins.add(new Movsx(toOperand(src), toOperand(dst)));
+                        ins.add(new Movsx(valToAsmType(src), valToAsmType(dst), toOperand(src), toOperand(dst)));
                 case TruncateIr(ValIr src, VarIr dst) ->
                         ins.add(new Mov(LONGWORD, toOperand(src), toOperand(dst)));
                 case ZeroExtendIr(ValIr src, VarIr dst) ->
-                        ins.add(new MovZeroExtend(toOperand(src), toOperand(dst)));
+                        ins.add(new MovZeroExtend(valToAsmType(src), valToAsmType(dst),toOperand(src), toOperand(dst)));
                 case IntToDouble(ValIr src, VarIr dst) ->
                         ins.add(new Cvtsi2sd(toTypeAsm(valToType(src)), toOperand(src), toOperand(dst)));
                 case DoubleToInt(ValIr src, VarIr dst) ->
@@ -645,7 +649,7 @@ public class Codegen {
                     var dst = toOperand(dstV);
                     Type dstType = valToType(dstV);
                     if (dstType == Primitive.INT) {
-                        ins.add(new MovZeroExtend(src, AX));
+                        ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
                         ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
                     } else {
                         LabelIr label1 = newLabel("outOfRange");

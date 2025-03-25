@@ -170,7 +170,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case Call(String functionName) ->
                         "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
                 case Cdq(TypeAsm t) -> instruction.format(t);
-                case Movsx(Operand src, Operand dst) -> {
+                case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                     String srcF = formatOperand(LONGWORD, instruction, src);
                     String dstF = formatOperand(QUADWORD, instruction, dst);
                     yield "movslq\t" + srcF + ", " + dstF;

@@ -1,4 +1,4 @@
 package com.quaxt.mcc.asm;
 
-public record Movsx(Operand src, Operand dst) implements Instruction {
+public record Movsx(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) implements Instruction {
 }
