@@ -16,7 +16,7 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
         return switch (this) {
             case LONG, ULONG, DOUBLE -> 8;
             case INT, UINT -> 4;
-            case CHAR,  UCHAR,  SCHAR -> 1;
+            case CHAR, UCHAR, SCHAR -> 1;
             case Array(Type element, Constant arraySize) ->
                     element.size() * arraySize.toInt();
             case Pointer _ -> 8;
@@ -26,15 +26,15 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
     }
 
     default boolean unsignedOrDoubleOrPointer() {
-        return this == UINT || this == ULONG | this == DOUBLE || this instanceof Pointer;
+        return this == UINT || this == ULONG || this == UCHAR | this == DOUBLE || this instanceof Pointer;
     }
 
     default boolean isSigned() {
-        return this == INT || this == LONG || this == DOUBLE;
+        return this == INT || this == LONG || this == DOUBLE || this == CHAR || this == SCHAR;
     }
 
     default boolean isInteger() {
-        return this.isCharacter() || this == INT || this == LONG || this == UINT || this == ULONG;
+        return this.isCharacter() || this == INT || this == LONG || this == UINT || this == ULONG || this == CHAR || this == SCHAR || this == UCHAR;
     }
 
     default boolean isCharacter() {

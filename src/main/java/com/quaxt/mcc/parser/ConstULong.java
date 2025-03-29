@@ -5,6 +5,9 @@ import com.quaxt.mcc.semantic.Type;
 import static com.quaxt.mcc.semantic.Primitive.ULONG;
 
 public record ConstULong(long l) implements Constant {
+    public ConstULong(long l){
+        this.l=l;
+    }
     @Override
     public Type type() {
         return ULONG;

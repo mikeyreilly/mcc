@@ -479,7 +479,7 @@ public class Parser {
             else return new ConstLong(v);
         }
         long v = Long.parseUnsignedLong(value);
-        if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && type == Primitive.INT)
+        if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && (type == Primitive.INT || type == Primitive.UINT))
             return new ConstUInt((int) v);
         else return new ConstULong(v);
     }

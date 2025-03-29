@@ -481,7 +481,8 @@ public class IrGen {
                 //string literals in expressions p. 441
                 String uniqueName = Mcc.makeTemporary("string.");
                 SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(type, new ConstantAttr(new StringInit(s, true))));
-                return emitTacky(SemanticAnalysis.typeCheckExpression(new AddrOf(new Var(uniqueName, type), null)), instructions);
+               // return emitTacky(SemanticAnalysis.typeCheckExpression(new AddrOf(new Var(uniqueName, type), null)), instructions);
+                return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions);
             }
             default:
                 throw new IllegalStateException("Unexpected value: " + expr);

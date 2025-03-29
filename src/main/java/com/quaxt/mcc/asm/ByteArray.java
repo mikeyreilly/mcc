@@ -1,3 +1,9 @@
 package com.quaxt.mcc.asm;
 
-public record ByteArray(int size, int alignment) implements TypeAsm {}
+import com.quaxt.mcc.Err;
+
+public record ByteArray(int size, int alignment) implements TypeAsm {
+    public String suffix() {
+        return "q";
+    }
+}
