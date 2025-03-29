@@ -1,15 +1,23 @@
 package com.quaxt.mcc.asm;
 
-public enum PrimitiveTypeAsm implements TypeAsm{
-    BYTE(1), LONGWORD(4), QUADWORD(8), DOUBLE(8);
+import com.quaxt.mcc.Err;
+
+public enum PrimitiveTypeAsm implements TypeAsm {
+    BYTE(1, "b"), LONGWORD(4, "l"), QUADWORD(8, "q"), DOUBLE(8, "sd");
 
     private final int size;
+    private final String suffix;
 
-    PrimitiveTypeAsm(int size) {
+    PrimitiveTypeAsm(int size, String suffix) {
         this.size = size;
+        this.suffix = suffix;
     }
 
     public int size() {
         return size;
+    }
+
+    public String suffix() {
+        return suffix;
     }
 }
