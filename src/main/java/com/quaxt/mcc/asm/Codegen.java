@@ -16,6 +16,7 @@ import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
+import static com.quaxt.mcc.semantic.Primitive.UCHAR;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
 import static com.quaxt.mcc.UnaryOperator.SHR;
 
@@ -71,7 +72,8 @@ public class Codegen {
 
     private static int alignment(Type t) {
         return switch (t) {
-            case Array(Type element, Constant arraySize) -> alignment(element);
+            case Array(Type element, Constant arraySize) ->
+                    t.size() < 16 ? alignment(element) : 16;
             case FunType _ -> 8;
             case Pointer _ -> 8;
             case Primitive primitive -> switch (primitive) {
@@ -179,15 +181,36 @@ public class Codegen {
             switch (oldInst) {
                 case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
                                    Operand src, Operand dst) -> {
-                    if (src instanceof Imm(long i1)) {
-                        if (srcType == BYTE) src = new Imm(i1 & 0xff);
-                        else if (srcType == LONGWORD) src = new Imm((int) i1);
-                    }
-                    if (dst instanceof Reg) {
-                        instructions.set(i, new Mov(srcType, src, dst));
+                    // if srcType is not byte we rewrite as Mov
+                    if (srcType == BYTE) {
+                        //   boolean mustFixSrc = src instanceof Imm;
+                        boolean mustFixDst = !(dst instanceof Reg);
+
+                        if (src instanceof Imm(long i1)) {
+                            src = new Imm(i1 & 0xff);
+                            if (mustFixDst) {
+                                instructions.set(i, new Mov(srcType, src, srcReg(dstType)));
+                                instructions.set(i + 1, new MovZeroExtend(srcType, dstType, srcReg(dstType), dstReg(dstType)));
+                                instructions.set(i + 2, new Mov(dstType, dstReg(dstType), dst));
+                            } else {
+                                instructions.set(i, new Mov(srcType, src, srcReg(dstType)));
+                                instructions.set(i + 1, new MovZeroExtend(srcType, dstType, srcReg(dstType), dst));
+                            }
+                        } else if (mustFixDst) {
+                            instructions.set(i, new MovZeroExtend(srcType, dstType, src, dstReg(dstType)));
+                            instructions.add(i + 1, new Mov(dstType, dstReg(dstType), dst));
+                        }
                     } else {
-                        instructions.set(i, new Mov(srcType, src, dstReg(dstType)));
-                        instructions.add(i + 1, new Mov(dstType, dstReg(dstType), dst));
+                        if (src instanceof Imm(long i1)) {
+                            if (srcType == LONGWORD) src = new Imm((int) i1);
+                        }
+
+                        if (dst instanceof Reg) {
+                            instructions.set(i, new Mov(srcType, src, dst));
+                        } else {
+                            instructions.set(i, new Mov(srcType, src, dstReg(dstType)));
+                            instructions.add(i + 1, new Mov(dstType, dstReg(dstType), dst));
+                        }
                     }
                 }
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
@@ -271,17 +294,17 @@ public class Codegen {
                 case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                            Operand dst) -> {
                     if (src instanceof Imm) {
-                        instructions.set(i, new Mov(LONGWORD, src, R10));
+                        instructions.set(i, new Mov(srcType, src, R10));
                         if (isRam(dst)) {
                             instructions.add(i + 1, new Movsx(srcType, dstType, R10, R11));
-                            instructions.add(i + 2, new Mov(QUADWORD, R11, dst));
+                            instructions.add(i + 2, new Mov(dstType, R11, dst));
                         } else {
                             instructions.add(i + 1, new Movsx(srcType, dstType, R10, dst));
                         }
                     } else {
                         if (isRam(dst)) {
                             instructions.set(i, new Movsx(srcType, dstType, src, R11));
-                            instructions.add(i + 1, new Mov(QUADWORD, R11, dst));
+                            instructions.add(i + 1, new Mov(dstType, R11, dst));
                         }
                     }
                 }
@@ -334,7 +357,7 @@ public class Codegen {
 
     private static TypeAsm toTypeAsm(Type type) {
         return switch (type) {
-            case Primitive.CHAR, Primitive.UCHAR, Primitive.SCHAR -> BYTE;
+            case Primitive.CHAR, UCHAR, Primitive.SCHAR -> BYTE;
             case Primitive.INT, Primitive.UINT -> LONGWORD;
             case Primitive.LONG, Primitive.ULONG -> QUADWORD;
             case Primitive.DOUBLE -> DOUBLE;
@@ -591,7 +614,7 @@ public class Codegen {
                 }
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
                     Type dstType = valToType(dst);
-                    if (dstType == Primitive.UCHAR) {
+                    if (dstType == UCHAR) {
                         ins.add(new Cvttsd2si(LONGWORD, toOperand(src), AX));
                         ins.add(new Mov(BYTE, AX, toOperand(dst)));
                     } else if (dstType == Primitive.INT) {
@@ -621,8 +644,8 @@ public class Codegen {
                     ins.add(new Lea(src, dst));
                 }
                 case IntToDouble(ValIr src, VarIr dst) -> {
-                    Type dstType = valToType(dst);
-                    if (dstType == Primitive.CHAR || dstType == Primitive.SCHAR) {
+                    Type srcType = valToType(src);
+                    if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
                         ins.add(new Movsx(BYTE, LONGWORD, toOperand(src), AX));
                         ins.add(new Cvtsi2sd(LONGWORD, AX, toOperand(dst)));
                     } else
@@ -673,16 +696,22 @@ public class Codegen {
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     ins.add(new Mov(toTypeAsm(valToType(srcV)), src, new Memory(AX, 0)));
                 }
-                case TruncateIr(ValIr src, VarIr dst) ->
-                        ins.add(new Mov(LONGWORD, toOperand(src), toOperand(dst)));
+                case TruncateIr(ValIr srcV, VarIr dstV) -> {
+                    var src = toOperand(srcV);
+                    var dst = toOperand(dstV);
+                    ins.add(new Mov(toTypeAsm(valToType(dstV)), src, dst));
+                }
                 case UIntToDouble(ValIr srcV, ValIr dstV) -> {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);
-                    Type dstType = valToType(dstV);
-                    if (dstType.isCharacter()) {
+                    Type srcType = valToType(srcV);
+                    if (srcType == UCHAR) {
                         ins.add(new MovZeroExtend(BYTE, LONGWORD, src, AX));
                         ins.add(new Cvtsi2sd(LONGWORD, AX, dst));
-                    } else if (dstType == Primitive.INT) {
+                    } else if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
+                        ins.add(new Movsx(BYTE, LONGWORD, src, AX));
+                        ins.add(new Cvtsi2sd(LONGWORD, AX, dst));
+                    } else if (srcType == Primitive.INT) {
                         ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
                         ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
                     } else {

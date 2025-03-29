@@ -218,8 +218,9 @@ public class SemanticAnalysis {
             throw new Err("Can't initialize non-character type with a string literal");
         if (s.length() > arrayLen)
             throw new Err("Too many chars in string literal");
-        int zeroCount = arrayLen - s.length();
-        acc.add(new StringInit(s, zeroCount > 0));
+        // how many zeros past the first one that comes with asciz
+        int zeroCount = arrayLen - s.length() - 1;
+        acc.add(new StringInit(s, zeroCount >= 0));
         if (zeroCount > 0) acc.add(new ZeroInit(zeroCount));
     }
 
@@ -721,7 +722,7 @@ public class SemanticAnalysis {
                 if (typedInner.type() instanceof Pointer && op != NOT) {
                     fail("Can't apply " + op + " to pointer");
                 }
-                if (op == UNARY_MINUS || op == BITWISE_NOT) {
+                if ((op == UNARY_MINUS || op == BITWISE_NOT) && typedInner.type().isCharacter()) {
                     typedInner = convertTo(typedInner, INT);
                 }
                 yield switch (op) {
@@ -793,9 +794,13 @@ public class SemanticAnalysis {
     }
 
     private static Type getCommonType(Type t1, Type t2) {
-        if (t1.isCharacter()) t1 = INT;
-        if (t2.isCharacter()) t2 = INT;
-        return t1 == t2 ? t1 : t1 == DOUBLE || t2 == DOUBLE ? DOUBLE : t1.size() == t2.size() ? (t1.isSigned() ? t2 : t1) : t1.size() > t2.size() ? t1 : t2;
+        t1 = t1.isCharacter() ? INT : t1;
+        t2 = t2.isCharacter() ? INT : t2;
+        if (t1 == t2) return t1;
+        if (t1 == DOUBLE || t2 == DOUBLE) return DOUBLE;
+        if (t1.size() == t2.size()) return t1.isSigned() ? t2 : t1;
+        if (t1.size() > t2.size()) return t1;
+        return t2;
     }
 
     record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}

@@ -1,10 +1,7 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.tacky.CharInit;
-import com.quaxt.mcc.tacky.Jump;
-import com.quaxt.mcc.tacky.LabelIr;
-import com.quaxt.mcc.tacky.UCharInit;
+import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
 import java.util.List;
@@ -45,6 +42,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             return "%" + switch (t) {
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
+                case BYTE -> reg.b;
                 case ByteArray _ -> reg.q;
                 default ->
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
@@ -81,17 +79,43 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     }
 
     private void emitStaticConstantAsm(PrintWriter out, StaticConstant v) {
-        long init = switch (v.init()) {
-            case DoubleInit(double d) -> Double.doubleToLongBits(d);
-            case null -> 0L;
-            default ->
-                    throw new IllegalStateException("Unexpected value: " + v.init());
-        };
         String name = v.label();
         out.println("                .section .rodata");
-        out.println("                .balign " + v.alignment());
+        if (v.alignment() != 1)
+            out.println("                .balign " + v.alignment());
         out.println(".L" + name + ":");
-        out.println("                .quad " + init);
+        writeValue(out, v.init());
+    }
+
+    private static void writeValue(PrintWriter out, StaticInit init) {
+        out.println("                " + switch (init) {
+            case DoubleInit(double d) -> ".quad " + Double.doubleToLongBits(d);
+            case IntInit(int l) -> ".long " + l;
+            case LongInit(long l) -> ".quad " + l;
+            case UIntInit(int l) -> ".long " + Integer.toUnsignedString(l);
+            case ULongInit(long l) -> ".quad " + Long.toUnsignedString(l);
+            case ZeroInit(int l) -> ".zero " + l;
+            case CharInit(int i) -> ".byte " + (i & 0xff);
+            case PointerInit(String label) -> ".quad " + label;
+            case StringInit(String s, boolean nullTerminated) -> {
+                StringBuilder sb = new StringBuilder();
+                sb.append(nullTerminated ? ".asciz \"" : ".ascii \"");
+                for (int i = 0; i < s.length(); i++) {
+                    char c = s.charAt(i);
+                    if (c == '\\') sb.append("\\\\");
+                    else if (c == '\"') sb.append("\\\"");
+                    else if (c == '\n') sb.append("\\n");
+                    else if (c < 32 || c > 126) {
+                        String octal = Integer.toString(c & 0xff, 8);
+                        sb.append("\\000", 0, 4 - octal.length());
+                        sb.append(octal);
+                    } else sb.append(c);
+                }
+                sb.append('\"');
+                yield sb;
+            }
+            case UCharInit(int i) -> ".byte " + (i & 0xff);
+        });
     }
 
     private void emitStaticVariableAsm(PrintWriter out, StaticVariableAsm v) {
@@ -111,17 +135,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             out.println("                .balign " + v.alignment());
             out.println(name + ":");
             for (var x : v.init()) {
-                out.println(switch (x) {
-                    case DoubleInit(double d) ->
-                            "                .quad " + Double.doubleToLongBits(d);
-                    case IntInit(int l) -> "                .long " + l;
-                    case LongInit(long l) -> "                .quad " + l;
-                    case UIntInit(int l) -> "                .long " + l;
-                    case ULongInit(long l) -> "                .quad " + l;
-                    case ZeroInit(int bytes) ->
-                            "                .zero " + bytes;
-                    default -> throw new Todo("can't handle: " + x);
-                });
+                writeValue(out, x);
             }
         }
     }
@@ -170,13 +184,18 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case Call(String functionName) ->
                         "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
                 case Cdq(TypeAsm t) -> instruction.format(t);
-                case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
-                    String srcF = formatOperand(LONGWORD, instruction, src);
-                    String dstF = formatOperand(QUADWORD, instruction, dst);
-                    yield "movslq\t" + srcF + ", " + dstF;
+                case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
+                           Operand dst) -> {
+                    String srcF = formatOperand(srcType, instruction, src);
+                    String dstF = formatOperand(dstType, instruction, dst);
+                    yield "movs" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
                 }
-                case MovZeroExtend movZeroExtend ->
-                        throw new AssertionError("can't happen because movZeroExtend is removed in fixup");
+                case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
+                                   Operand src, Operand dst) -> {
+                    String srcF = formatOperand(srcType, instruction, src);
+                    String dstF = formatOperand(dstType, instruction, dst);
+                    yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
+                }
                 case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
                     String srcF = formatOperand(DOUBLE, instruction, src);
                     String dstF = formatOperand(dstType, instruction, dst);

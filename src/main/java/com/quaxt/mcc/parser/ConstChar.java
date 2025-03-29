@@ -3,7 +3,7 @@ package com.quaxt.mcc.parser;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.ValIr;
 
-import static com.quaxt.mcc.semantic.Primitive.UINT;
+import static com.quaxt.mcc.semantic.Primitive.CHAR;
 
 public record ConstChar(byte i) implements Constant {
     final static ConstChar ZERO = new ConstChar((byte) 0);
@@ -14,7 +14,7 @@ public record ConstChar(byte i) implements Constant {
 
     @Override
     public Type type() {
-        return UINT;
+        return CHAR;
     }
 
     @Override
