@@ -85,6 +85,7 @@ public class Codegen {
                 case LONG -> 8;
                 case ULONG -> 8;
                 case DOUBLE -> 8;
+                case VOID -> throw new Err("no alignment for void");
             };
         };
     }

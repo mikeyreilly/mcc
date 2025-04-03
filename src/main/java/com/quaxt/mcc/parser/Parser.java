@@ -28,6 +28,7 @@ public class Parser {
         Token token = tokens.getFirst();
         if (RETURN == token.type()) {
             tokens.removeFirst();
+            if (tokens.getFirst() == SEMICOLON) return new Return(null);
             Exp exp = parseExp(tokens, 0);
             expect(SEMICOLON, tokens);
             return new Return(exp);
@@ -171,7 +172,7 @@ public class Parser {
             tokens.removeFirst();
             Token firstParam = tokens.getFirst();
             List<ParamInfo> params;
-            if (VOID == firstParam.type()) {
+            if (VOID == firstParam.type() && tokens.get(1) == CLOSE_PAREN) {
                 tokens.removeFirst();
                 expect(CLOSE_PAREN, tokens);
                 params = Collections.emptyList();
@@ -337,7 +338,6 @@ public class Parser {
 
     private static Type parseType(List<Token> types, boolean throwExceptionIfNoType) {
         parseTypeCount++;
-        boolean foundDouble = false;
         boolean foundInt = false;
         boolean foundLong = false;
         boolean foundSigned = false;
@@ -346,8 +346,10 @@ public class Parser {
         for (Token t : types) {
             switch (t) {
                 case DOUBLE -> {
-                    if (foundDouble) fail("invalid type specifier");
-                    else foundDouble = true;
+                    if (types.size() != 1) {
+                        fail("can't combine double with other type specifiers");
+                    }
+                    return Primitive.DOUBLE;
                 }
                 case INT -> {
                     if (foundInt || foundChar) fail("invalid type specifier");
@@ -372,15 +374,15 @@ public class Parser {
                         fail("invalid type specifier");
                     else foundUnsigned = true;
                 }
+                case VOID -> {
+                    if (types.size() > 1)
+                        fail("can't combine void with other type specifiers");
+                    return Primitive.VOID;
+                }
                 default -> fail("invalid type specifier");
             }
         }
-        if (foundDouble) {
-            if (types.size() != 1) {
-                fail("can't combine double with other type specifiers");
-            }
-            return Primitive.DOUBLE;
-        }
+
         if (foundChar)
             return foundSigned ? Primitive.SCHAR : foundUnsigned ? Primitive.UCHAR : Primitive.CHAR;
         else if (foundLong)
@@ -404,16 +406,8 @@ public class Parser {
         return new Program(declarations);
     }
 
-    private static String parseIdentifier(Token identifier) {
-        if (identifier instanceof TokenWithValue(TokenType type,
-                                                 String value) && type == IDENTIFIER) {
-            return value;
-        }
-        throw new IllegalArgumentException("Expected identifier, got " + identifier);
-    }
-
     private static boolean isTypeSpecifier(Token type) {
-        return CHAR == type || INT == type || LONG == type || UNSIGNED == type || SIGNED == type || DOUBLE == type;
+        return CHAR == type || INT == type || LONG == type || UNSIGNED == type || SIGNED == type || DOUBLE == type || VOID == type;
     }
 
     private static Function parseRestOfFunction(ArrayList<String> paramNames, List<Type> paramTypes, ArrayList<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
@@ -500,53 +494,40 @@ public class Parser {
 
     private static Exp parseUnaryExp(ArrayList<Token> tokens) {
         // <unary-exp> ::= <unop> <unary-exp>
-        //               | "(" { <type-specifier> }+ [ <abstract-declarator> ] ")" <unary-exp>
+        //               | "sizeof" <unary-exp>
+        //               | "sizeof" "(" <type-name> ")"
         //               | <postfix-exp>
 
         return switch (tokens.getFirst()) {
             case SUB -> {
                 tokens.removeFirst();
-                yield new UnaryOp(UnaryOperator.UNARY_MINUS, parseUnaryExp(tokens), null);
+                yield new UnaryOp(UnaryOperator.UNARY_MINUS, parseCastExp(tokens), null);
             }
             case BITWISE_NOT -> {
                 tokens.removeFirst();
-                yield new UnaryOp(UnaryOperator.BITWISE_NOT, parseUnaryExp(tokens), null);
+                yield new UnaryOp(UnaryOperator.BITWISE_NOT, parseCastExp(tokens), null);
             }
             case AMPERSAND -> {
                 tokens.removeFirst();
-                yield new AddrOf(parseUnaryExp(tokens), null);
+                yield new AddrOf(parseCastExp(tokens), null);
             }
             case IMUL -> {
                 tokens.removeFirst();
-                yield new Dereference(parseUnaryExp(tokens), null);
+                yield new Dereference(parseCastExp(tokens), null);
             }
             case NOT -> {
                 tokens.removeFirst();
-                yield new UnaryOp(UnaryOperator.NOT, parseUnaryExp(tokens), null);
+                yield new UnaryOp(UnaryOperator.NOT, parseCastExp(tokens), null);
             }
-            case OPEN_PAREN -> {
+            case SIZEOF -> {
                 tokens.removeFirst();
-                TypeAndStorageClass typeSpecifierAndStorageClass = parseTypeAndStorageClass(tokens, false);
-                if (typeSpecifierAndStorageClass != null) {
-                    if (typeSpecifierAndStorageClass.storageClass() != null) {
-                        fail("storage class not allowed in cast");
-                    }
-                    Type type = typeSpecifierAndStorageClass.type();
-                    if (tokens.getFirst() != CLOSE_PAREN) {
-                        AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens);
-                        type = processAbstractDeclarator(abstractDeclarator, type);
-                    }
+                if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens.get(1))) {
+                    tokens.removeFirst();
+                    TypeName typeName = parseTypeName(tokens);
                     expect(CLOSE_PAREN, tokens);
-                    Exp inner = parseUnaryExp(tokens);
-                    if (inner instanceof Assignment) {
-                        fail("lvalue required as left operand of assignment");
-                    }
-                    yield new Cast(type, inner);
-
+                    yield new SizeOfT(typeNameToType(typeName));
                 } else {
-                    Exp r = parseExp(tokens, 0);
-                    expect(CLOSE_PAREN, tokens);
-                    yield r;
+                    yield new SizeOf(parseUnaryExp(tokens));
                 }
             }
             default -> parsePostfixExp(tokens);
@@ -628,17 +609,15 @@ public class Parser {
         // <primary-exp> ::= <const> | <identifier> | "(" <exp> ")"
         //                 | <identifier> "(" [ <argument-list> ] ")"
         return switch (tokens.getFirst()) {
-            case OPEN_BRACKET -> {
-                Exp exp = parseExp(tokens, 0);
-                expect(CLOSE_BRACKET, tokens);
-                yield exp;
-            }
+//            case OPEN_BRACKET -> {
+//                Exp exp = parseExp(tokens, 0);
+//                expect(CLOSE_BRACKET, tokens);
+//                yield exp;
+//            }
             case TokenWithValue(Token tokenType, String value) -> {
 
                 yield switch (tokenType) {
-                    case STRING_LITERAL -> {
-                        yield new Str(parseStr(tokens), null);
-                    }
+                    case STRING_LITERAL -> new Str(parseStr(tokens), null);
                     case IDENTIFIER -> {
                         tokens.removeFirst();
 
@@ -673,6 +652,12 @@ public class Parser {
                     }
                     default -> parseConst(tokens);
                 };
+            }
+            case OPEN_PAREN -> {
+                tokens.removeFirst();
+                Exp exp = parseExp(tokens, 0);
+                expect(CLOSE_PAREN, tokens);
+                yield exp;
             }
             default -> throw new Todo("can't handle:" + tokens.getFirst());
         };
@@ -724,9 +709,45 @@ public class Parser {
         return new String(cs, 0, toIndex);
     }
 
+    private static Exp parseCastExp(ArrayList<Token> tokens) {
+        // <cast-exp> ::= "(" <type-name> ")" <cast-exp>
+        //              | <unary-exp>
+
+        if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens.get(1))) {
+            tokens.removeFirst();
+            TypeName typeName = parseTypeName(tokens);
+            expect(CLOSE_PAREN, tokens);
+            Type type = typeNameToType(typeName);
+            Exp inner = parseCastExp(tokens);
+            return new Cast(type, inner);
+        }
+        return parseUnaryExp(tokens);
+    }
+
+    private static Type typeNameToType(TypeName typeName) {
+        List<Token> typeSpecifiers = typeName.typeSpecifiers();
+        Type t = parseType(typeSpecifiers, true);
+        return processAbstractDeclarator(typeName.abstractDeclarator(), t);
+    }
+
+    record TypeName(List<Token> typeSpecifiers,
+                    AbstractDeclarator abstractDeclarator) {}
+
+    private static TypeName parseTypeName(ArrayList<Token> tokens) {
+        List<Token> typeSpecifiers = new ArrayList<Token>();
+        while (isTypeSpecifier(tokens.getFirst())) {
+            typeSpecifiers.add(tokens.removeFirst());
+        }
+        AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens);
+        return new TypeName(typeSpecifiers, abstractDeclarator);
+    }
+
     private static Exp parseExp(ArrayList<Token> tokens, int minPrecedence) {
-        // <exp> ::= <unary-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":" <exp>
-        Exp left = parseUnaryExp(tokens);
+
+        //to this
+        // <exp> ::= <cast-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":" <exp>
+
+        Exp left = parseCastExp(tokens);
         // now peek to see if there is "binop <exp>" or "? <exp> : <exp>
 
         while (!tokens.isEmpty()) {
