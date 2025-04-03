@@ -35,3 +35,5 @@ double multiplication work
 ** DONE track whether each string literal should be null terminated
 
 
+* ch17
+** TODO <2025-04-03 Thu> take casting out of parseUnaryExp and add support for sizeof (see p. 466)

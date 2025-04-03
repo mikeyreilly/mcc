@@ -8,7 +8,8 @@ import com.quaxt.mcc.tacky.UCharInit;
 public enum Primitive implements Type {
     CHAR(new CharInit(0), new ConstChar((byte)0)), UCHAR(new UCharInit(0), new ConstUChar(0)), SCHAR(new CharInit(0), new ConstChar((byte)0)),
     INT(new IntInit(0), new ConstInt(0)), UINT(new UIntInit(0), new ConstUInt(0)), LONG(new LongInit(0), new ConstLong(0L)),
-    ULONG(new ULongInit(0), new ConstULong(0L)), DOUBLE(new DoubleInit(0), new ConstDouble(0d));
+    ULONG(new ULongInit(0), new ConstULong(0L)), DOUBLE(new DoubleInit(0), new ConstDouble(0d)),
+    VOID(new UIntInit(0), new ConstUInt(0)),;
 
     private final StaticInit zero;
     private final Constant zeroConstant;
