@@ -74,6 +74,7 @@ public class Lexer {
                                 case "long" -> LONG;
                                 case "return" -> RETURN;
                                 case "signed" -> SIGNED;
+                                case "sizeof" -> SIZEOF;
                                 case "static" -> STATIC;
                                 case "unsigned" -> UNSIGNED;
                                 case "void" -> VOID;
