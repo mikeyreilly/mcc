@@ -16,7 +16,7 @@ public enum TokenType implements Token {
             Pattern.DOTALL), 0), UNSIGNED(), SIGNED(),
     CHAR(),
     DOUBLE(), LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
-    BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), STATIC(),
+    BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), SIZEOF(), STATIC(),
     DECREMENT("--"), INCREMENT("\\+\\+"), BITWISE_NOT("~"),
     NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
     COMMA(","), AMPERSAND("&"),OPEN_BRACKET("\\["),CLOSE_BRACKET("\\]");
@@ -67,6 +67,7 @@ public enum TokenType implements Token {
         case MULTILINE_COMMENT -> "multiline_comment";
         case UNSIGNED -> "unsigned";
         case SIGNED -> "signed";
+        case SIZEOF -> "sizeof";
         case CHAR -> "char";
         case DOUBLE -> "double";
         case LONG -> "long";
