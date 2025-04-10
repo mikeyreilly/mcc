@@ -10,6 +10,8 @@ import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
+    private static final String LOCAL_LABEL_PREFIX = Mcc.IS_MAC ? "L" : ".L";
+
     private static void printIndent(PrintWriter out, String s) {
         out.println("\t" + s);
     }
@@ -27,7 +29,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Memory(Reg reg, int offset) -> offset + "(%" + reg.q + ")";
             case Data data -> {
                 boolean isConstant = BACKEND_SYMBOL_TABLE.get(data.identifier()) instanceof ObjEntry e && e.isConstant();
-                yield (isConstant ? ".L" + data.identifier() : data.identifier()) + "(%rip)";
+                yield (isConstant ? LOCAL_LABEL_PREFIX + data.identifier() : data.identifier()) + "(%rip)";
             }
             case DoubleReg reg -> reg.toString();
             case Indexed(Reg base, Reg index, int scale) ->
@@ -75,16 +77,23 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
 
 
         out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0\"");
-        out.println("                .section	.note.GNU-stack,\"\",@progbits");
+	if (!Mcc.IS_MAC)
+           out.println("                .section	.note.GNU-stack,\"\",@progbits");
     }
 
     private void emitStaticConstantAsm(PrintWriter out, StaticConstant v) {
         String name = v.label();
-        out.println("                .section .rodata");
+        String section = Mcc.IS_MAC ?
+                (v.alignment() > 8 ? "                .literal16"
+                        : "                .literal8")
+                :"                .section .rodata";
+        out.println(section);
         if (v.alignment() != 1)
             out.println("                .balign " + v.alignment());
-        out.println(".L" + name + ":");
+        out.println(LOCAL_LABEL_PREFIX + name + ":");
         writeValue(out, v.init());
+        if (Mcc.IS_MAC && v.alignment() == 16 && v.init() instanceof DoubleInit)
+            out.println("                .quad 0");
     }
 
     private static void writeValue(PrintWriter out, StaticInit init) {
@@ -143,9 +152,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private void emitFunctionAsm(PrintWriter out, FunctionAsm functionAsm) {
         String name = functionAsm.name();
         if (functionAsm.global())
-            out.println("                .globl	" + name);
+            out.println("                .globl	" + formatFunctionName(name));
         out.println("                .text");
-        out.println(name + ":");
+        out.println(formatFunctionName(name) + ":");
         List<Instruction> instructions = functionAsm.instructions();
         printIndent(out, "pushq\t%rbp");
         printIndent(out, "movq\t%rsp, %rbp");
@@ -182,7 +191,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                            String label) ->
                         "j" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + label;
                 case Call(String functionName) ->
-                        "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
+                        "call\t" + formatFunctionName(Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
                 case Cdq(TypeAsm t) -> instruction.format(t);
                 case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                            Operand dst) -> {
@@ -215,6 +224,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
 
         }
 
+    }
+
+    private String formatFunctionName(String name) {
+        return Mcc.IS_MAC ? '_' +name : name;
     }
 
 }

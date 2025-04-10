@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class Mcc {
+    public static final boolean IS_MAC = System.getProperty("os.name").equals("Mac OS X");
 
     public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>(){
         @Override
