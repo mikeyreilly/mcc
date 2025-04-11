@@ -557,6 +557,14 @@ public class SemanticAnalysis {
         if (t.looseEquals(targetType)) return e;
         if ((isArithmeticType(t) && isArithmeticType(targetType)) || (isNullPointerConstant(e) && targetType instanceof Pointer))
             return convertTo(e, targetType);
+        if (targetType instanceof Pointer(
+                Type referenced) && referenced == VOID && e.type() instanceof Pointer) {
+            return convertTo(e, targetType);
+        }
+        if (e.type() instanceof Pointer(
+                Type referenced) && referenced == VOID && targetType instanceof Pointer) {
+            return convertTo(e, targetType);
+        }
         throw new Err("Cannot convert type for assignment");
     }
 
@@ -776,6 +784,9 @@ public class SemanticAnalysis {
         if (t1.equals(t2)) return t1;
         if (isNullPointerConstant(e1)) return t2;
         if (isNullPointerConstant(e2)) return t1;
+        var pv = new Pointer(VOID);
+        if (t1.equals(pv) && t2 instanceof Pointer) return pv;
+        if (t2.equals(pv) && t1 instanceof Pointer) return pv;
         throw new Err("Expressions have incompatible types");
     }
 
