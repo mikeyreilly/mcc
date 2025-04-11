@@ -50,6 +50,11 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
     boolean looseEquals(Type other);
 
     default boolean isScalar() {
-        return this.isInteger() || this instanceof Pointer;
+        return switch(this) {
+            case Array _-> false;
+            case FunType _ -> false;
+            case VOID -> false;
+            default -> true;
+        };
     }
 }

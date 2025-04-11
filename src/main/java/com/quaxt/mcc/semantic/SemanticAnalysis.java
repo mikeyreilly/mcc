@@ -1,7 +1,6 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.tacky.CharInit;
 import com.quaxt.mcc.tacky.PointerInit;
@@ -179,8 +178,6 @@ public class SemanticAnalysis {
                     case Pointer _, FunType _, Primitive _ ->
                             throw new Err("illegal compound initializer for scalar type:" + targetType);
                 }
-                ;
-
             }
             case SingleInit(Exp exp) -> {
                 if (exp instanceof Str(String s,
@@ -227,6 +224,9 @@ public class SemanticAnalysis {
     private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
         InitialValue initialValue;
         var varType = decl.varType();
+        if (varType == VOID) {
+            fail("Can't declare void variable");
+        }
         if (decl.init() == null)
             initialValue = decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
         else {
@@ -234,6 +234,7 @@ public class SemanticAnalysis {
             convertCompoundInitializerToStaticInitList(decl.init(), varType, staticInits);
             initialValue = new Initial(staticInits);
         }
+        validateTypeSpecifier(varType);
         if (varType instanceof Pointer && decl.init() instanceof SingleInit(
                 Exp exp) && exp instanceof Constant c && !isNullPointerConstant(c)) {
             throw new Err("Cannot convert type for assignment");
@@ -331,12 +332,19 @@ public class SemanticAnalysis {
 
 
     private static Function typeCheckFunctionDeclaration(Function decl, boolean blockScope) {
-        if (decl.funType().ret() instanceof Array) {
+        Type ret = decl.funType().ret();
+        if (ret instanceof Array) {
             fail("A function cannot return an array");
         }
+        validateTypeSpecifier(ret);
         List<Type> oldParams = decl.funType().params();
         ArrayList<Type> adjustedParams = new ArrayList<>(oldParams.size());
-        for (Type p : oldParams) {
+        for (int i = 0; i < oldParams.size(); i++) {
+            Type p = oldParams.get(i);
+            validateTypeSpecifier(p);
+            if (p == VOID) {
+                fail("named parameter " + (i + 1) + " is void");
+            }
             adjustedParams.add(arrayToPointer(p));
         }
         if (blockScope && decl.storageClass() == STATIC) {
@@ -346,7 +354,7 @@ public class SemanticAnalysis {
         boolean global = decl.storageClass() != STATIC;
         SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
         boolean alreadyDefined = false;
-        FunType funType = new FunType(adjustedParams, decl.funType().ret());
+        FunType funType = new FunType(adjustedParams, ret);
         if (oldEntry instanceof SymbolTableEntry(Type oldType,
                                                  IdentifierAttributes _)) {
             if (oldType instanceof FunType) {
@@ -410,31 +418,69 @@ public class SemanticAnalysis {
             }
             case Block block -> typeCheckBlock(block, enclosingFunction);
             case DoWhile(Statement whileBody, Exp condition, String label) ->
-                    new DoWhile((Statement) typeCheckBlockItem(whileBody, enclosingFunction), typeCheckAndConvert(condition), label);
+                    new DoWhile((Statement) typeCheckBlockItem(whileBody, enclosingFunction), requireScalar(typeCheckAndConvert(condition)), label);
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String label) -> new For(switch (init) {
                 case null -> null;
                 case Exp exp -> typeCheckAndConvert(exp);
                 case VarDecl varDecl ->
                         typeCheckLocalVariableDeclaration(varDecl);
-            }, typeCheckAndConvert(condition), typeCheckAndConvert(post), (Statement) typeCheckBlockItem(body, enclosingFunction), label);
+            }, requireScalar(typeCheckAndConvert(condition)), typeCheckAndConvert(post), (Statement) typeCheckBlockItem(body, enclosingFunction), label);
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
-                    new If(typeCheckAndConvert(condition), (Statement) typeCheckBlockItem(ifTrue, enclosingFunction), (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
+                    new If(requireScalar(typeCheckAndConvert(condition)), (Statement) typeCheckBlockItem(ifTrue, enclosingFunction), (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
 
             case Return(Exp exp) -> {
                 Type returnType = enclosingFunction.funType().ret();
+                if (returnType == VOID) {
+                    if (exp != null) {
+                        fail("Can't return value from void function");
+                    }
+                    yield blockItem;
+                }
+                if (exp == null) {
+                    fail("non-void function must return a value");
+                }
                 yield new Return(convertByAssignment(typeCheckAndConvert(exp), returnType));
 
             }
             case While(Exp condition, Statement whileBody, String label) ->
-                    new While(typeCheckAndConvert(condition), (Statement) typeCheckBlockItem(whileBody, enclosingFunction), label);
+                    new While(requireScalar(typeCheckAndConvert(condition)), (Statement) typeCheckBlockItem(whileBody, enclosingFunction), label);
             case NullStatement _, Continue _, Break _ -> blockItem;
             case null -> null;
 
         };
     }
 
+    private static Exp requireScalar(Exp exp) {
+        if (!exp.type().isScalar()) {
+            fail("Scalar required here");
+        }
+        return exp;
+    }
+
+
+    private static void validateTypeSpecifier(Type type) {
+        switch (type) {
+            case Array(Type element, Constant arraySize) -> {
+                if (!isComplete(element))
+                    throw new Err("Illegal array of incomplete type");
+                validateTypeSpecifier(element);
+            }
+            case FunType(List<Type> params, Type ret) -> {
+                validateTypeSpecifier(ret);
+                for (Type p : params) {
+                    validateTypeSpecifier(p);
+                }
+            }
+            case Pointer(Type element) -> validateTypeSpecifier(element);
+            default -> {}
+        }
+    }
+
+
     private static VarDecl typeCheckLocalVariableDeclaration(VarDecl decl) {
+        validateTypeSpecifier(decl.varType());
+        if (decl.varType() == VOID) fail("Can't declare void variable");
         if (decl.storageClass() == EXTERN) {
             if (decl.init() != null)
                 fail("Initializer on local extern variable declaration");
@@ -483,7 +529,7 @@ public class SemanticAnalysis {
     }
 
     private static int strlen(ArrayList<StaticInit> l) {
-        /*** this logic is probably not going to handle arrays of char* well*/
+        /* this logic is probably not going to handle arrays of char* well*/
         int len = 0;
         for (StaticInit s : l) {
             len += switch (s) {
@@ -561,11 +607,19 @@ public class SemanticAnalysis {
         if (t.looseEquals(targetType)) return e;
         if ((isArithmeticType(t) && isArithmeticType(targetType)) || (isNullPointerConstant(e) && targetType instanceof Pointer))
             return convertTo(e, targetType);
+        if (targetType instanceof Pointer(
+                Type referenced) && referenced == VOID && e.type() instanceof Pointer) {
+            return convertTo(e, targetType);
+        }
+        if (e.type() instanceof Pointer(
+                Type referenced) && referenced == VOID && targetType instanceof Pointer) {
+            return convertTo(e, targetType);
+        }
         throw new Err("Cannot convert type for assignment");
     }
 
     private static boolean isArithmeticType(Type t) {
-        return t instanceof Primitive;
+        return t instanceof Primitive && t != VOID;
     }
 
     private static Exp typeCheckAndConvert(Exp exp) {
@@ -588,6 +642,9 @@ public class SemanticAnalysis {
                 Exp typedRight = typeCheckAndConvert(right);
                 Type leftType = typedLeft.type();
                 Exp convertedRight = convertByAssignment(typedRight, leftType);
+                if (typedRight.type() == VOID) {
+                    fail("can't assign void");
+                }
                 yield new Assignment(typedLeft, convertedRight, leftType);
             }
             case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
@@ -596,7 +653,12 @@ public class SemanticAnalysis {
                 Exp typedE2 = typeCheckAndConvert(e2);
                 Type t1 = typedE1.type();
                 Type t2 = typedE2.type();
-                Type commonType = t1 instanceof Pointer || t2 instanceof Pointer ? getCommonPointerType(typedE1, typedE2) : getCommonType(t1, t2);
+                Type commonType;
+                if (t1 instanceof Pointer || t2 instanceof Pointer)
+                    commonType = getCommonPointerType(typedE1, typedE2);
+                else if (isArithmeticType(t1) && isArithmeticType(t2)) {
+                    commonType = getCommonType(t1, t2);
+                } else throw new Err("Invalid operands to equality expression");
                 Exp convertedE1 = convertTo(typedE1, commonType);
                 Exp convertedE2 = convertTo(typedE2, commonType);
                 yield new BinaryOp(op, convertedE1, convertedE2, INT);
@@ -614,10 +676,10 @@ public class SemanticAnalysis {
                     Exp convertedE2 = convertTo(typedE2, commonType);
 
                     yield new BinaryOp(op, convertedE1, convertedE2, commonType);
-                } else if (t1 instanceof Pointer && t2.isInteger()) {
+                } else if (isPointerToComplete(t1) && t2.isInteger()) {
                     var convertedE2 = convertTo(typedE2, LONG);
                     yield new BinaryOp(ADD, typedE1, convertedE2, t1);
-                } else if (t1.isInteger() && t2 instanceof Pointer) {
+                } else if (t1.isInteger() && isPointerToComplete(t2)) {
                     var convertedE1 = convertTo(typedE1, LONG);
                     yield new BinaryOp(ADD, convertedE1, typedE2, t2);
                 } else throw new Err("Invalid operands for addition");
@@ -634,21 +696,25 @@ public class SemanticAnalysis {
                     Exp convertedE1 = convertTo(typedE1, commonType);
                     Exp convertedE2 = convertTo(typedE2, commonType);
                     yield new BinaryOp(op, convertedE1, convertedE2, commonType);
-                } else if (t1 instanceof Pointer && t2.isInteger()) {
+                } else if (isPointerToComplete(t1) && t2.isInteger()) {
                     var convertedE2 = convertTo(typedE2, LONG);
                     yield new BinaryOp(SUB, typedE1, convertedE2, t1);
-                } else if (t1 instanceof Pointer && t1.equals(t2)) {
+                } else if (isPointerToComplete(t1) && t1.equals(t2)) {
                     yield new BinaryOp(SUB, typedE1, typedE2, LONG);
                 } else throw new Err("Invalid operands for subtraction");
             }
             case BinaryOp(BinaryOperator op, Exp e1, Exp e2, Type _) -> {
                 Exp typedE1 = typeCheckAndConvert(e1);
                 Exp typedE2 = typeCheckAndConvert(e2);
+                Type t1 = typedE1.type();
+                Type t2 = typedE2.type();
+                if (!t1.isScalar() || !t2.isScalar()) {
+                    fail("Non-scalar operand illegal here");
+                }
+
                 if (op == AND || op == OR) {
                     yield new BinaryOp(op, typedE1, typedE2, INT);
                 }
-                Type t1 = typedE1.type();
-                Type t2 = typedE2.type();
                 if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE)) || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
                     fail("invalid operands to binary % (have ‘" + t1 + "’ and ‘" + t2 + "’");
 
@@ -674,20 +740,36 @@ public class SemanticAnalysis {
 
             }
             case Cast(Type type, Exp inner) -> {
+                validateTypeSpecifier(type);
                 Exp typedInner = typeCheckAndConvert(inner);
+                if (type == VOID) yield new Cast(type, typedInner);
+                if (!type.isScalar()) {
+                    fail("Can only cast to scalar type or void");
+                }
                 Type innerType = typedInner.type();
+                if (!innerType.isScalar()) {
+                    fail("Cannot cast non-scalar expression to scalar type");
+                }
+
                 if ((type instanceof Array) || (type instanceof Pointer && innerType == DOUBLE || innerType instanceof Pointer && type == DOUBLE))
                     throw new Err("illegal cast:" + innerType + "->" + type);
                 yield new Cast(type, typedInner);
             }
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type _) -> {
-                Exp typedCondition = typeCheckAndConvert(condition);
+                Exp typedCondition = requireScalar(typeCheckAndConvert(condition));
                 Exp typedIfTrue = typeCheckAndConvert(ifTrue);
                 Exp typedIfFalse = typeCheckAndConvert(ifFalse);
                 Type t1 = typedIfTrue.type();
                 Type t2 = typedIfFalse.type();
-                Type commonType = t1 instanceof Pointer || t2 instanceof Pointer ? getCommonPointerType(typedIfTrue, typedIfFalse) : getCommonType(t1, t2);
+                Type commonType;
+                if (t1 == VOID && t2 == VOID) commonType = VOID;
+                else if (t1 instanceof Pointer || t2 instanceof Pointer)
+                    commonType = getCommonPointerType(typedIfTrue, typedIfFalse);
+                else if (isArithmeticType(t1) && isArithmeticType(t1))
+                    commonType = getCommonType(t1, t2);
+                else
+                    throw new Err("Can't convert branches of conditional to a common type");
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
             case Constant constant -> constant;
@@ -720,6 +802,8 @@ public class SemanticAnalysis {
             }
             case UnaryOp(UnaryOperator op, Exp inner, Type _) -> {
                 Exp typedInner = typeCheckAndConvert(inner);
+                if (!typedInner.type().isScalar())
+                    fail("can't apply " + op + " to non scalar type");
                 if (op == BITWISE_NOT && typedInner.type() == DOUBLE) {
                     fail("can't apply ~ to double");
                 }
@@ -760,18 +844,41 @@ public class SemanticAnalysis {
                 var t1 = typedE1.type();
                 var t2 = typedE2.type();
                 Pointer ptrType;
-                if (t1 instanceof Pointer p && t2.isInteger()) {
+                if (t1 instanceof Pointer p && t2.isInteger() && isPointerToComplete(t1)) {
                     ptrType = p;
                     typedE2 = convertTo(typedE2, LONG);
-                } else if (t1.isInteger() && t2 instanceof Pointer p) {
+                } else if (t1.isInteger() && t2 instanceof Pointer p && isPointerToComplete(t2)) {
                     ptrType = p;
                     typedE1 = convertTo(typedE1, LONG);
                 } else
-                    throw new Err("Subscript must have integer and pointer operands");
+                    throw new Err("Subscript must have integer and pointer (to complete type) operands");
                 yield new Subscript(typedE1, typedE2, ptrType.referenced());
             }
-            default -> throw new Todo("Unexpected value: " + exp);
+            //    default -> throw new Todo("Unexpected value: " + exp);
+            case SizeOf(Exp e) -> {
+                Exp typedE = typeCheckExpression(e);
+                if (!isComplete(typedE.type())) {
+                    fail("Complete type required here");
+                }
+                yield new SizeOf(typedE);
+            }
+            case SizeOfT(Type typeToSize) -> {
+                validateTypeSpecifier(typeToSize);
+                if (!isComplete(typeToSize)) {
+                    fail("Complete type required here");
+                }
+                yield exp;
+            }
         };
+    }
+
+
+    private static boolean isComplete(Type t) {
+        return t != VOID;
+    }
+
+    private static boolean isPointerToComplete(Type t1) {
+        return t1 instanceof Pointer(Type referenced) && isComplete(referenced);
     }
 
     private static Type getCommonPointerType(Exp e1, Exp e2) {
@@ -780,6 +887,10 @@ public class SemanticAnalysis {
         if (t1.equals(t2)) return t1;
         if (isNullPointerConstant(e1)) return t2;
         if (isNullPointerConstant(e2)) return t1;
+        if (t1 instanceof Pointer(Type r1) && t2 instanceof Pointer(Type r2)) {
+            if (r1 == VOID) return t1;
+            if (r2 == VOID) return t2;
+        }
         throw new Err("Expressions have incompatible types");
     }
 
@@ -983,7 +1094,8 @@ public class SemanticAnalysis {
                     new Cast(type, resolveExp(e, identifierMap));
             case Subscript(Exp array, Exp index, Type type) ->
                     new Subscript(resolveExp(array, identifierMap), resolveExp(index, identifierMap), type);
-            default -> throw new Todo("Unexpected value: " + exp);
+            case SizeOf(Exp e) -> new SizeOf(resolveExp(e, identifierMap));
+            case SizeOfT(Type _) -> exp;
         };
         return r;
     }
