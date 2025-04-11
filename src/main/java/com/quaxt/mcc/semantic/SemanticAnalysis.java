@@ -419,6 +419,15 @@ public class SemanticAnalysis {
 
             case Return(Exp exp) -> {
                 Type returnType = enclosingFunction.funType().ret();
+                if (returnType == VOID) {
+                    if (exp != null) {
+                        fail("Can't return value from void function");
+                    }
+                    yield blockItem;
+                }
+                if (exp == null) {
+                    fail("non-void function must return a value");
+                }
                 yield new Return(convertByAssignment(typeCheckAndConvert(exp), returnType));
 
             }
