@@ -19,7 +19,7 @@ public record ConstULong(long l) implements Constant {
     }
 
 
-    public int toInt() {
-        return (int)l;
+    public long toLong() {
+        return l;
     }
 }

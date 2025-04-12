@@ -10,7 +10,7 @@ public record ConstInt(int i) implements Constant {
         return INT;
     }
 
-    public int toInt() {
+    public long toLong() {
         return i;
     }
 }

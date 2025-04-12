@@ -138,12 +138,12 @@ public class IrGen {
         ExpResult lval = emitTacky(name, instructions);
         switch (lval) {
             case PlainOperand(VarIr dst) -> {
-                int arrayLen = arraySize.toInt();
-                int howManyCharsToCopy = Math.min(s.length(), arrayLen);
+                long arrayLen = arraySize.toLong();
+                long howManyCharsToCopy = Math.min(s.length(), arrayLen);
                 for (int i = 0; i < howManyCharsToCopy; i++) {
                     instructions.add(new CopyToOffset(new ConstChar((byte) (s.charAt(i) & 0xff)), dst, offset + i));
                 }
-                for (int i = howManyCharsToCopy; i < arrayLen; i++) {
+                for (long i = howManyCharsToCopy; i < arrayLen; i++) {
                     instructions.add(new CopyToOffset(ConstChar.zero(), dst, offset + i));
                 }
             }
@@ -368,7 +368,7 @@ public class IrGen {
                         VarIr dstName = makeTemporary("tmp.", expr.type());
                         ValIr ptr = null;
                         ValIr other = null;
-                        int scale = 0;
+                        long scale = 0;
                         if (left.type() instanceof Pointer(Type referenced)) {
                             ptr = v1;
                             other = v2;
@@ -386,15 +386,15 @@ public class IrGen {
                                         // ptr - ptr (left has to be pointer because type checker doesn't allow non-ptr - ptr)
                                         var diff = makeTemporary("tmp.", LONG);
                                         instructions.add(new BinaryIr(SUB, ptr, other, diff));
-                                        instructions.add(new BinaryIr(DIVIDE, diff, new ConstInt(scale), dstName));
+                                        instructions.add(new BinaryIr(DIVIDE, diff, new ConstInt((int)scale), dstName));
                                     } else { // ptr - int
                                         var j = makeTemporary("tmp.", LONG);
                                         instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, other, j));
-                                        instructions.add(new AddPtr(ptr, j, scale, dstName));
+                                        instructions.add(new AddPtr(ptr, j, (int)scale, dstName));
                                     }
                                 }
                                 case ADD ->
-                                        instructions.add(new AddPtr(ptr, other, scale, dstName));
+                                        instructions.add(new AddPtr(ptr, other, (int)scale, dstName));
 
                                 case CmpOperator _ ->
                                         instructions.add(new BinaryIr(op, v1, v2, dstName));
@@ -468,7 +468,7 @@ public class IrGen {
                 VarIr dstName = makeTemporary("tmp.", new Pointer(expr.type()));
                 ValIr ptr;
                 ValIr other;
-                int scale;
+                long scale;
                 // type checker ensures either left or right will be pointer
                 // but it could also swap the left and right when they are in the
                 // "wrong" (index-first) order and it would make this code simpler.
@@ -484,7 +484,7 @@ public class IrGen {
                     other = v1;
                     scale = referenced.size();
                 } else throw new AssertionError("");
-                instructions.add(new AddPtr(ptr, other, scale, dstName));
+                instructions.add(new AddPtr(ptr, other, (int)scale, dstName));
                 return new DereferencedPointer(dstName);
             }
 

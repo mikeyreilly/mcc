@@ -12,13 +12,13 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
         throw new Err(this + " has no zero");
     }
 
-    default int size() {
+    default long size() {
         return switch (this) {
             case LONG, ULONG, DOUBLE -> 8;
             case INT, UINT -> 4;
             case CHAR, UCHAR, SCHAR, VOID -> 1;
             case Array(Type element, Constant arraySize) ->
-                    element.size() * arraySize.toInt();
+                    element.size() * arraySize.toLong();
             case Pointer _ -> 8;
             default ->
                     throw new AssertionError("don't know the size in this case");

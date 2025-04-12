@@ -1,4 +1,4 @@
 package com.quaxt.mcc;
 
-public record ZeroInit(int bytes) implements StaticInit {
+public record ZeroInit(long bytes) implements StaticInit {
 }
