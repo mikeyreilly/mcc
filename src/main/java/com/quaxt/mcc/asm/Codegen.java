@@ -499,9 +499,11 @@ public class Codegen {
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD, new Imm(bytesToRemove), SP));
             }
-            TypeAsm returnType = valToAsmType(dst);
+            if (dst != null) {// dst is null for void functions
+                TypeAsm returnType = valToAsmType(dst);
 
-            instructionAsms.add(new Mov(returnType, returnType == DOUBLE ? XMM0 : AX, toOperand(dst)));
+                instructionAsms.add(new Mov(returnType, returnType == DOUBLE ? XMM0 : AX, toOperand(dst)));
+            }
         }
     }
 
@@ -684,9 +686,11 @@ public class Codegen {
                     ins.add(new Mov(toTypeAsm(dstType), new Memory(AX, 0), dst));
                 }
                 case ReturnIr(ValIr val) -> {
-                    Operand src1 = toOperand(val);
-                    TypeAsm returnType = valToAsmType(val);
-                    ins.add(new Mov(returnType, src1, returnType == DOUBLE ? XMM0 : AX));
+                    if (val != null) {
+                        Operand src1 = toOperand(val);
+                        TypeAsm returnType = valToAsmType(val);
+                        ins.add(new Mov(returnType, src1, returnType == DOUBLE ? XMM0 : AX));
+                    }
                     ins.add(RET);
                 }
                 case SignExtendIr(ValIr src, VarIr dst) ->
