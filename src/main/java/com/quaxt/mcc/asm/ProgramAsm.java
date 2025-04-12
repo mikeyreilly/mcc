@@ -94,7 +94,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case LongInit(long l) -> ".quad " + l;
             case UIntInit(int l) -> ".long " + Integer.toUnsignedString(l);
             case ULongInit(long l) -> ".quad " + Long.toUnsignedString(l);
-            case ZeroInit(int l) -> ".zero " + l;
+            case ZeroInit(long l) -> ".zero " + l;
             case CharInit(int i) -> ".byte " + (i & 0xff);
             case PointerInit(String label) -> ".quad " + label;
             case StringInit(String s, boolean nullTerminated) -> {

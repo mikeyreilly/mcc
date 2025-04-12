@@ -364,9 +364,9 @@ public class Codegen {
             case Primitive.DOUBLE -> DOUBLE;
             case Pointer _ -> QUADWORD;
             case Array array -> {
-                int size = array.size();
-                int alignment = size < 16 && array.element().isScalar() ? array.element().size() : 16;
-                yield new ByteArray(size, alignment);
+                long size = array.size();
+                long alignment = size < 16 && array.element().isScalar() ? array.element().size() : 16;
+                yield new ByteArray((int) size, (int) alignment);
             }
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
@@ -600,9 +600,9 @@ public class Codegen {
                     assert (typeAsm == valToAsmType(dst1));
                     ins.add(new Mov(typeAsm, toOperand(val), toOperand(dst1)));
                 }
-                case CopyToOffset(ValIr srcV, VarIr dstV, int offset) -> {
+                case CopyToOffset(ValIr srcV, VarIr dstV, long offset) -> {
                     Operand src = toOperand(srcV);
-                    Operand dst = toOperand(dstV, offset);
+                    Operand dst = toOperand(dstV, (int)offset);
                     TypeAsm typeAsm = valToAsmType(srcV);
                     ins.add(new Mov(typeAsm, src, dst));
                 }

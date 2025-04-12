@@ -10,7 +10,7 @@ public record ConstDouble(double d) implements Constant {
         return DOUBLE;
     }
 
-    public int toInt() {
-        return (int)d;
+    public long toLong() {
+        return (long)d;
     }
 }

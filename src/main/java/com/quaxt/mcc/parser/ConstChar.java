@@ -23,7 +23,7 @@ public record ConstChar(byte i) implements Constant {
     }
 
 
-    public int toInt() {
+    public long toLong() {
         return i;
     }
 }

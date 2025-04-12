@@ -135,11 +135,11 @@ public class SemanticAnalysis {
     }
 
     private static ZeroInit createZeroInit(Type targetType) {
-        int size = 1;
+        long size = 1;
         out:
         while (true) switch (targetType) {
             case Array(Type element, Constant arraySize) -> {
-                size *= arraySize.toInt();
+                size *= arraySize.toLong();
                 targetType = element;
             }
             case FunType funType ->
@@ -162,7 +162,7 @@ public class SemanticAnalysis {
             case CompoundInit(ArrayList<Initializer> inits) -> {
                 switch (targetType) {
                     case Array(Type inner, Constant arraySize) -> {
-                        int declaredLength = arraySize.toInt();
+                        long declaredLength = arraySize.toLong();
                         if (declaredLength < inits.size()) {
                             throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
                         }
@@ -171,7 +171,7 @@ public class SemanticAnalysis {
                             throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
                         }
                         if (declaredLength > inits.size()) {
-                            acc.add(createZeroInit(new Array(inner, new ConstInt(declaredLength - inits.size()))));
+                            acc.add(createZeroInit(new Array(inner, new ConstULong(declaredLength - inits.size()))));
                         }
                     }
 
@@ -183,7 +183,7 @@ public class SemanticAnalysis {
                 if (exp instanceof Str(String s,
                                        Type _) && targetType instanceof Array(
                         Type element, Constant arraySize)) {
-                    handleStringLiteral(acc, s, element, arraySize.toInt());
+                    handleStringLiteral(acc, s, element, arraySize.toLong());
                 } else if (exp instanceof Str(String s,
                                               Type _) && targetType instanceof Pointer(
                         Type element)) {
@@ -210,13 +210,13 @@ public class SemanticAnalysis {
         }
     }
 
-    private static void handleStringLiteral(List<StaticInit> acc, String s, Type element, int arrayLen) {
+    private static void handleStringLiteral(List<StaticInit> acc, String s, Type element, long arrayLen) {
         if (!element.isCharacter())
             throw new Err("Can't initialize non-character type with a string literal");
         if (s.length() > arrayLen)
             throw new Err("Too many chars in string literal");
         // how many zeros past the first one that comes with asciz
-        int zeroCount = arrayLen - s.length() - 1;
+        long zeroCount = arrayLen - s.length() - 1;
         acc.add(new StringInit(s, zeroCount >= 0));
         if (zeroCount > 0) acc.add(new ZeroInit(zeroCount));
     }
@@ -547,7 +547,7 @@ public class SemanticAnalysis {
                         Type element, Constant arraySize)) {
                     if (!element.isCharacter())
                         throw new Err("Can't initialize non-character type with a string literal");
-                    if (s.length() > arraySize.toInt())
+                    if (s.length() > arraySize.toLong())
                         throw new Err("Too many chars in string literal");
                     yield new SingleInit(new Str(s, targetType));
                 }
@@ -557,7 +557,7 @@ public class SemanticAnalysis {
             case CompoundInit(ArrayList<Initializer> inits) -> {
                 if (targetType instanceof Array(Type elementType,
                                                 Constant arraySize)) {
-                    int l = arraySize.toInt();
+                    long l = arraySize.toLong();
                     if (inits.size() > l) {
                         throw new Err("wrong number of values in initializer");
                     }
@@ -578,8 +578,8 @@ public class SemanticAnalysis {
     private static Initializer zeroInitializer(Type elementType) {
         return switch (elementType) {
             case Array(Type element, Constant arraySize) -> {
-                int len = arraySize.toInt();
-                ArrayList<Initializer> zeros = new ArrayList<>(len);
+                long len = arraySize.toLong();
+                ArrayList<Initializer> zeros = new ArrayList<>((int)len);
                 var zero = zeroInitializer(element);
                 for (int i = 0; i < len; i++) {
                     zeros.add(zero);

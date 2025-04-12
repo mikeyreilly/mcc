@@ -16,7 +16,7 @@ public record ConstUInt(int i) implements Constant {
     }
 
 
-    public int toInt() {
+    public long toLong() {
         return i;
     }
 }
