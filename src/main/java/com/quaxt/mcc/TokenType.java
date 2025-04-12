@@ -17,9 +17,11 @@ public enum TokenType implements Token {
     CHAR(),
     DOUBLE(), LONG(), INT(), RETURN(), VOID(), ELSE(), IF(),
     BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN(), SIZEOF(), STATIC(),
+    STRUCT(),
     DECREMENT("--"), INCREMENT("\\+\\+"), BITWISE_NOT("~"),
     NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
-    COMMA(","), AMPERSAND("&"),OPEN_BRACKET("\\["),CLOSE_BRACKET("\\]");
+    COMMA(","), AMPERSAND("&"),OPEN_BRACKET("\\["),CLOSE_BRACKET("\\]"),
+    ARROW("->"), DOT("([.])[^0-9]",1);
     final Pattern regex;
     private final int group;
 
@@ -50,6 +52,7 @@ public enum TokenType implements Token {
     }
     public String toString() {
         return switch(this) {
+            case ARROW -> "->";
         case IDENTIFIER -> "identifier";
         case OPEN_PAREN -> "(";
         case CLOSE_PAREN -> ")";
@@ -80,9 +83,11 @@ public enum TokenType implements Token {
         case CONTINUE -> "continue";
         case WHILE -> "while";
         case DO -> "do";
+        case DOT -> ".";
         case FOR -> "for";
         case EXTERN -> "extern";
         case STATIC -> "static";
+        case STRUCT -> "struct";
         case DECREMENT -> "decrement";
         case INCREMENT -> "increment";
         case BITWISE_NOT -> "bitwise_not";
