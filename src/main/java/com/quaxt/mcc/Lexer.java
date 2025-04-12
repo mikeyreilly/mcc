@@ -21,7 +21,7 @@ public class Lexer {
                     AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
                     GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
                     BECOMES, QUESTION_MARK, COLON, COMMA, AMPERSAND, OPEN_BRACKET,
-                    CLOSE_BRACKET};
+                    CLOSE_BRACKET, DOT};
 
     public static ArrayList<Token> lex(String src) {
         Matcher matcher = IDENTIFIER.regex.matcher(src);
@@ -76,6 +76,7 @@ public class Lexer {
                                 case "signed" -> SIGNED;
                                 case "sizeof" -> SIZEOF;
                                 case "static" -> STATIC;
+                                case "struct" -> STRUCT;
                                 case "unsigned" -> UNSIGNED;
                                 case "void" -> VOID;
                                 case "while" -> WHILE;
