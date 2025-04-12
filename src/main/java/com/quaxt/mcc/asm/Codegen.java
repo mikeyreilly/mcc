@@ -683,7 +683,7 @@ public class Codegen {
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     ins.add(new Mov(toTypeAsm(dstType), new Memory(AX, 0), dst));
                 }
-                case ReturnInstructionIr(ValIr val) -> {
+                case ReturnIr(ValIr val) -> {
                     Operand src1 = toOperand(val);
                     TypeAsm returnType = valToAsmType(val);
                     ins.add(new Mov(returnType, src1, returnType == DOUBLE ? XMM0 : AX));
