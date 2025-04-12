@@ -16,7 +16,7 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array {
         return switch (this) {
             case LONG, ULONG, DOUBLE -> 8;
             case INT, UINT -> 4;
-            case CHAR, UCHAR, SCHAR -> 1;
+            case CHAR, UCHAR, SCHAR, VOID -> 1;
             case Array(Type element, Constant arraySize) ->
                     element.size() * arraySize.toInt();
             case Pointer _ -> 8;

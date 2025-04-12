@@ -1,7 +1,6 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
@@ -35,21 +34,21 @@ public class IrGen {
         for (Map.Entry<String, SymbolTableEntry> e : SYMBOL_TABLE.entrySet()) {
             String name = e.getKey();
             SymbolTableEntry value = e.getValue();
-           switch(value.attrs()){
-               case ConstantAttr(StaticInit init)  -> {
-                   tackyDefs.add(new StaticConstant(name,  value.type(), init));
-               }
-               case FunAttributes funAttributes -> {}
-               case IdentifierAttributes.LocalAttr localAttr -> {}
-               case StaticAttributes(InitialValue init,
-                                     boolean global) -> {
-                   if (init instanceof InitialValue.Tentative) {
-                       tackyDefs.add(new StaticVariable(name, global, value.type(), Collections.singletonList(new ZeroInit(value.type().size()))));
-                   } else if (init instanceof Initial(List<StaticInit> initList)) {
-                       tackyDefs.add(new StaticVariable(name, global, value.type(), initList));
-                   }
-               }
-           }
+            switch (value.attrs()) {
+                case ConstantAttr(StaticInit init) -> {
+                    tackyDefs.add(new StaticConstant(name, value.type(), init));
+                }
+                case FunAttributes funAttributes -> {}
+                case IdentifierAttributes.LocalAttr localAttr -> {}
+                case StaticAttributes(InitialValue init, boolean global) -> {
+                    if (init instanceof InitialValue.Tentative) {
+                        tackyDefs.add(new StaticVariable(name, global, value.type(), Collections.singletonList(new ZeroInit(value.type().size()))));
+                    } else if (init instanceof Initial(
+                            List<StaticInit> initList)) {
+                        tackyDefs.add(new StaticVariable(name, global, value.type(), initList));
+                    }
+                }
+            }
 
         }
     }
@@ -58,7 +57,7 @@ public class IrGen {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
         FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions);
-        ReturnInstructionIr ret = new ReturnInstructionIr(new ConstInt(0));
+        ReturnIr ret = new ReturnIr(new ConstInt(0));
         instructions.add(ret);
         return f;
     }
@@ -98,7 +97,8 @@ public class IrGen {
                                         offset = assign(name, innerInit, instructions, offset);
                                 case SingleInit(Exp exp) -> {
 
-                                    if (exp instanceof Str(String s, Type type) && type instanceof Array(
+                                    if (exp instanceof Str(String s,
+                                                           Type type) && type instanceof Array(
                                             Type _, Constant arraySize)) {
                                         initializeArrayWithStringLiteral(name, instructions, offset, s, arraySize);
                                     } else {
@@ -121,7 +121,8 @@ public class IrGen {
             }
             case SingleInit(Exp exp) -> {
                 // String literal as array initializer p. 440
-                if (exp instanceof Str(String s, Type type) && type instanceof Array(
+                if (exp instanceof Str(String s,
+                                       Type type) && type instanceof Array(
                         Type _, Constant arraySize)) {
                     initializeArrayWithStringLiteral(name, instructions, offset, s, arraySize);
                 } else {
@@ -186,9 +187,9 @@ public class IrGen {
 
     private static void compileStatement(Statement i, List<InstructionIr> instructions) {
         switch (i) {
-            case Return r -> {
-                ValIr retVal = emitTackyAndConvert(r.exp(), instructions);
-                ReturnInstructionIr ret = new ReturnInstructionIr(retVal);
+            case Return(Exp exp) -> {
+                ValIr retVal = exp == null ? null : emitTackyAndConvert(exp, instructions);
+                ReturnIr ret = new ReturnIr(retVal);
                 instructions.add(ret);
             }
 
@@ -291,19 +292,29 @@ public class IrGen {
                 return new PlainOperand(c);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
-                ValIr c = emitTackyAndConvert(condition, instructions);
+                ValIr cond = emitTackyAndConvert(condition, instructions);
                 LabelIr e2Label = newLabel("e2");
-                instructions.add(new JumpIfZero(c, e2Label.label()));
-                ValIr e1 = emitTackyAndConvert(ifTrue, instructions);
-                VarIr result = makeTemporary("result", type);
-                instructions.add(new Copy(e1, result));
-                LabelIr endLabel = newLabel("end");
-                instructions.add(new Jump(endLabel.label()));
-                instructions.add(e2Label);
-                ValIr e2 = emitTackyAndConvert(ifFalse, instructions);
-                instructions.add(new Copy(e2, result));
-                instructions.add(endLabel);
-                return new PlainOperand(result);
+                instructions.add(new JumpIfZero(cond, e2Label.label()));
+                if (type == VOID) {
+                    emitTackyAndConvert(ifTrue, instructions);
+                    LabelIr endLabel = newLabel("end");
+                    instructions.add(new Jump(endLabel.label()));
+                    instructions.add(e2Label);
+                    emitTackyAndConvert(ifFalse, instructions);
+                    instructions.add(endLabel);
+                    return null;//not used by caller (see p480)
+                } else {
+                    ValIr e1 = emitTackyAndConvert(ifTrue, instructions);
+                    VarIr result = makeTemporary("result", type);
+                    instructions.add(new Copy(e1, result));
+                    LabelIr endLabel = newLabel("end");
+                    instructions.add(new Jump(endLabel.label()));
+                    instructions.add(e2Label);
+                    ValIr e2 = emitTackyAndConvert(ifFalse, instructions);
+                    instructions.add(new Copy(e2, result));
+                    instructions.add(endLabel);
+                    return new PlainOperand(result);
+                }
             }
             case UnaryOp(UnaryOperator op, Exp exp, Type type): {
                 ValIr src = emitTackyAndConvert(exp, instructions);
@@ -400,7 +411,7 @@ public class IrGen {
             case Var(String name, Type _):
                 return new PlainOperand(new VarIr(name));
             case FunctionCall(Var name, List<Exp> args, Type type): {
-                VarIr result = makeTemporary("tmp.", type);
+                VarIr result = type == VOID ? null : makeTemporary("tmp.", type);
                 ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {
                     argVals.add(emitTackyAndConvert(e, instructions));
@@ -414,7 +425,7 @@ public class IrGen {
                 // for the purposes of casting we treat pointers exactly like unsigned long (p. 375)
                 if (t instanceof Pointer) t = ULONG;
                 if (innerType instanceof Pointer) innerType = ULONG;
-                if (t == innerType) {
+                if (t == innerType || t == VOID) {
                     return new PlainOperand(result);
                 }
                 VarIr dst = makeTemporary("dst", t);
@@ -481,11 +492,14 @@ public class IrGen {
                 //string literals in expressions p. 441
                 String uniqueName = Mcc.makeTemporary("string.");
                 SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(type, new ConstantAttr(new StringInit(s, true))));
-               // return emitTacky(SemanticAnalysis.typeCheckExpression(new AddrOf(new Var(uniqueName, type), null)), instructions);
                 return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions);
             }
-            default:
-                throw new IllegalStateException("Unexpected value: " + expr);
+            case SizeOf(Exp exp): {
+                return new PlainOperand(new ConstULong(exp.type().size()));
+            }
+            case SizeOfT(Type t):{
+                return new PlainOperand(new ConstULong(t.size()));
+            }
 
         }
     }
@@ -494,6 +508,7 @@ public class IrGen {
     private static ValIr emitTackyAndConvert(Exp e, List<InstructionIr> instructions) {
         ExpResult result = emitTacky(e, instructions);
         return switch (result) {
+            case null -> null;
             case DereferencedPointer(ValIr ptr) -> {
                 VarIr dst = makeTemporary("ptr", e.type());
                 instructions.add(new Load(ptr, dst));
