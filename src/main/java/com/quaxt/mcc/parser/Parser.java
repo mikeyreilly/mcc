@@ -244,9 +244,34 @@ public class Parser {
     }
 
     private static Declaration parseDeclaration(ArrayList<Token> tokens, boolean throwExceptionIfNoType) {
-        // parse int i; or int i=5; or int foo(void);
+        // parse int i; or int i=5; or int foo(void) or struct...;
         TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
         if (typeAndStorageClass == null) return null;
+        if (typeAndStorageClass.type() instanceof Structure(String tag)) {
+            var t = tokens.getFirst();
+            switch (t) {
+                case SEMICOLON:
+                    tokens.removeFirst();
+                    return new StructDecl(tag, null);
+                case OPEN_BRACE: {
+                    tokens.removeFirst();
+                    ArrayList<MemberDeclaration> members = new ArrayList<>();
+                    while (tokens.getFirst() != CLOSE_BRACE) {
+                        members.add(parseMemberDeclaration(tokens));
+                        expect(SEMICOLON, tokens);
+                    }
+                    tokens.removeFirst(); // closing brace
+                    expect(SEMICOLON, tokens);
+                    if (members.isEmpty()) {
+                        throw new Err("A struct must have one or more member declarators");
+                    }
+                    return new StructDecl(tag, members);
+                }
+
+                default:
+                    break;
+            }
+        }
         Declarator declarator = parseDeclarator(tokens);
         NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator, typeAndStorageClass.type());
         String name = nameDeclTypeParams.name();
@@ -270,6 +295,19 @@ public class Parser {
         }
 
         return new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass());
+    }
+
+    private static MemberDeclaration parseMemberDeclaration(ArrayList<Token> tokens) {
+        TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, true);
+        if (typeAndStorageClass.storageClass() != null)
+            fail("error: storage class specified for struct member");
+        Declarator paramDeclarator = parseDeclarator(tokens);
+        NameDeclTypeParams nameDeclTypeParams = processDeclarator(paramDeclarator, typeAndStorageClass.type());
+        var t = nameDeclTypeParams.type();
+        if (t instanceof FunType)
+            fail("error: member declaration can't be function");
+        return new MemberDeclaration(nameDeclTypeParams.name(), t);
+
     }
 
     private static Initializer parseInitializer(ArrayList<Token> tokens) {
@@ -312,7 +350,14 @@ public class Parser {
 
         while (true) {
             t = tokens.getFirst();
-            if (isTypeSpecifier(t)) {
+            if (t == STRUCT) {
+                tokens.removeFirst();
+                types.add(STRUCT);
+                if (tokens.getFirst().type() == IDENTIFIER) {
+
+                    types.add(tokens.removeFirst());
+                }
+            } else if (isTypeSpecifier(tokens, 0)) {
                 tokens.removeFirst();
                 types.add(t);
             } else if (STATIC == t) {
@@ -379,6 +424,14 @@ public class Parser {
                         fail("can't combine void with other type specifiers");
                     return Primitive.VOID;
                 }
+                case STRUCT -> {
+                    if (types.size() > 2)
+                        fail("can't combine void with other type specifiers");
+                    if (types.get(1) instanceof TokenWithValue(Token type,
+                                                               String tag) && type == IDENTIFIER)
+                        return new Structure(tag);
+                    else fail("identifier expected following struct");
+                }
                 default -> fail("invalid type specifier");
             }
         }
@@ -406,8 +459,9 @@ public class Parser {
         return new Program(declarations);
     }
 
-    private static boolean isTypeSpecifier(Token type) {
-        return CHAR == type || INT == type || LONG == type || UNSIGNED == type || SIGNED == type || DOUBLE == type || VOID == type;
+    private static boolean isTypeSpecifier(List<Token> tokens, int start) {
+        Token first = tokens.get(start);
+        return CHAR == first || INT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first;
     }
 
     private static Function parseRestOfFunction(ArrayList<String> paramNames, List<Type> paramTypes, ArrayList<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
@@ -460,7 +514,7 @@ public class Parser {
 
     private static BlockItem parseBlockItem(ArrayList<Token> tokens) {
         Token t = tokens.getFirst();
-        return t == EXTERN || t == STATIC || isTypeSpecifier(t) ? parseDeclaration(tokens, false) : parseStatement(tokens);
+        return t == EXTERN || t == STATIC || isTypeSpecifier(tokens, 0) ? parseDeclaration(tokens, false) : parseStatement(tokens);
     }
 
     public static Constant parseConst(String value, Type type) {
@@ -521,7 +575,7 @@ public class Parser {
             }
             case SIZEOF -> {
                 tokens.removeFirst();
-                if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens.get(1))) {
+                if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens, 1)) {
                     tokens.removeFirst();
                     TypeName typeName = parseTypeName(tokens);
                     expect(CLOSE_PAREN, tokens);
@@ -536,12 +590,29 @@ public class Parser {
 
     private static Exp parsePostfixExp(ArrayList<Token> tokens) {
         // <postfix-exp> ::= <primary-exp> { "[" <exp> "]" }
+        //                 | <primary-exp> { "." <identifier>  }
+        //                 | <primary-exp>  { "->" <identifier>  }
         Exp exp = parsePrimaryExp(tokens);
-        while (tokens.getFirst() == OPEN_BRACKET) {
-            tokens.removeFirst();
-            Exp subscript = parseExp(tokens, 0);
-            expect(CLOSE_BRACKET, tokens);
-            exp = new Subscript(exp, subscript, null);
+        outer:
+        while (true) {
+            switch (tokens.getFirst()) {
+                case OPEN_BRACKET:
+                    tokens.removeFirst();
+                    Exp subscript = parseExp(tokens, 0);
+                    expect(CLOSE_BRACKET, tokens);
+                    exp = new Subscript(exp, subscript, null);
+                    break;
+                case DOT:
+                    tokens.removeFirst();
+                    exp = new Dot(exp, expectIdentifier(tokens), null);
+                    break;
+                case ARROW:
+                    tokens.removeFirst();
+                    exp = new Arrow(exp, expectIdentifier(tokens), null);
+                    break;
+                default:
+                    break outer;
+            }
         }
         return exp;
     }
@@ -713,7 +784,7 @@ public class Parser {
         // <cast-exp> ::= "(" <type-name> ")" <cast-exp>
         //              | <unary-exp>
 
-        if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens.get(1))) {
+        if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens, 1)) {
             tokens.removeFirst();
             TypeName typeName = parseTypeName(tokens);
             expect(CLOSE_PAREN, tokens);
@@ -735,8 +806,10 @@ public class Parser {
 
     private static TypeName parseTypeName(ArrayList<Token> tokens) {
         List<Token> typeSpecifiers = new ArrayList<Token>();
-        while (isTypeSpecifier(tokens.getFirst())) {
-            typeSpecifiers.add(tokens.removeFirst());
+        while (isTypeSpecifier(tokens, 0)) {
+            var t = tokens.removeFirst();
+            typeSpecifiers.add(t);
+            if (t == STRUCT) typeSpecifiers.add(tokens.removeFirst());
         }
         AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens);
         return new TypeName(typeSpecifiers, abstractDeclarator);
@@ -793,9 +866,10 @@ public class Parser {
     }
 
     private static ForInit parseForInit(ArrayList<Token> tokens) {
-        Token t = tokens.getFirst();
-        if (isTypeSpecifier(t)) return (ForInit) parseDeclaration(tokens, true);
-        Exp r = t == SEMICOLON ? null : parseExp(tokens, 0);
+
+        if (isTypeSpecifier(tokens, 0))
+            return (ForInit) parseDeclaration(tokens, true);
+        Exp r = tokens.getFirst() == SEMICOLON ? null : parseExp(tokens, 0);
         expect(SEMICOLON, tokens);
         return r;
     }

@@ -7,7 +7,7 @@ import com.quaxt.mcc.parser.Constant;
 import static com.quaxt.mcc.semantic.Primitive.*;
 import static com.quaxt.mcc.semantic.Primitive.LONG;
 
-public sealed interface Type permits FunType, Primitive, Pointer, Array {
+public sealed interface Type permits FunType, Primitive, Pointer, Array, Structure {
     default StaticInit zero() {
         throw new Err(this + " has no zero");
     }

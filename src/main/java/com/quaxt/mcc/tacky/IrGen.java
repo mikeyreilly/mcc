@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 
 import java.util.ArrayList;
@@ -80,6 +81,7 @@ public class IrGen {
                 }
                 emitTacky(null, instructions);
             }
+            case StructDecl _ -> throw new Todo();
         }
     }
 
@@ -501,6 +503,7 @@ public class IrGen {
                 return new PlainOperand(new ConstULong(t.size()));
             }
 
+            default: throw new Todo();
         }
     }
 
