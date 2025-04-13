@@ -1,6 +1,7 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.tacky.CharInit;
 import com.quaxt.mcc.tacky.PointerInit;
@@ -52,6 +53,7 @@ public class SemanticAnalysis {
                     case Statement innerStatement ->
                             loopLabelStatement(innerStatement, currentLabel);
                     case Function function -> loopLabelFunction(function);
+                    case StructDecl _ -> throw new Todo();
                 });
                 yield (T) block;
             }
@@ -130,6 +132,7 @@ public class SemanticAnalysis {
                         typeCheckFunctionDeclaration(function, false);
                 case VarDecl varDecl ->
                         typeCheckFileScopeVariableDeclaration(varDecl);
+                default -> throw new Todo();
             });
         }
     }
@@ -152,6 +155,7 @@ public class SemanticAnalysis {
                 size *= primitive.size();
                 break out;
             }
+            default -> throw new Todo();
         }
         return new ZeroInit(size);
     }
@@ -177,6 +181,7 @@ public class SemanticAnalysis {
 
                     case Pointer _, FunType _, Primitive _ ->
                             throw new Err("illegal compound initializer for scalar type:" + targetType);
+                    default -> throw new Todo();
                 }
             }
             case SingleInit(Exp exp) -> {
@@ -447,7 +452,7 @@ public class SemanticAnalysis {
                     new While(requireScalar(typeCheckAndConvert(condition)), (Statement) typeCheckBlockItem(whileBody, enclosingFunction), label);
             case NullStatement _, Continue _, Break _ -> blockItem;
             case null -> null;
-
+            default -> throw new Todo();
         };
     }
 
@@ -593,6 +598,7 @@ public class SemanticAnalysis {
             case Primitive primitive -> primitive.zeroInitializer;
             case Pointer _ -> ULONG.zeroInitializer;
             case FunType funType -> throw new AssertionError(funType);
+            default -> throw new Todo();
         };
 
     }
@@ -869,6 +875,7 @@ public class SemanticAnalysis {
                 }
                 yield exp;
             }
+            default -> throw new Todo();
         };
     }
 
@@ -931,7 +938,9 @@ public class SemanticAnalysis {
                 case VarDecl varDecl ->
                         decls.set(i, resolveFileScopeVariableDeclaration(varDecl, identifierMap));
 
+                default -> throw new Todo();
             }
+
         }
         return program;
     }
@@ -990,6 +999,7 @@ public class SemanticAnalysis {
                     resolveStatement(statement, identifierMap);
             case Function function ->
                     resolveFunctionDeclaration(function, identifierMap);
+            default -> throw new Todo();
         };
     }
 
@@ -1096,6 +1106,7 @@ public class SemanticAnalysis {
                     new Subscript(resolveExp(array, identifierMap), resolveExp(index, identifierMap), type);
             case SizeOf(Exp e) -> new SizeOf(resolveExp(e, identifierMap));
             case SizeOfT(Type _) -> exp;
+            default -> throw new Todo();
         };
         return r;
     }

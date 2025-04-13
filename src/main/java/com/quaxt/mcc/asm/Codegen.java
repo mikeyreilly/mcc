@@ -87,6 +87,7 @@ public class Codegen {
                 case DOUBLE -> 8;
                 case VOID -> throw new Err("no alignment for void");
             };
+            default -> throw new Todo();
         };
     }
 
