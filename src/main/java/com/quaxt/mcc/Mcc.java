@@ -2,9 +2,10 @@ package com.quaxt.mcc;
 
 import com.quaxt.mcc.asm.Codegen;
 import com.quaxt.mcc.asm.ProgramAsm;
+import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Parser;
 import com.quaxt.mcc.parser.Program;
-import com.quaxt.mcc.semantic.SemanticAnalysis;
+import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.IrGen;
 import com.quaxt.mcc.tacky.ProgramIr;
 
@@ -18,11 +19,20 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.quaxt.mcc.semantic.Primitive.*;
+
 public class Mcc {
 
-    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>(){
+    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>() {
         @Override
         public SymbolTableEntry put(String key, SymbolTableEntry value) {
+            return super.put(key, value);
+        }
+    };
+
+    public static final HashMap<String, StructEntry> TYPE_TABLE =  new HashMap<>() {
+        @Override
+        public StructEntry put(String key, StructEntry value) {
             return super.put(key, value);
         }
     };
@@ -33,11 +43,50 @@ public class Mcc {
         return prefix + TEMP_COUNT.getAndIncrement();
     }
 
+    public static int alignment(Type type) {
+        return switch (type) {
+            case Array(Type element, Constant _) -> size(element);
+            case FunType _ -> 0;
+            case Pointer _ -> 8;
+            case CHAR -> 1;
+            case UCHAR -> 1;
+            case SCHAR -> 1;
+            case INT -> 4;
+            case UINT -> 4;
+            case LONG -> 8;
+            case ULONG -> 8;
+            case DOUBLE -> 8;
+            case VOID -> 1;
+            case Structure(String tag) -> TYPE_TABLE.get(tag).alignment();
+        };
+    }
+
+    public static int size(Type type) {
+        return switch (type) {
+            case Array(Type element, Constant arraySize) ->
+                    size(element) * (int) arraySize.toLong();
+            case FunType _ -> 0;
+            case Pointer _ -> 8;
+
+            case CHAR -> 1;
+            case UCHAR -> 1;
+            case SCHAR -> 1;
+            case INT -> 4;
+            case UINT -> 4;
+            case LONG -> 8;
+            case ULONG -> 8;
+            case DOUBLE -> 8;
+            case VOID -> 1;
+
+            case Structure(String tag) -> TYPE_TABLE.get(tag).size();
+        };
+    }
+
+
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE}
 
     public static int preprocess(Path cFile, Path iFile) throws IOException, InterruptedException {
-        ProcessBuilder pb =
-                new ProcessBuilder("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()).inheritIO();
+        ProcessBuilder pb = new ProcessBuilder("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()).inheritIO();
         return pb.start().waitFor();
     }
 
@@ -48,14 +97,12 @@ public class Mcc {
         }
         gccArgs.addAll(Arrays.asList("-o", asmFile.resolveSibling(bareFileName + (doNotCompile ? ".o" : "")).toString()));
         gccArgs.addAll(libs);
-        ProcessBuilder pb =
-                new ProcessBuilder(gccArgs.toArray(new String[0])).inheritIO();
+        ProcessBuilder pb = new ProcessBuilder(gccArgs.toArray(new String[0])).inheritIO();
         return pb.start().waitFor();
     }
 
     public static void main(String[] args0) throws Exception {
-        ArrayList<String> args = Arrays.stream(args0)
-                .collect(Collectors.toCollection(ArrayList::new));
+        ArrayList<String> args = Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;
         List<String> libs = new ArrayList<>();
