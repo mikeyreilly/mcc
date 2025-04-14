@@ -16,6 +16,7 @@ import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.Mcc.makeTemporary;
 import static com.quaxt.mcc.UnaryOperator.*;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
@@ -23,6 +24,9 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 
 public class SemanticAnalysis {
 
+    record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}
+
+    record StructureEntry(String name, boolean fromCurrentScope) {}
 
     public static Program loopLabelProgram(Program program) {
         ArrayList<Declaration> decls = program.declarations();
@@ -53,7 +57,7 @@ public class SemanticAnalysis {
                     case Statement innerStatement ->
                             loopLabelStatement(innerStatement, currentLabel);
                     case Function function -> loopLabelFunction(function);
-                    case StructDecl _ -> throw new Todo();
+                    case StructDecl structDecl -> structDecl;
                 });
                 yield (T) block;
             }
@@ -72,14 +76,14 @@ public class SemanticAnalysis {
                 yield statement;
             }
             case DoWhile(Statement body, Exp condition, String _) -> {
-                String newLabel = Mcc.makeTemporary("do");
+                String newLabel = makeTemporary("do");
                 yield (T) new DoWhile(loopLabelStatement(body, newLabel), condition, newLabel);
 
             }
             case Exp _ -> statement;
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String _) -> {
-                String newLabel = Mcc.makeTemporary("for");
+                String newLabel = makeTemporary("for");
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
                     case VarDecl declaration ->
@@ -99,7 +103,7 @@ public class SemanticAnalysis {
             case Return(Exp exp) ->
                     (T) new Return(loopLabelStatement(exp, currentLabel));
             case While(Exp condition, Statement body, String _) -> {
-                String newLabel = Mcc.makeTemporary("while");
+                String newLabel = makeTemporary("while");
                 yield (T) new While(condition, loopLabelStatement(body, newLabel), newLabel);
 
             }
@@ -132,8 +136,47 @@ public class SemanticAnalysis {
                         typeCheckFunctionDeclaration(function, false);
                 case VarDecl varDecl ->
                         typeCheckFileScopeVariableDeclaration(varDecl);
-                default -> throw new Todo();
+
+                case StructDecl structDecl -> {
+                    typeCheckStructureDeclaration(structDecl);
+                    yield structDecl;
+                }
             });
+        }
+    }
+
+    private static void typeCheckStructureDeclaration(StructDecl structDecl) {
+        if (structDecl.members() == null) return;
+        if (Mcc.TYPE_TABLE.containsKey(structDecl.tag())) {
+            throw new Err("redefinition of struct");
+        }
+        validateStructDefinition(structDecl);
+        ArrayList<MemberEntry> memberEntries = new ArrayList<>();
+        int structSize = 0;
+        int structAlignment = 0;
+        for (MemberDeclaration member : structDecl.members()) {
+            int memberAlignment = Mcc.alignment(member.type());
+            int memberOffset = roundUp(structSize, memberAlignment);
+            MemberEntry m = new MemberEntry(member.name(), member.type(), memberOffset);
+            memberEntries.add(m);
+            structAlignment = Math.max(structAlignment, memberAlignment);
+            structSize = memberOffset + Mcc.size(member.type());
+
+        }
+        structSize = roundUp(structSize, structAlignment);
+        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructEntry(structAlignment, structSize, memberEntries));
+    }
+
+    private static int roundUp(int x, int n) {
+        int rem = x % n;
+        if (rem == 0) return x;
+        return x - rem + n;
+    }
+
+    private static void validateStructDefinition(StructDecl structDecl) {
+        for (var m : structDecl.members()) {
+            if (m.type() == VOID) fail("Can't declare void field");
+            validateTypeSpecifier(m.type());
         }
     }
 
@@ -155,7 +198,11 @@ public class SemanticAnalysis {
                 size *= primitive.size();
                 break out;
             }
-            default -> throw new Todo();
+
+            case Structure(String tag) -> {
+                size *= Mcc.TYPE_TABLE.get(tag).size();
+                break out;
+            }
         }
         return new ZeroInit(size);
     }
@@ -181,7 +228,28 @@ public class SemanticAnalysis {
 
                     case Pointer _, FunType _, Primitive _ ->
                             throw new Err("illegal compound initializer for scalar type:" + targetType);
-                    default -> throw new Todo();
+
+                    case Structure(String tag) -> {
+                        StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                        if (inits.size() > structDef.members().size()) {
+                            throw new Err("Too many elements in structure initializer");
+                        }
+                        int currentOffset = 0;
+                        int i = 0;
+
+                        for (var initElement : inits) {
+                            var member = structDef.members().get(i);
+                            if (member.offset() != currentOffset) {
+                                acc.add(new ZeroInit(member.offset() - currentOffset));
+                            }
+                            convertCompoundInitializerToStaticInitList(initElement, member.type(), acc);
+                            currentOffset = member.offset() + Mcc.size(member.type());
+                            i++;
+                        }
+                        if (structDef.size() != currentOffset) {
+                            acc.add(new ZeroInit(structDef.size() - currentOffset));
+                        }
+                    }
                 }
             }
             case SingleInit(Exp exp) -> {
@@ -196,6 +264,9 @@ public class SemanticAnalysis {
                 } else {
                     if (targetType instanceof Array) {
                         throw new Err("Can't initialize static array with a scalar");
+                    }
+                    if (targetType instanceof Structure) {
+                        throw new Err("Can't initialize structure with a scalar");
                     }
                     acc.add(switch (exp) {
                         case ConstInt(int i) ->
@@ -232,6 +303,9 @@ public class SemanticAnalysis {
         if (varType == VOID) {
             fail("Can't declare void variable");
         }
+        if (!isComplete(varType) && (decl.storageClass() != EXTERN || decl.init() != null)) {
+            fail("Can't declare incomplete variable");
+        }
         if (decl.init() == null)
             initialValue = decl.storageClass() == EXTERN ? NO_INITIALIZER : TENTATIVE;
         else {
@@ -266,7 +340,7 @@ public class SemanticAnalysis {
         }
         // when initializing a static pointer with a string
         if (varType instanceof Pointer(Type referenced) && referenced == CHAR) {
-            String uniqueName = Mcc.makeTemporary(decl.name() + ".string.");
+            String uniqueName = makeTemporary(decl.name() + ".string.");
             StringInit stringInit = (StringInit) ((Initial) initialValue).initList().getFirst();
             SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(CHAR, new ConstInt(stringInit.str().length() + 1)), new ConstantAttr(stringInit)));
             StaticAttributes attrs = new StaticAttributes(initialValue, global);
@@ -338,6 +412,9 @@ public class SemanticAnalysis {
             fail("A function cannot return an array");
         }
         validateTypeSpecifier(ret);
+        if (ret != VOID && !isComplete(ret) && decl.body() != null) {
+            fail("function return type is incomplete");
+        }
         List<Type> oldParams = decl.funType().params();
         ArrayList<Type> adjustedParams = new ArrayList<>(oldParams.size());
         for (int i = 0; i < oldParams.size(); i++) {
@@ -345,6 +422,9 @@ public class SemanticAnalysis {
             validateTypeSpecifier(p);
             if (p == VOID) {
                 fail("named parameter " + (i + 1) + " is void");
+            }
+            if (!isComplete(p) && decl.body() != null) {
+                fail("function with incomplete type parameter");
             }
             adjustedParams.add(arrayToPointer(p));
         }
@@ -446,9 +526,12 @@ public class SemanticAnalysis {
             }
             case While(Exp condition, Statement whileBody, String label) ->
                     new While(requireScalar(typeCheckAndConvert(condition)), (Statement) typeCheckBlockItem(whileBody, enclosingFunction), label);
+            case StructDecl structDecl -> {
+                typeCheckStructureDeclaration(structDecl);
+                yield structDecl;
+            }
             case NullStatement _, Continue _, Break _ -> blockItem;
             case null -> null;
-            default -> throw new Todo();
         };
     }
 
@@ -482,6 +565,12 @@ public class SemanticAnalysis {
     private static VarDecl typeCheckLocalVariableDeclaration(VarDecl decl) {
         validateTypeSpecifier(decl.varType());
         if (decl.varType() == VOID) fail("Can't declare void variable");
+        if (!isComplete(decl.varType())) {
+            if (decl.storageClass() != EXTERN)
+                fail("Attempt to declare variable of incomplete type with non-external storage class");
+            if (decl.init() != null)
+                fail("Attempt to define variable of incomplete type");
+        }
         if (decl.storageClass() == EXTERN) {
             if (decl.init() != null)
                 fail("Initializer on local extern variable declaration");
@@ -491,7 +580,7 @@ public class SemanticAnalysis {
                     fail("inconsistent variable redefinition");
 
             } else {
-                SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(INT, new StaticAttributes(NO_INITIALIZER, true)));
+                SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(NO_INITIALIZER, true)));
             }
             return decl;
         } else if (decl.storageClass() == STATIC) {
@@ -504,7 +593,7 @@ public class SemanticAnalysis {
             if (isStringLiteralInit(staticInits) && decl.varType() instanceof Pointer(
                     Type referenced)) {
                 if (referenced == CHAR) {
-                    String uniqueName = Mcc.makeTemporary(decl.name() + ".string.");
+                    String uniqueName = makeTemporary(decl.name() + ".string.");
                     /* TODO: this logic is probably not going to handle arrays of char* well*/
                     SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new ConstInt(strlen(staticInits))), new StaticAttributes(initialValue, false)));
                     SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false)));
@@ -571,6 +660,21 @@ public class SemanticAnalysis {
                     for (long i = 0; i < zerosToAdd; i++) {
                         inits.add(zeroInitializer(elementType));
                     }
+                } else if (targetType instanceof Structure(String tag)) {
+                    StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                    ArrayList<MemberEntry> members = structDef.members();
+                    if (inits.size() > members.size()) {
+                        throw new Err("Too many elements in structure initializer");
+                    }
+                    ArrayList<Initializer> typeCheckedList = new ArrayList<>();
+                    int i;
+                    for (i = 0; i < inits.size(); i++) {
+                        typeCheckedList.add(typeCheckInit(inits.get(i), members.get(i).type()));
+                    }
+                    for (; i < members.size(); i++) {
+                        typeCheckedList.add(zeroInitializer(members.get(i).type()));
+                    }
+                    yield new CompoundInit(typeCheckedList);
                 } else {
                     throw new Err("Can't use compound initializer to initialize scalar type: " + targetType);
                 }
@@ -584,7 +688,7 @@ public class SemanticAnalysis {
         return switch (elementType) {
             case Array(Type element, Constant arraySize) -> {
                 long len = arraySize.toLong();
-                ArrayList<Initializer> zeros = new ArrayList<>((int)len);
+                ArrayList<Initializer> zeros = new ArrayList<>((int) len);
                 var zero = zeroInitializer(element);
                 for (int i = 0; i < len; i++) {
                     zeros.add(zero);
@@ -594,7 +698,16 @@ public class SemanticAnalysis {
             case Primitive primitive -> primitive.zeroInitializer;
             case Pointer _ -> ULONG.zeroInitializer;
             case FunType funType -> throw new AssertionError(funType);
-            default -> throw new Todo();
+
+            case Structure(String tag) -> {
+                StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                ArrayList<MemberEntry> members = structDef.members();
+                ArrayList<Initializer> typeCheckedList = new ArrayList<>();
+                for (MemberEntry member : members) {
+                    typeCheckedList.add(zeroInitializer(member.type()));
+                }
+                yield new CompoundInit(typeCheckedList);
+            }
         };
 
     }
@@ -630,7 +743,12 @@ public class SemanticAnalysis {
         return switch (typedE.type()) {
             case Array(Type element, _) ->
                     new AddrOf(typedE, new Pointer(element));
+            case Structure(String tag) -> {
+                if (Mcc.TYPE_TABLE.containsKey(tag)) yield typedE;
+                else throw new Err("Invalid use of incomplete structure type");
+            }
             default -> typedE;
+
         };
     }
 
@@ -770,7 +888,11 @@ public class SemanticAnalysis {
                     commonType = getCommonPointerType(typedIfTrue, typedIfFalse);
                 else if (isArithmeticType(t1) && isArithmeticType(t1))
                     commonType = getCommonType(t1, t2);
-                else
+                else if (t1 instanceof Structure(
+                        String tag1) && t2 instanceof Structure(
+                        String tag2) && tag1.equals(tag2)) {
+                    commonType = t1;
+                } else
                     throw new Err("Can't convert branches of conditional to a common type");
                 yield new Conditional(typedCondition, convertTo(typedIfTrue, commonType), convertTo(typedIfFalse, commonType), commonType);
             }
@@ -871,13 +993,43 @@ public class SemanticAnalysis {
                 }
                 yield exp;
             }
-            default -> throw new Todo();
+
+            case Arrow(Exp pointer, String member, Type _) -> {
+                Exp typedPointer = typeCheckAndConvert(pointer);
+                if (typedPointer.type() instanceof Pointer(
+                        Type structure) && structure instanceof Structure(
+                        String tag)) {
+                    StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                    MemberEntry me = structDef.findMember(member);
+                    if (me == null) {
+                        throw new Err("Structure has no member with this name");
+                    }
+                    yield new Arrow(typedPointer, member, me.type());
+                }
+                throw new Err("Tried to get member of non-structure");
+            }
+            case Dot(Exp structure, String member, Type _) -> {
+                Exp typedStructure = typeCheckAndConvert(structure);
+                if (typedStructure.type() instanceof Structure(String tag)) {
+                    StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                    MemberEntry me = structDef.findMember(member);
+                    if (me == null) {
+                        throw new Err("Structure has no member with this name");
+                    }
+                    yield new Dot(typedStructure, member, me.type());
+                }
+                throw new Err("Tried to get member of non-structure");
+            }
         };
     }
 
 
     private static boolean isComplete(Type t) {
-        return t != VOID;
+        return switch (t) {
+            case VOID -> false;
+            case Structure(String tag) -> Mcc.TYPE_TABLE.containsKey(tag);
+            default -> true;
+        };
     }
 
     private static boolean isPointerToComplete(Type t1) {
@@ -908,7 +1060,9 @@ public class SemanticAnalysis {
     }
 
     private static boolean isLvalue(Exp exp) {
-        return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript || exp instanceof Str;
+        if (exp instanceof Dot(Exp structure, String member, Type type))
+            return isLvalue(structure);
+        return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript || exp instanceof Str || exp instanceof Arrow;
     }
 
     private static Type getCommonType(Type t1, Type t2) {
@@ -921,44 +1075,86 @@ public class SemanticAnalysis {
         return t2;
     }
 
-    record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}
+    public static Type resolveType(Type typeSpecifier, Map<String, StructureEntry> structureMap) {
+        return switch (typeSpecifier) {
+            case Structure(String tag) -> {
+                var e = structureMap.get(tag);
+                if (e != null) yield new Structure(e.name());
+                else throw new Err("Specifiec and undeclared structure type");
+            }
+            case Pointer(Type referenced) ->
+                    new Pointer(resolveType(referenced, structureMap));
+            case Array(Type element, Constant size) ->
+                    new Array(resolveType(element, structureMap), size);
+            case FunType(List<Type> params, Type ret) ->
+                    new FunType(params.stream().map(p -> resolveType(p, structureMap)).toList(), resolveType(ret, structureMap));
+            case Primitive primitive -> primitive;
+        };
+    }
 
     public static Program resolveProgram(Program program) {
         Map<String, Entry> identifierMap = new HashMap<>();
+        Map<String, StructureEntry> structureMap = new HashMap<>();
         ArrayList<Declaration> decls = program.declarations();
         for (int i = 0; i < decls.size(); i++) {
             switch (decls.get(i)) {
                 case Function f ->
-                        decls.set(i, resolveFunctionDeclaration(f, identifierMap));
-
+                        decls.set(i, resolveFunctionDeclaration(f, identifierMap, structureMap));
                 case VarDecl varDecl ->
-                        decls.set(i, resolveFileScopeVariableDeclaration(varDecl, identifierMap));
-
-                default -> throw new Todo();
+                        decls.set(i, resolveFileScopeVariableDeclaration(varDecl, identifierMap, structureMap));
+                case StructDecl decl ->
+                        decls.set(i, resolveStructureDeclaration(decl, structureMap));
             }
 
         }
         return program;
     }
 
-    private static Declaration resolveFileScopeVariableDeclaration(VarDecl varDecl, Map<String, Entry> identifierMap) {
+    private static StructDecl resolveStructureDeclaration(StructDecl decl, Map<String, StructureEntry> structureMap) {
+        StructureEntry prevEntry = structureMap.get(decl.tag());
+        String uniqueTag;
+        if (prevEntry == null || !prevEntry.fromCurrentScope()) {
+            uniqueTag = makeTemporary(decl.tag() + ".");
+            structureMap.put(decl.tag(), new StructureEntry(uniqueTag, true));
+        } else {
+            uniqueTag = prevEntry.name();
+
+        }
+        ArrayList<MemberDeclaration> processedMembers;
+        if (decl.members() == null) processedMembers = null;
+        else {
+            processedMembers = new ArrayList<>();
+            for (MemberDeclaration member : decl.members()) {
+                for (var p : processedMembers) {
+                    if (p.name().equals(member.name())) {
+                        throw new Err("Duplicate structure member name");
+                    }
+                }
+                processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name()));
+            }
+        }
+        return new StructDecl(uniqueTag, processedMembers);
+    }
+
+    private static Declaration resolveFileScopeVariableDeclaration(VarDecl varDecl, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         return switch (varDecl) {
-            case VarDecl(Var name, Initializer _, Type _, StorageClass _) -> {
+            case VarDecl(Var name, Initializer init, Type type,
+                         StorageClass storageClass) -> {
                 identifierMap.put(name.name(), new Entry(name.name(), true, true));
-                yield varDecl;
+                yield new VarDecl(name, init, resolveType(type, structureMap), storageClass);
             }
         };
     }
 
-    private static Block resolveBlock(Block block, Map<String, Entry> identifierMap) {
+    private static Block resolveBlock(Block block, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         ArrayList<BlockItem> blockItems = new ArrayList<>();
         for (BlockItem i : block.blockItems()) {
-            blockItems.add(resolveIdentifiersBlockItem(i, identifierMap));
+            blockItems.add(resolveIdentifiersBlockItem(i, identifierMap, structureMap));
         }
         return new Block(blockItems);
     }
 
-    private static Function resolveFunctionDeclaration(Function function, Map<String, Entry> identifierMap) {
+    private static Function resolveFunctionDeclaration(Function function, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         String name = function.name();
         if (identifierMap.get(name) instanceof Entry previousEntry) {
             if (previousEntry.fromCurrentScope() && !previousEntry.hasLinkage()) {
@@ -967,67 +1163,74 @@ public class SemanticAnalysis {
         }
         identifierMap.put(name, new Entry(name, true, true));
         Map<String, Entry> innerMap = copyIdentifierMap(identifierMap);
+        Map<String, StructureEntry> innerStructureMap = copyStructureMap(structureMap);
+        List<Var> newArgs = resolveParams(function.parameters(), innerMap, innerStructureMap);
 
-        List<Var> newArgs = resolveParams(function.parameters(), innerMap);
-
-        Block newBody = function.body() instanceof Block block ? resolveBlock(block, innerMap) : null;
-        return new Function(function.name(), newArgs, newBody, function.funType(), function.storageClass());
+        Block newBody = function.body() instanceof Block block ? resolveBlock(block, innerMap, innerStructureMap) : null;
+        return new Function(function.name(), newArgs, newBody, resolveFunType(function.funType(), innerStructureMap), function.storageClass());
     }
 
-    private static List<Var> resolveParams(List<Var> parameters, Map<String, Entry> identifierMap) {
+    private static FunType resolveFunType(FunType funType, Map<String, StructureEntry> structureMap) {
+        return new FunType(funType.params().stream().map(p -> resolveType(p, structureMap)).toList(), resolveType(funType.ret(), structureMap));
+    }
+
+    private static List<Var> resolveParams(List<Var> parameters, Map<String, Entry> identifierMap, Map<String, StructureEntry> innerStructureMap) {
         List<Var> newParams = new ArrayList<>();
         for (Var d : parameters) {
             if (identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
                 fail("Duplicate variable declaration");
             }
-            String uniqueName = Mcc.makeTemporary(d.name() + ".");
+            String uniqueName = makeTemporary(d.name() + ".");
             identifierMap.put(d.name(), new Entry(uniqueName, true, false));
-            newParams.add(new Var(uniqueName, d.type()));
+            newParams.add(new Var(uniqueName, resolveType(d.type(), innerStructureMap)));
         }
         return newParams;
     }
 
-    private static BlockItem resolveIdentifiersBlockItem(BlockItem blockItem, Map<String, Entry> identifierMap) {
+    private static BlockItem resolveIdentifiersBlockItem(BlockItem blockItem, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         return switch (blockItem) {
             case VarDecl declaration ->
-                    resolveLocalIdentifierDeclaration(declaration, identifierMap);
+                    resolveLocalIdentifierDeclaration(declaration, identifierMap, structureMap);
             case Statement statement ->
-                    resolveStatement(statement, identifierMap);
+                    resolveStatement(statement, identifierMap, structureMap);
             case Function function ->
-                    resolveFunctionDeclaration(function, identifierMap);
-            default -> throw new Todo();
+                    resolveFunctionDeclaration(function, identifierMap, structureMap);
+            case StructDecl structDecl ->
+                    resolveStructureDeclaration(structDecl, structureMap);
         };
     }
 
-    private static Statement resolveStatement(Statement blockItem, Map<String, Entry> identifierMap) {
+    private static Statement resolveStatement(Statement blockItem, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         return switch (blockItem) {
             case null -> null;
-            case Exp exp -> resolveExp(exp, identifierMap);
-            case Return(Exp exp) -> new Return(resolveExp(exp, identifierMap));
+            case Exp exp -> resolveExp(exp, identifierMap, structureMap);
+            case Return(Exp exp) ->
+                    new Return(resolveExp(exp, identifierMap, structureMap));
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
-                    new If(resolveExp(condition, identifierMap), resolveStatement(ifTrue, identifierMap), resolveStatement(ifFalse, identifierMap));
+                    new If(resolveExp(condition, identifierMap, structureMap), resolveStatement(ifTrue, identifierMap, structureMap), resolveStatement(ifFalse, identifierMap, structureMap));
             case Block block ->
-                    resolveBlock(block, copyIdentifierMap(identifierMap));
+                    resolveBlock(block, copyIdentifierMap(identifierMap), copyStructureMap(structureMap));
             case NullStatement nullStatement -> nullStatement;
             case Break _, Continue _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
-                    new DoWhile(resolveStatement(body, identifierMap), resolveExp(condition, identifierMap), label);
+                    new DoWhile(resolveStatement(body, identifierMap, structureMap), resolveExp(condition, identifierMap, structureMap), label);
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String label) -> {
                 Map<String, Entry> newVariableMap = copyIdentifierMap(identifierMap);
-                yield new For(resolveForInit(init, newVariableMap), resolveExp(condition, newVariableMap), resolveExp(post, newVariableMap), resolveStatement(body, newVariableMap), label);
+                Map<String, StructureEntry> newStructureMap = copyStructureMap(structureMap);
+                yield new For(resolveForInit(init, newVariableMap, newStructureMap), resolveExp(condition, newVariableMap, newStructureMap), resolveExp(post, newVariableMap, newStructureMap), resolveStatement(body, newVariableMap, newStructureMap), label);
             }
             case While(Exp condition, Statement body, String label) ->
-                    new While(resolveExp(condition, identifierMap), resolveStatement(body, identifierMap), label);
+                    new While(resolveExp(condition, identifierMap, structureMap), resolveStatement(body, identifierMap, structureMap), label);
         };
 
     }
 
-    private static ForInit resolveForInit(ForInit init, Map<String, Entry> identifierMap) {
+    private static ForInit resolveForInit(ForInit init, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         return switch (init) {
             case VarDecl declaration ->
-                    resolveLocalIdentifierDeclaration(declaration, identifierMap);
-            case Exp exp -> resolveExp(exp, identifierMap);
+                    resolveLocalIdentifierDeclaration(declaration, identifierMap, structureMap);
+            case Exp exp -> resolveExp(exp, identifierMap, structureMap);
             case null -> null;
         };
     }
@@ -1042,7 +1245,19 @@ public class SemanticAnalysis {
         return copy;
     }
 
-    private static VarDecl resolveLocalIdentifierDeclaration(VarDecl decl, Map<String, Entry> identifierMap) {
+
+    private static Map<String, StructureEntry> copyStructureMap(Map<String, StructureEntry> m) {
+        Map<String, StructureEntry> copy = HashMap.newHashMap(m.size());
+        for (var e : m.entrySet()) {
+            var v = e.getValue();
+            copy.put(e.getKey(), new StructureEntry(v.name(), false));
+        }
+        return copy;
+
+    }
+
+
+    private static VarDecl resolveLocalIdentifierDeclaration(VarDecl decl, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         if (identifierMap.get(decl.name().name()) instanceof Entry prevEntry) {
             if (prevEntry.fromCurrentScope()) {
                 if (!(prevEntry.hasLinkage() && decl.storageClass() == EXTERN)) {
@@ -1053,64 +1268,71 @@ public class SemanticAnalysis {
         }
         if (decl.storageClass() == EXTERN) {
             identifierMap.put(decl.name().name(), new Entry(decl.name().name(), true, true));
-            return decl;
+            return new VarDecl(decl.name(), decl.init(), resolveType(decl.varType(), structureMap), decl.storageClass());
         }
-        String uniqueName = Mcc.makeTemporary(decl.name().name() + ".");
+        String uniqueName = makeTemporary(decl.name().name() + ".");
         identifierMap.put(decl.name().name(), new Entry(uniqueName, true, false));
         var init = decl.init();
-        return new VarDecl(new Var(uniqueName, null), resolveInitializer(init, identifierMap), decl.varType(), decl.storageClass());
+        return new VarDecl(new Var(uniqueName, null), resolveInitializer(init, identifierMap, structureMap), resolveType(decl.varType(), structureMap), decl.storageClass());
     }
 
-    private static Initializer resolveInitializer(Initializer init, Map<String, Entry> identifierMap) {
+    private static Initializer resolveInitializer(Initializer init, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         return switch (init) {
             case null -> null;
             case CompoundInit(ArrayList<Initializer> inits) -> {
-                inits.replaceAll(i -> resolveInitializer(i, identifierMap));
+                inits.replaceAll(i -> resolveInitializer(i, identifierMap, structureMap));
                 yield new CompoundInit(inits);
             }
             case SingleInit(Exp exp) ->
-                    new SingleInit(resolveExp(exp, identifierMap));
+                    new SingleInit(resolveExp(exp, identifierMap, structureMap));
         };
 
     }
 
-    private static <T extends Exp> T resolveExp(T exp, Map<String, Entry> identifierMap) {
+    private static <T extends Exp> T resolveExp(T exp, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         @SuppressWarnings("unchecked") T r = (T) switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right, Type type) ->
-                    isLvalue(left) ? new Assignment(resolveExp(left, identifierMap), resolveExp(right, identifierMap), type) : fail("Invalid lvalue");
+                    isLvalue(left) ? new Assignment(resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), type) : fail("Invalid lvalue");
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
-                    new BinaryOp(op, resolveExp(left, identifierMap), resolveExp(right, identifierMap), type);
+                    new BinaryOp(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), type);
             case Constant constant -> constant;
             case Str str -> str;
             case UnaryOp(UnaryOperator op, Exp arg, Type type) ->
-                    new UnaryOp(op, resolveExp(arg, identifierMap), type);
+                    new UnaryOp(op, resolveExp(arg, identifierMap, structureMap), type);
             case AddrOf(Exp arg, Type type) ->
-                    new AddrOf(resolveExp(arg, identifierMap), type);
+                    new AddrOf(resolveExp(arg, identifierMap, structureMap), type);
             case Dereference(Exp arg, Type type) ->
-                    new Dereference(resolveExp(arg, identifierMap), type);
+                    new Dereference(resolveExp(arg, identifierMap, structureMap), type);
             case Var(String name, Type type) ->
                     identifierMap.get(name) instanceof Entry e ? new Var(e.name(), type) : fail("Undeclared variable:" + exp);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type) ->
-                    new Conditional(resolveExp(condition, identifierMap), resolveExp(ifTrue, identifierMap), resolveExp(ifFalse, identifierMap), type);
+                    new Conditional(resolveExp(condition, identifierMap, structureMap), resolveExp(ifTrue, identifierMap, structureMap), resolveExp(ifFalse, identifierMap, structureMap), type);
             case FunctionCall(Var name, List<Exp> args, Type type) ->
-                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, args), type) : fail("Undeclared function:" + name);
-            case Cast(Type type, Exp e) ->
-                    new Cast(type, resolveExp(e, identifierMap));
+                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, structureMap, args), type) : fail("Undeclared function:" + name);
+            case Cast(Type type, Exp e) -> {
+                Type resolvedType = resolveType(type, structureMap);
+                yield new Cast(resolvedType, resolveExp(e, identifierMap, structureMap));
+            }
             case Subscript(Exp array, Exp index, Type type) ->
-                    new Subscript(resolveExp(array, identifierMap), resolveExp(index, identifierMap), type);
-            case SizeOf(Exp e) -> new SizeOf(resolveExp(e, identifierMap));
-            case SizeOfT(Type _) -> exp;
-            default -> throw new Todo();
+                    new Subscript(resolveExp(array, identifierMap, structureMap), resolveExp(index, identifierMap, structureMap), type);
+            case SizeOf(Exp e) ->
+                    new SizeOf(resolveExp(e, identifierMap, structureMap));
+            case SizeOfT(Type type) ->
+                    new SizeOfT(resolveType(type, structureMap));
+            case Arrow(Exp pointer, String member, Type type) ->
+                    new Arrow(resolveExp(pointer, identifierMap, structureMap), member, type);
+            case Dot(Exp structure, String member, Type type) ->
+                    new Dot(resolveExp(structure, identifierMap, structureMap), member, type);
         };
         return r;
     }
 
-    private static <T extends Exp> List<T> resolveArgs(Map<String, Entry> identifierMap, List<T> args) {
+    private static <T extends Exp> List<T> resolveArgs(Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap, List<T> args) {
         List<T> newArgs = new ArrayList<>();
         for (T arg : args) {
-            newArgs.add(resolveExp(arg, identifierMap));
+            newArgs.add(resolveExp(arg, identifierMap, structureMap));
         }
         return newArgs;
     }
@@ -1118,4 +1340,6 @@ public class SemanticAnalysis {
     private static Exp fail(String s) {
         throw new Err(s);
     }
+
+
 }

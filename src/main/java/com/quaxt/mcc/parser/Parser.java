@@ -306,7 +306,7 @@ public class Parser {
         var t = nameDeclTypeParams.type();
         if (t instanceof FunType)
             fail("error: member declaration can't be function");
-        return new MemberDeclaration(nameDeclTypeParams.name(), t);
+        return new MemberDeclaration(t, nameDeclTypeParams.name());
 
     }
 
@@ -354,7 +354,6 @@ public class Parser {
                 tokens.removeFirst();
                 types.add(STRUCT);
                 if (tokens.getFirst().type() == IDENTIFIER) {
-
                     types.add(tokens.removeFirst());
                 }
             } else if (isTypeSpecifier(tokens, 0)) {

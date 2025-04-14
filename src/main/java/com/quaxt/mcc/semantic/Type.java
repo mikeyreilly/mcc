@@ -51,8 +51,7 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array, Structu
 
     default boolean isScalar() {
         return switch(this) {
-            case Array _-> false;
-            case FunType _ -> false;
+            case Array _, FunType _, Structure _ -> false;
             case VOID -> false;
             default -> true;
         };
