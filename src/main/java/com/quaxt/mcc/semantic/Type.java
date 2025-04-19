@@ -2,7 +2,6 @@ package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.Err;
 import com.quaxt.mcc.StaticInit;
-import com.quaxt.mcc.parser.Constant;
 
 import static com.quaxt.mcc.semantic.Primitive.*;
 import static com.quaxt.mcc.semantic.Primitive.LONG;
@@ -10,19 +9,6 @@ import static com.quaxt.mcc.semantic.Primitive.LONG;
 public sealed interface Type permits FunType, Primitive, Pointer, Array, Structure {
     default StaticInit zero() {
         throw new Err(this + " has no zero");
-    }
-
-    default long size() {
-        return switch (this) {
-            case LONG, ULONG, DOUBLE -> 8;
-            case INT, UINT -> 4;
-            case CHAR, UCHAR, SCHAR, VOID -> 1;
-            case Array(Type element, Constant arraySize) ->
-                    element.size() * arraySize.toLong();
-            case Pointer _ -> 8;
-            default ->
-                    throw new AssertionError("don't know the size in this case");
-        };
     }
 
     default boolean unsignedOrDoubleOrPointer() {
@@ -56,4 +42,5 @@ public sealed interface Type permits FunType, Primitive, Pointer, Array, Structu
             default -> true;
         };
     }
+
 }
