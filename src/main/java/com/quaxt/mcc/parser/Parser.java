@@ -334,10 +334,10 @@ public class Parser {
                             throw new IllegalStateException("Unexpected value: " + tokens.removeFirst());
                 };
             }
-            return new CompoundInit(inits);
+            return new CompoundInit(inits, null);
 
         }
-        return new SingleInit(parseExp(tokens, 0));
+        return new SingleInit(parseExp(tokens, 0), null);
 
     }
 

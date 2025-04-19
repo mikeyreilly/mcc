@@ -21,7 +21,10 @@ import java.util.stream.Collectors;
 
 import static com.quaxt.mcc.semantic.Primitive.*;
 
+import java.util.logging.*;
+
 public class Mcc {
+    private static final Logger logger = Logger.getLogger(Mcc.class.getName());
 
     public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>() {
         @Override
@@ -30,9 +33,9 @@ public class Mcc {
         }
     };
 
-    public static final HashMap<String, StructEntry> TYPE_TABLE =  new HashMap<>() {
+    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>() {
         @Override
-        public StructEntry put(String key, StructEntry value) {
+        public StructDef put(String key, StructDef value) {
             return super.put(key, value);
         }
     };
@@ -102,6 +105,7 @@ public class Mcc {
     }
 
     public static void main(String[] args0) throws Exception {
+        logger.info("started with args " + Arrays.toString(args0));
         ArrayList<String> args = Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;

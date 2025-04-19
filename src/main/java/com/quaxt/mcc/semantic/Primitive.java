@@ -18,7 +18,7 @@ public enum Primitive implements Type {
     Primitive(StaticInit zero, Constant zeroConstant) {
         this.zero = zero;
         this.zeroConstant = zeroConstant;
-        this.zeroInitializer = new SingleInit(zeroConstant);
+        this.zeroInitializer = new SingleInit(zeroConstant, this);
     }
     public StaticInit zero() {
         return zero;

@@ -73,7 +73,7 @@ public class Codegen {
     private static int alignment(Type t) {
         return switch (t) {
             case Array(Type element, Constant arraySize) ->
-                    t.size() < 16 ? alignment(element) : 16;
+                    (long) Mcc.size(t) < 16 ? alignment(element) : 16;
             case FunType _ -> 8;
             case Pointer _ -> 8;
             case Primitive primitive -> switch (primitive) {
@@ -365,8 +365,9 @@ public class Codegen {
             case Primitive.DOUBLE -> DOUBLE;
             case Pointer _ -> QUADWORD;
             case Array array -> {
-                long size = array.size();
-                long alignment = size < 16 && array.element().isScalar() ? array.element().size() : 16;
+                long size = Mcc.size(array);
+                long alignment;
+                alignment = size < 16 && array.element().isScalar() ? Mcc.size(array.element()) : 16;
                 yield new ByteArray((int) size, (int) alignment);
             }
             default ->
@@ -765,6 +766,8 @@ public class Codegen {
                 case ZeroExtendIr(ValIr src, VarIr dst) ->
                         ins.add(new MovZeroExtend(valToAsmType(src), valToAsmType(dst), toOperand(src), toOperand(dst)));
 
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + inst);
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(), ins);

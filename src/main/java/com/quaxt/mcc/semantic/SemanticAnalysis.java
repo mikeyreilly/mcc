@@ -1,7 +1,6 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.tacky.CharInit;
 import com.quaxt.mcc.tacky.PointerInit;
@@ -117,12 +116,12 @@ public class SemanticAnalysis {
 
     private static Initializer loopLabelInitializer(Initializer init, String currentLabel) {
         return switch (init) {
-            case CompoundInit(ArrayList<Initializer> inits) -> {
+            case CompoundInit(ArrayList<Initializer> inits, Type t) -> {
                 inits.replaceAll(i -> loopLabelInitializer(i, currentLabel));
-                yield new CompoundInit(inits);
+                yield new CompoundInit(inits, t);
             }
-            case SingleInit(Exp exp) ->
-                    new SingleInit(loopLabelStatement(exp, currentLabel));
+            case SingleInit(Exp exp, Type targetType) ->
+                    new SingleInit(loopLabelStatement(exp, currentLabel), targetType);
             case null -> null;
         };
     }
@@ -164,7 +163,7 @@ public class SemanticAnalysis {
 
         }
         structSize = roundUp(structSize, structAlignment);
-        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructEntry(structAlignment, structSize, memberEntries));
+        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructDef(structAlignment, structSize, memberEntries));
     }
 
     private static int roundUp(int x, int n) {
@@ -195,7 +194,7 @@ public class SemanticAnalysis {
                 break out;
             }
             case Primitive primitive -> {
-                size *= primitive.size();
+                size *= Mcc.size(primitive);
                 break out;
             }
 
@@ -210,7 +209,7 @@ public class SemanticAnalysis {
     private static void convertCompoundInitializerToStaticInitList(Initializer init, Type targetType, List<StaticInit> acc) {
         switch (init) {
             case null -> acc.add(createZeroInit(targetType));
-            case CompoundInit(ArrayList<Initializer> inits) -> {
+            case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
                 switch (targetType) {
                     case Array(Type inner, Constant arraySize) -> {
                         long declaredLength = arraySize.toLong();
@@ -230,7 +229,7 @@ public class SemanticAnalysis {
                             throw new Err("illegal compound initializer for scalar type:" + targetType);
 
                     case Structure(String tag) -> {
-                        StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                        StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                         if (inits.size() > structDef.members().size()) {
                             throw new Err("Too many elements in structure initializer");
                         }
@@ -252,7 +251,7 @@ public class SemanticAnalysis {
                     }
                 }
             }
-            case SingleInit(Exp exp) -> {
+            case SingleInit(Exp exp, Type _) -> {
                 if (exp instanceof Str(String s,
                                        Type _) && targetType instanceof Array(
                         Type element, Constant arraySize)) {
@@ -315,7 +314,8 @@ public class SemanticAnalysis {
         }
         validateTypeSpecifier(varType);
         if (varType instanceof Pointer && decl.init() instanceof SingleInit(
-                Exp exp) && exp instanceof Constant c && !isNullPointerConstant(c)) {
+                Exp exp,
+                Type targetType) && exp instanceof Constant c && !isNullPointerConstant(c)) {
             throw new Err("Cannot convert type for assignment");
         }
         boolean global = decl.storageClass() != STATIC;
@@ -602,12 +602,11 @@ public class SemanticAnalysis {
             } else
 
                 SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
-            //MR-TODO this looks questionable - just return decl
-            return new VarDecl(decl.name(), decl.init(), decl.varType(), decl.storageClass());
+            return new VarDecl(new Var(decl.name().name(), decl.varType()), decl.init(), decl.varType(), decl.storageClass());
         } else {
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
             var init = decl.init() != null ? typeCheckInit(decl.init(), decl.varType()) : null;
-            return new VarDecl(decl.name(), init, decl.varType(), decl.storageClass());
+            return new VarDecl(new Var(decl.name().name(), decl.varType()), init, decl.varType(), decl.storageClass());
         }
     }
 
@@ -635,7 +634,7 @@ public class SemanticAnalysis {
 
     private static Initializer typeCheckInit(Initializer init, Type targetType) {
         return switch (init) {
-            case SingleInit(Exp exp) -> {
+            case SingleInit(Exp exp, Type _) -> {
                 if (exp instanceof Str(String s,
                                        Type _) && targetType instanceof Array(
                         Type element, Constant arraySize)) {
@@ -643,12 +642,12 @@ public class SemanticAnalysis {
                         throw new Err("Can't initialize non-character type with a string literal");
                     if (s.length() > arraySize.toLong())
                         throw new Err("Too many chars in string literal");
-                    yield new SingleInit(new Str(s, targetType));
+                    yield new SingleInit(new Str(s, targetType), targetType);
                 }
                 var typeCheckedExp = typeCheckAndConvert(exp);
-                yield new SingleInit(convertByAssignment(typeCheckedExp, targetType));
+                yield new SingleInit(convertByAssignment(typeCheckedExp, targetType), targetType);
             }
-            case CompoundInit(ArrayList<Initializer> inits) -> {
+            case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
                 if (targetType instanceof Array(Type elementType,
                                                 Constant arraySize)) {
                     long l = arraySize.toLong();
@@ -660,8 +659,9 @@ public class SemanticAnalysis {
                     for (long i = 0; i < zerosToAdd; i++) {
                         inits.add(zeroInitializer(elementType));
                     }
+                    yield new CompoundInit(inits, targetType);
                 } else if (targetType instanceof Structure(String tag)) {
-                    StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                    StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     ArrayList<MemberEntry> members = structDef.members();
                     if (inits.size() > members.size()) {
                         throw new Err("Too many elements in structure initializer");
@@ -674,11 +674,10 @@ public class SemanticAnalysis {
                     for (; i < members.size(); i++) {
                         typeCheckedList.add(zeroInitializer(members.get(i).type()));
                     }
-                    yield new CompoundInit(typeCheckedList);
+                    yield new CompoundInit(typeCheckedList, targetType);
                 } else {
                     throw new Err("Can't use compound initializer to initialize scalar type: " + targetType);
                 }
-                yield init;
             }
 
         };
@@ -693,20 +692,20 @@ public class SemanticAnalysis {
                 for (int i = 0; i < len; i++) {
                     zeros.add(zero);
                 }
-                yield new CompoundInit(zeros);
+                yield new CompoundInit(zeros, elementType);
             }
             case Primitive primitive -> primitive.zeroInitializer;
             case Pointer _ -> ULONG.zeroInitializer;
             case FunType funType -> throw new AssertionError(funType);
 
             case Structure(String tag) -> {
-                StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                 ArrayList<MemberEntry> members = structDef.members();
                 ArrayList<Initializer> typeCheckedList = new ArrayList<>();
                 for (MemberEntry member : members) {
                     typeCheckedList.add(zeroInitializer(member.type()));
                 }
-                yield new CompoundInit(typeCheckedList);
+                yield new CompoundInit(typeCheckedList, elementType);
             }
         };
 
@@ -999,7 +998,7 @@ public class SemanticAnalysis {
                 if (typedPointer.type() instanceof Pointer(
                         Type structure) && structure instanceof Structure(
                         String tag)) {
-                    StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                    StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
                         throw new Err("Structure has no member with this name");
@@ -1011,7 +1010,7 @@ public class SemanticAnalysis {
             case Dot(Exp structure, String member, Type _) -> {
                 Exp typedStructure = typeCheckAndConvert(structure);
                 if (typedStructure.type() instanceof Structure(String tag)) {
-                    StructEntry structDef = Mcc.TYPE_TABLE.get(tag);
+                    StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
                         throw new Err("Structure has no member with this name");
@@ -1070,8 +1069,8 @@ public class SemanticAnalysis {
         t2 = t2.isCharacter() ? INT : t2;
         if (t1 == t2) return t1;
         if (t1 == DOUBLE || t2 == DOUBLE) return DOUBLE;
-        if (t1.size() == t2.size()) return t1.isSigned() ? t2 : t1;
-        if (t1.size() > t2.size()) return t1;
+        if ((long) Mcc.size(t1) == (long) Mcc.size(t2)) return t1.isSigned() ? t2 : t1;
+        if ((long) Mcc.size(t1) > (long) Mcc.size(t2)) return t1;
         return t2;
     }
 
@@ -1141,7 +1140,8 @@ public class SemanticAnalysis {
             case VarDecl(Var name, Initializer init, Type type,
                          StorageClass storageClass) -> {
                 identifierMap.put(name.name(), new Entry(name.name(), true, true));
-                yield new VarDecl(name, init, resolveType(type, structureMap), storageClass);
+                Type t = resolveType(type, structureMap);
+                yield new VarDecl(new Var(name.name(), t), init, t, storageClass);
             }
         };
     }
@@ -1279,12 +1279,12 @@ public class SemanticAnalysis {
     private static Initializer resolveInitializer(Initializer init, Map<String, Entry> identifierMap, Map<String, StructureEntry> structureMap) {
         return switch (init) {
             case null -> null;
-            case CompoundInit(ArrayList<Initializer> inits) -> {
+            case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
                 inits.replaceAll(i -> resolveInitializer(i, identifierMap, structureMap));
-                yield new CompoundInit(inits);
+                yield new CompoundInit(inits, type);
             }
-            case SingleInit(Exp exp) ->
-                    new SingleInit(resolveExp(exp, identifierMap, structureMap));
+            case SingleInit(Exp exp, Type targetType) ->
+                    new SingleInit(resolveExp(exp, identifierMap, structureMap), targetType);
         };
 
     }
