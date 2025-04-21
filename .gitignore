@@ -1,7 +1,6 @@
 *.o
 .idea/
 a
-a.c
 a.out
 mcc.log
 target/

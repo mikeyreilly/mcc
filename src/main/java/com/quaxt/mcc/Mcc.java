@@ -46,9 +46,34 @@ public class Mcc {
         return prefix + TEMP_COUNT.getAndIncrement();
     }
 
-    public static int alignment(Type type) {
+    public static int variableAlignment(Type type) {
         return switch (type) {
-            case Array(Type element, Constant _) -> size(element);
+            case Array(Type element, Constant _) -> {
+                long size = Mcc.size(type);
+                yield size < 16L && element.isScalar() ? (int) Mcc.size(element) : 16;
+            }
+            case FunType _ -> 0;
+            case Pointer _ -> 8;
+            case CHAR -> 1;
+            case UCHAR -> 1;
+            case SCHAR -> 1;
+            case INT -> 4;
+            case UINT -> 4;
+            case LONG -> 8;
+            case ULONG -> 8;
+            case DOUBLE -> 8;
+            case VOID -> 1;
+            case Structure(String tag) -> {
+                var st = TYPE_TABLE.get(tag);
+                yield st == null ? 1 : st.alignment();
+            }
+        };
+    }
+
+    public static int typeAlignment(Type type) {
+        return switch (type) {
+            case Array(Type element, Constant _) ->
+                    Mcc.typeAlignment(element);
             case FunType _ -> 0;
             case Pointer _ -> 8;
             case CHAR -> 1;
@@ -64,10 +89,10 @@ public class Mcc {
         };
     }
 
-    public static int size(Type type) {
+    public static long size(Type type) {
         return switch (type) {
             case Array(Type element, Constant arraySize) ->
-                    size(element) * (int) arraySize.toLong();
+                    size(element) * arraySize.toLong();
             case FunType _ -> 0;
             case Pointer _ -> 8;
 
@@ -81,7 +106,10 @@ public class Mcc {
             case DOUBLE -> 8;
             case VOID -> 1;
 
-            case Structure(String tag) -> TYPE_TABLE.get(tag).size();
+            case Structure(String tag) -> {
+                var st = TYPE_TABLE.get(tag);
+                yield st == null ? -1 : st.size();
+            }
         };
     }
 

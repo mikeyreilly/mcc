@@ -17,6 +17,8 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case REMAINDER -> "remainderq	";
             case AND -> "andq	";
             case OR -> "orq	";
+            case SHL -> "shl	";
+            case SHR_TWO_OP -> "shr	";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
         } : t == LONGWORD ?

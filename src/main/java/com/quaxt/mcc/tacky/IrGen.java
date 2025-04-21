@@ -53,7 +53,7 @@ public class IrGen {
     private static FunctionIr compileFunction(Function function) {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
-        FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions);
+        FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions, function.funType().ret());
         ReturnIr ret = new ReturnIr(new ConstInt(0));
         instructions.add(ret);
         return f;
@@ -83,34 +83,40 @@ public class IrGen {
 
     private static long assign(VarIr name, Initializer init, List<InstructionIr> instructions, long offset) {
         switch (init) {
-            case CompoundInit(ArrayList<Initializer> inits, Type compoundInitType) when compoundInitType instanceof Structure(String tag) -> {
+            case CompoundInit(ArrayList<Initializer> inits,
+                              Type compoundInitType) when compoundInitType instanceof Structure(
+                    String tag) -> {
                 ArrayList<MemberEntry> members = Mcc.TYPE_TABLE.get(tag).members();
-                for (int i =0; i < inits.size();i++) {
-                    Initializer memInit =  inits.get(i);
+                for (int i = 0; i < inits.size(); i++) {
+                    Initializer memInit = inits.get(i);
                     MemberEntry member = members.get(i);
                     switch (memInit) {
                         case CompoundInit _ ->
-                                offset = assign(name, memInit, instructions, offset+member.offset());
+                                assign(name, memInit, instructions, offset + member.offset());
                         case SingleInit(Exp exp, Type targetType) -> {
-                            if (exp instanceof Str(String s, Type type) && type instanceof Array(Type _, Constant arraySize)) {
-                                initializeArrayWithStringLiteral(name, instructions, offset+member.offset(), s, arraySize);
+                            if (exp instanceof Str(String s,
+                                                   Type type) && type instanceof Array(
+                                    Type _, Constant arraySize)) {
+                                initializeArrayWithStringLiteral(name, instructions, offset + member.offset(), s, arraySize);
                             } else {
                                 var val = emitTackyAndConvert(exp, instructions);
-                                instructions.add(new CopyToOffset(val, name, offset+member.offset()));
+                                instructions.add(new CopyToOffset(val, name, offset + member.offset()));
                             }
 
                         }
                     }
                 }
-                return offset+ (long) Mcc.size(compoundInitType);
+                return offset + Mcc.size(compoundInitType);
             }
-            case CompoundInit(ArrayList<Initializer> inits, Type compoundInitType) -> {
+            case CompoundInit(ArrayList<Initializer> inits,
+                              Type compoundInitType) -> {
                 for (Initializer innerInit : inits) {
                     switch (innerInit) {
                         case CompoundInit _ ->
                                 offset = assign(name, innerInit, instructions, offset);
                         case SingleInit(Exp exp, Type targetType) -> {
-                            if (exp instanceof Str(String s, Type type) && type instanceof Array(
+                            if (exp instanceof Str(String s,
+                                                   Type type) && type instanceof Array(
                                     Type _, Constant arraySize)) {
                                 initializeArrayWithStringLiteral(name, instructions, offset, s, arraySize);
                             } else {
@@ -119,8 +125,10 @@ public class IrGen {
                             }
                             offset += Mcc.size(exp.type());
                         }
+
                     }
                 }
+                return offset;
             }
             case SingleInit(Exp exp, Type targetType) -> {
                 // String literal as array initializer p. 440
@@ -131,10 +139,11 @@ public class IrGen {
                 } else {
                     assign(name, exp, instructions);
                 }
-                offset += Mcc.size(exp.type());
+                return offset + Mcc.size(targetType);
             }
+
         }
-        return offset;
+
     }
 
 
@@ -389,7 +398,8 @@ public class IrGen {
                                         instructions.add(new AddPtr(ptr, j, (int) (long) Mcc.size(ptrRefType), dstName));
                                     }
                                 }
-                                case ADD -> instructions.add(new AddPtr(ptr, other, (int) (long) Mcc.size(ptrRefType), dstName));
+                                case ADD ->
+                                        instructions.add(new AddPtr(ptr, other, (int) (long) Mcc.size(ptrRefType), dstName));
 
                                 case CmpOperator _ ->
                                         instructions.add(new BinaryIr(op, v1, v2, dstName));
@@ -553,13 +563,13 @@ public class IrGen {
         return switch (result) {
             case null -> null;
             case DereferencedPointer(ValIr ptr) -> {
-                VarIr dst = makeTemporary("ptr", e.type());
+                VarIr dst = makeTemporary("ptr.", e.type());
                 instructions.add(new Load(ptr, dst));
                 yield dst;
             }
             case PlainOperand(ValIr v) -> v;
             case SubObject(VarIr base, int offset) -> {
-                VarIr dst = makeTemporary("dst", e.type());
+                VarIr dst = makeTemporary("dst.", e.type());
                 instructions.add(new CopyFromOffset(base, offset, dst));
                 yield dst;
             }

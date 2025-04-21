@@ -20,4 +20,9 @@ public enum PrimitiveTypeAsm implements TypeAsm {
     public String suffix() {
         return suffix;
     }
+
+    @Override
+    public boolean isScalar() {
+        return true;
+    }
 }
