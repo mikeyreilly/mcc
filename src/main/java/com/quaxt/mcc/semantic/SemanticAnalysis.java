@@ -154,13 +154,12 @@ public class SemanticAnalysis {
         int structSize = 0;
         int structAlignment = 0;
         for (MemberDeclaration member : structDecl.members()) {
-            int memberAlignment = Mcc.alignment(member.type());
+            int memberAlignment = Mcc.typeAlignment(member.type());
             int memberOffset = roundUp(structSize, memberAlignment);
             MemberEntry m = new MemberEntry(member.name(), member.type(), memberOffset);
             memberEntries.add(m);
             structAlignment = Math.max(structAlignment, memberAlignment);
-            structSize = memberOffset + Mcc.size(member.type());
-
+            structSize = (int) (memberOffset + Mcc.size(member.type()));
         }
         structSize = roundUp(structSize, structAlignment);
         Mcc.TYPE_TABLE.put(structDecl.tag(), new StructDef(structAlignment, structSize, memberEntries));
@@ -242,7 +241,7 @@ public class SemanticAnalysis {
                                 acc.add(new ZeroInit(member.offset() - currentOffset));
                             }
                             convertCompoundInitializerToStaticInitList(initElement, member.type(), acc);
-                            currentOffset = member.offset() + Mcc.size(member.type());
+                            currentOffset = (int) (member.offset() + Mcc.size(member.type()));
                             i++;
                         }
                         if (structDef.size() != currentOffset) {
@@ -259,7 +258,9 @@ public class SemanticAnalysis {
                 } else if (exp instanceof Str(String s,
                                               Type _) && targetType instanceof Pointer(
                         Type element)) {
-                    handleStringLiteral(acc, s, element, s.length() + 1);
+
+                    String pointerName = handleStringPointer(s);
+                    acc.add(new PointerInit(pointerName));
                 } else {
                     if (targetType instanceof Array) {
                         throw new Err("Can't initialize static array with a scalar");
@@ -283,6 +284,21 @@ public class SemanticAnalysis {
                 }
             }
         }
+    }
+
+    static Map<String, String> STRING_TABLE = new HashMap<>();
+
+    private static String handleStringPointer(String s) {
+        String k = STRING_TABLE.get(s);
+        if (k != null) {
+            return k;
+        }
+        String stringId = Mcc.makeTemporary("string.");
+        STRING_TABLE.put(s, stringId);
+        StringInit stringInit = new StringInit(s, true);
+        StaticAttributes attrs = new StaticAttributes(new Initial(Collections.singletonList(stringInit)), false);
+        SYMBOL_TABLE.put(stringId, new SymbolTableEntry(new Pointer(CHAR), attrs));
+        return stringId;
     }
 
     private static void handleStringLiteral(List<StaticInit> acc, String s, Type element, long arrayLen) {
@@ -506,7 +522,7 @@ public class SemanticAnalysis {
                 case Exp exp -> typeCheckAndConvert(exp);
                 case VarDecl varDecl ->
                         typeCheckLocalVariableDeclaration(varDecl);
-            }, requireScalar(typeCheckAndConvert(condition)), typeCheckAndConvert(post), (Statement) typeCheckBlockItem(body, enclosingFunction), label);
+            }, condition == null ? null : requireScalar(typeCheckAndConvert(condition)), typeCheckAndConvert(post), (Statement) typeCheckBlockItem(body, enclosingFunction), label);
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
                     new If(requireScalar(typeCheckAndConvert(condition)), (Statement) typeCheckBlockItem(ifTrue, enclosingFunction), (Statement) typeCheckBlockItem(ifFalse, enclosingFunction));
 
@@ -590,10 +606,10 @@ public class SemanticAnalysis {
             convertCompoundInitializerToStaticInitList(decl.init(), decl.varType(), staticInits);
             initialValue = new Initial(staticInits);
 
-            if (isStringLiteralInit(staticInits) && decl.varType() instanceof Pointer(
+            if (isStringPointerInit(staticInits) && decl.varType() instanceof Pointer(
                     Type referenced)) {
                 if (referenced == CHAR) {
-                    String uniqueName = makeTemporary(decl.name() + ".string.");
+                    String uniqueName = makeTemporary(decl.name().name() + ".string.");
                     /* TODO: this logic is probably not going to handle arrays of char* well*/
                     SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new ConstInt(strlen(staticInits))), new StaticAttributes(initialValue, false)));
                     SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false)));
@@ -610,11 +626,11 @@ public class SemanticAnalysis {
         }
     }
 
-    private static boolean isStringLiteralInit(ArrayList<StaticInit> l) {
+    private static boolean isStringPointerInit(ArrayList<StaticInit> l) {
         if (l.isEmpty()) {
             return false;
         }
-        return l.getFirst() instanceof StringInit;
+        return l.getFirst() instanceof PointerInit;
     }
 
     private static int strlen(ArrayList<StaticInit> l) {
@@ -1069,7 +1085,8 @@ public class SemanticAnalysis {
         t2 = t2.isCharacter() ? INT : t2;
         if (t1 == t2) return t1;
         if (t1 == DOUBLE || t2 == DOUBLE) return DOUBLE;
-        if ((long) Mcc.size(t1) == (long) Mcc.size(t2)) return t1.isSigned() ? t2 : t1;
+        if ((long) Mcc.size(t1) == (long) Mcc.size(t2))
+            return t1.isSigned() ? t2 : t1;
         if ((long) Mcc.size(t1) > (long) Mcc.size(t2)) return t1;
         return t2;
     }
@@ -1079,7 +1096,8 @@ public class SemanticAnalysis {
             case Structure(String tag) -> {
                 var e = structureMap.get(tag);
                 if (e != null) yield new Structure(e.name());
-                else throw new Err("Specifiec and undeclared structure type");
+                else
+                    throw new Err("Specified an undeclared structure: tag=" + tag);
             }
             case Pointer(Type referenced) ->
                     new Pointer(resolveType(referenced, structureMap));

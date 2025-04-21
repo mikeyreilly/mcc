@@ -25,9 +25,17 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 default -> reg.d;
             };
             case Memory(Reg reg, int offset) -> offset + "(%" + reg.q + ")";
-            case Data data -> {
-                boolean isConstant = BACKEND_SYMBOL_TABLE.get(data.identifier()) instanceof ObjEntry e && e.isConstant();
-                yield (isConstant ? ".L" + data.identifier() : data.identifier()) + "(%rip)";
+            case Data(String identifier, int offset) -> {
+                boolean isConstant = BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
+                StringBuilder sb = new StringBuilder();
+                if (isConstant) sb.append(".L");
+                sb.append(identifier);
+                if (offset < 0) sb.append(offset);
+                else if (offset > 0) {
+                    sb.append("+").append(offset);
+                }
+                sb.append("(%rip)");
+                yield sb.toString();
             }
             case DoubleReg reg -> reg.toString();
             case Indexed(Reg base, Reg index, int scale) ->
@@ -206,6 +214,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     String dstF = formatOperand(DOUBLE, instruction, dst);
                     yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
                 }
+                case Comment(String comment) -> "# "+comment;
             };
             if (instruction instanceof LabelIr) {
                 out.println(s);

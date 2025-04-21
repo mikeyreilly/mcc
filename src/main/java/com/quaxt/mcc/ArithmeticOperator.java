@@ -8,7 +8,7 @@ public enum ArithmeticOperator implements BinaryOperator {
     AND("&&"), OR("\\|\\|"), BITWISE_XOR("\\^"), BECOMES("="),
     // These are used in asm but not before, so in parser and tacky SUB is used
     // for both integer and double subtraction.
-    DOUBLE_SUB(), DOUBLE_ADD(), DOUBLE_MUL(), DOUBLE_DIVIDE();
+    DOUBLE_SUB(), DOUBLE_ADD(), DOUBLE_MUL(), DOUBLE_DIVIDE(), SHL, SHR_TWO_OP;
 
     final Pattern regex;
 
@@ -33,6 +33,8 @@ public enum ArithmeticOperator implements BinaryOperator {
             case ADD -> "+";
             case IMUL -> "*";
             case OR -> "|";
+            case SHL -> "SHL";
+            case SHR_TWO_OP -> "SHR_TWO_OP";
             default -> regex.pattern();
         };
     }
