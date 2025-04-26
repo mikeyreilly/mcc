@@ -136,7 +136,7 @@ public class Parser {
             if (d == null) d = new AbstractBase();
             while (tokens.getFirst() == OPEN_BRACKET) {
                 tokens.removeFirst();
-                Constant c = parseConst(tokens);
+                Constant c = parseConst(tokens, true);
                 d = new AbstractArrayDeclarator(d, c);
                 expect(CLOSE_BRACKET, tokens);
             }
@@ -198,7 +198,7 @@ public class Parser {
         } else {
             while (tokens.getFirst() == OPEN_BRACKET) {
                 tokens.removeFirst();
-                var c = parseConst(tokens);
+                var c = parseConst(tokens, false);
                 if (c instanceof ConstDouble) {
                     throw new Err("illegal non-integer array size");
                 }
@@ -616,7 +616,7 @@ public class Parser {
         return exp;
     }
 
-    private static Constant parseConst(List<Token> tokens) {
+    private static Constant parseConst(List<Token> tokens, boolean throwIfNotFound) {
         Token token = tokens.getFirst();
         if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
@@ -643,7 +643,8 @@ public class Parser {
                     break;
             }
         }
-        throw new IllegalStateException("expected const, found: " + token);
+        if (throwIfNotFound) throw new IllegalStateException("expected const, found: " + token);
+        return null;
     }
 
     private static int parseChar(String s) {
@@ -720,7 +721,7 @@ public class Parser {
                         yield id;
 
                     }
-                    default -> parseConst(tokens);
+                    default -> parseConst(tokens, true);
                 };
             }
             case OPEN_PAREN -> {
