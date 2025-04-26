@@ -220,7 +220,7 @@ public class SemanticAnalysis {
                             throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
                         }
                         if (declaredLength > inits.size()) {
-                            acc.add(createZeroInit(new Array(inner, new ConstULong(declaredLength - inits.size()))));
+                            acc.add(createZeroInit(new Array(inner, new ULongInit(declaredLength - inits.size()))));
                         }
                     }
 
@@ -269,15 +269,15 @@ public class SemanticAnalysis {
                         throw new Err("Can't initialize structure with a scalar");
                     }
                     acc.add(switch (exp) {
-                        case ConstInt(int i) ->
+                        case IntInit(int i) ->
                                 convertConst(new IntInit(i), targetType);
-                        case ConstLong(long i) ->
+                        case LongInit(long i) ->
                                 convertConst(new LongInit(i), targetType);
-                        case ConstUInt(int i) ->
+                        case UIntInit(int i) ->
                                 convertConst(new UIntInit(i), targetType);
-                        case ConstULong(long i) ->
+                        case ULongInit(long i) ->
                                 convertConst(new ULongInit(i), targetType);
-                        case ConstDouble(double d) ->
+                        case DoubleInit(double d) ->
                                 convertConst(new DoubleInit(d), targetType);
                         default -> throw new Err("Non constant initializer");
                     });
@@ -358,7 +358,7 @@ public class SemanticAnalysis {
         if (varType instanceof Pointer(Type referenced) && referenced == CHAR) {
             String uniqueName = makeTemporary(decl.name() + ".string.");
             StringInit stringInit = (StringInit) ((Initial) initialValue).initList().getFirst();
-            SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(CHAR, new ConstInt(stringInit.str().length() + 1)), new ConstantAttr(stringInit)));
+            SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(CHAR, new IntInit(stringInit.str().length() + 1)), new ConstantAttr(stringInit)));
             StaticAttributes attrs = new StaticAttributes(initialValue, global);
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType, attrs));
         } else {
@@ -611,7 +611,7 @@ public class SemanticAnalysis {
                 if (referenced == CHAR) {
                     String uniqueName = makeTemporary(decl.name().name() + ".string.");
                     /* TODO: this logic is probably not going to handle arrays of char* well*/
-                    SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new ConstInt(strlen(staticInits))), new StaticAttributes(initialValue, false)));
+                    SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new IntInit(strlen(staticInits))), new StaticAttributes(initialValue, false)));
                     SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false)));
                 } else
                     throw new Err("Can't initialize pointer to " + referenced + " with string literal");
@@ -622,11 +622,14 @@ public class SemanticAnalysis {
         } else {
             Initializer init;
             Type type = decl.varType();
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
             if (decl.init() != null) {
                 init = typeCheckInit(decl.init(), decl.varType());
                 type = init.type();
+                // the init type might have an array length when decl.varType() doesn't
+                SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(type, LOCAL_ATTR));
             } else init = null;
-            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(type, LOCAL_ATTR));
+
 
             return new VarDecl(new Var(decl.name().name(), type), init, type, decl.storageClass());
         }
@@ -685,7 +688,7 @@ public class SemanticAnalysis {
                     for (long i = 0; i < zerosToAdd; i++) {
                         inits.add(zeroInitializer(elementType));
                     }
-                    yield new CompoundInit(inits, arraySize == null ? new Array(elementType, new ConstULong(inits.size())) : targetType);
+                    yield new CompoundInit(inits, arraySize == null ? new Array(elementType, new ULongInit(inits.size())) : targetType);
                 } else if (targetType instanceof Structure(String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     ArrayList<MemberEntry> members = structDef.members();
@@ -923,7 +926,7 @@ public class SemanticAnalysis {
             }
             case Constant constant -> constant;
             case Str(String s, Type type) ->
-                    new Str(s, new Array(CHAR, new ConstInt(s.length() + 1)));
+                    new Str(s, new Array(CHAR, new IntInit(s.length() + 1)));
             case FunctionCall(Var name, List<Exp> args, Type _) -> {
                 Type fType = SYMBOL_TABLE.get(name.name()).type();
                 yield switch (fType) {
@@ -1076,10 +1079,10 @@ public class SemanticAnalysis {
 
     private static boolean isNullPointerConstant(Exp e) {
         return switch (e) {
-            case ConstInt(int i) -> i == 0;
-            case ConstLong(long l) -> l == 0L;
-            case ConstUInt(int i) -> i == 0;
-            case ConstULong(long l) -> l == 0;
+            case IntInit(int i) -> i == 0;
+            case LongInit(long l) -> l == 0L;
+            case UIntInit(int i) -> i == 0;
+            case ULongInit(long l) -> l == 0;
             default -> false;
         };
     }

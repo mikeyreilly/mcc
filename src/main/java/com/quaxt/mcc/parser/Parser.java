@@ -199,7 +199,7 @@ public class Parser {
             while (tokens.getFirst() == OPEN_BRACKET) {
                 tokens.removeFirst();
                 var c = parseConst(tokens, false);
-                if (c instanceof ConstDouble) {
+                if (c instanceof DoubleInit) {
                     throw new Err("illegal non-integer array size");
                 }
                 d = new ArrayDeclarator(d, c);
@@ -518,17 +518,17 @@ public class Parser {
 
     public static Constant parseConst(String value, Type type) {
         if (type == Primitive.DOUBLE)
-            return new ConstDouble(Double.parseDouble(value));
+            return new DoubleInit(Double.parseDouble(value));
         if (type.isSigned()) {
             long v = Long.parseLong(value);
             if (v < 1L << 31 && type == Primitive.INT)
-                return new ConstInt((int) v);
-            else return new ConstLong(v);
+                return new IntInit((int) v);
+            else return new LongInit(v);
         }
         long v = Long.parseUnsignedLong(value);
         if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && (type == Primitive.INT || type == Primitive.UINT))
-            return new ConstUInt((int) v);
-        else return new ConstULong(v);
+            return new UIntInit((int) v);
+        else return new ULongInit(v);
     }
 
     private static Type processAbstractDeclarator(AbstractDeclarator abstractDeclarator, Type type) {
@@ -637,7 +637,7 @@ public class Parser {
                     return parseConst(value.substring(0, len), t);
                 }
                 case CHAR_LITERAL: {
-                    return new ConstInt(parseChar(value));
+                    return new IntInit(parseChar(value));
                 }
                 default:
                     break;

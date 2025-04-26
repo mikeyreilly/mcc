@@ -54,7 +54,7 @@ public class IrGen {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
         FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions, function.funType().ret());
-        ReturnIr ret = new ReturnIr(new ConstInt(0));
+        ReturnIr ret = new ReturnIr(new IntInit(0));
         instructions.add(ret);
         return f;
     }
@@ -151,10 +151,10 @@ public class IrGen {
         long arrayLen = arraySize.toLong();
         long howManyCharsToCopy = Math.min(s.length(), arrayLen);
         for (int i = 0; i < howManyCharsToCopy; i++) {
-            instructions.add(new CopyToOffset(new ConstChar((byte) (s.charAt(i) & 0xff)), dst, offset + i));
+            instructions.add(new CopyToOffset(new CharInit((byte) (s.charAt(i) & 0xff)), dst, offset + i));
         }
         for (long i = howManyCharsToCopy; i < arrayLen; i++) {
-            instructions.add(new CopyToOffset(ConstChar.zero(), dst, offset + i));
+            instructions.add(new CopyToOffset(CharInit.zero(), dst, offset + i));
         }
     }
 
@@ -281,19 +281,19 @@ public class IrGen {
         switch (expr) {
             case null:
                 return null;
-            case ConstInt c:
+            case IntInit c:
                 return new PlainOperand(c);
-            case ConstLong c:
+            case LongInit c:
                 return new PlainOperand(c);
-            case ConstUInt c:
+            case UIntInit c:
                 return new PlainOperand(c);
-            case ConstULong c:
+            case ULongInit c:
                 return new PlainOperand(c);
-            case ConstDouble c:
+            case DoubleInit c:
                 return new PlainOperand(c);
-            case ConstChar c:
+            case CharInit c:
                 return new PlainOperand(c);
-            case ConstUChar c:
+            case UCharInit c:
                 return new PlainOperand(c);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
@@ -339,11 +339,11 @@ public class IrGen {
 
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         instructions.add(new JumpIfZero(v2, falseLabel.label()));
-                        instructions.add(new Copy(new ConstInt(1), result));
+                        instructions.add(new Copy(new IntInit(1), result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(falseLabel);
-                        instructions.add(new Copy(new ConstInt(0), result));
+                        instructions.add(new Copy(new IntInit(0), result));
                         instructions.add(endLabel);
 
                         return new PlainOperand(result);
@@ -358,11 +358,11 @@ public class IrGen {
 
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         instructions.add(new JumpIfNotZero(v2, trueLabel.label()));
-                        instructions.add(new Copy(new ConstInt(0), result));
+                        instructions.add(new Copy(new IntInit(0), result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(trueLabel);
-                        instructions.add(new Copy(new ConstInt(1), result));
+                        instructions.add(new Copy(new IntInit(1), result));
                         instructions.add(endLabel);
 
                         return new PlainOperand(result);
@@ -391,7 +391,7 @@ public class IrGen {
                                         // ptr - ptr (left has to be pointer because type checker doesn't allow non-ptr - ptr)
                                         var diff = makeTemporary("tmp.", LONG);
                                         instructions.add(new BinaryIr(SUB, ptr, other, diff));
-                                        instructions.add(new BinaryIr(DIVIDE, diff, new ConstInt((int) (long) Mcc.size(ptrRefType)), dstName));
+                                        instructions.add(new BinaryIr(DIVIDE, diff, new IntInit((int) (long) Mcc.size(ptrRefType)), dstName));
                                     } else { // ptr - int
                                         var j = makeTemporary("tmp.", LONG);
                                         instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, other, j));
@@ -470,7 +470,7 @@ public class IrGen {
                         var dst = makeTemporary("dst", expr.type());
                         instructions.add(new GetAddress(base, dst));
                         if (offset != 0)
-                            instructions.add(new AddPtr(dst, new ConstLong(offset), 1, dst));
+                            instructions.add(new AddPtr(dst, new LongInit(offset), 1, dst));
                         yield new PlainOperand(dst);
                     }
                 };
@@ -509,10 +509,10 @@ public class IrGen {
                 return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions);
             }
             case SizeOf(Exp exp): {
-                return new PlainOperand(new ConstULong(Mcc.size(exp.type())));
+                return new PlainOperand(new ULongInit(Mcc.size(exp.type())));
             }
             case SizeOfT(Type t): {
-                return new PlainOperand(new ConstULong(Mcc.size(t)));
+                return new PlainOperand(new ULongInit(Mcc.size(t)));
             }
             case Dot(Exp structure, String member, Type type): {
                 StructDef structDef = Mcc.TYPE_TABLE.get(tag(structure));
@@ -522,7 +522,7 @@ public class IrGen {
                     case DereferencedPointer(ValIr ptr) -> {
                         if (memberOffset == 0) yield innerObject;
                         VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
-                        instructions.add(new AddPtr(ptr, new ConstLong(memberOffset), 1, dstPtr));
+                        instructions.add(new AddPtr(ptr, new LongInit(memberOffset), 1, dstPtr));
                         yield new DereferencedPointer(dstPtr);
                     }
                     case PlainOperand(VarIr v) ->
@@ -541,7 +541,7 @@ public class IrGen {
                 if (memberOffset == 0)
                     return new DereferencedPointer(innerObject);
                 VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
-                instructions.add(new AddPtr(innerObject, new ConstLong(memberOffset), 1, dstPtr));
+                instructions.add(new AddPtr(innerObject, new LongInit(memberOffset), 1, dstPtr));
                 return new DereferencedPointer(dstPtr);
             }
         }

@@ -116,7 +116,6 @@ public class Mcc {
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE}
 
     public static int preprocess(Path cFile, Path iFile) throws IOException, InterruptedException {
-        System.out.println(Arrays.asList("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()));
         ProcessBuilder pb = new ProcessBuilder("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()).inheritIO();
         return pb.start().waitFor();
     }

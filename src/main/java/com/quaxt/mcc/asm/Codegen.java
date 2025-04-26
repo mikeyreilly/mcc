@@ -366,17 +366,17 @@ public class Codegen {
 
     private static Operand toOperand(ValIr val) {
         return switch (val) {
-            case ConstChar(byte i) -> new Imm(i);
-            case ConstUChar(byte i) -> new Imm(i);
-            case ConstInt(int i) -> new Imm(i);
+            case CharInit(byte i) -> new Imm(i);
+            case UCharInit(byte i) -> new Imm(i);
+            case IntInit(int i) -> new Imm(i);
             case VarIr(String identifier) -> {
                 Type t = valToType(val);
                 yield t instanceof Array || t instanceof Structure ? new PseudoMem(identifier, 0) : new Pseudo(identifier);
             }
-            case ConstLong(long l) -> new Imm(l);
-            case ConstUInt(int i) -> new Imm(i);
-            case ConstULong(long l) -> new Imm(l);
-            case ConstDouble(double d) -> resolveConstant(d);
+            case LongInit(long l) -> new Imm(l);
+            case UIntInit(int i) -> new Imm(i);
+            case ULongInit(long l) -> new Imm(l);
+            case DoubleInit(double d) -> resolveConstant(d);
             default -> throw new Todo("can't yet handle" + val);
         };
     }
