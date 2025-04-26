@@ -36,4 +36,15 @@ double multiplication work
 
 
 * ch17
-** TODO <2025-04-03 Thu> take casting out of parseUnaryExp and add support for sizeof (see p. 466)
+** DONE <2025-04-03 Thu> take casting out of parseUnaryExp and add support for sizeof (see p. 466)
+
+* TODO <2025-04-26 Sat> ch19
+* TODO <2025-04-26 Sat> ch20
+* TODO <2025-04-26 Sat> unions
+* TODO <2025-04-26 Sat> typedef
+* TODO <2025-04-26 Sat> varargs
+* TODO <2025-04-26 Sat> the rest of c
+* TODO <2025-04-26 Sat> my own preprocessor
+* TODO <2025-04-26 Sat> my own assembler
+* TODO <2025-04-26 Sat> Windows support
+* TODO <2025-04-26 Sat> ARM support
