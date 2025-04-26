@@ -1,3 +1,7 @@
 package com.quaxt.mcc.parser;
 
-public sealed interface Initializer permits SingleInit, CompoundInit{}
+import com.quaxt.mcc.semantic.Type;
+
+public sealed interface Initializer permits SingleInit, CompoundInit{
+    Type type();
+}

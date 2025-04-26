@@ -72,8 +72,7 @@ public class Mcc {
 
     public static int typeAlignment(Type type) {
         return switch (type) {
-            case Array(Type element, Constant _) ->
-                    Mcc.typeAlignment(element);
+            case Array(Type element, Constant _) -> Mcc.typeAlignment(element);
             case FunType _ -> 0;
             case Pointer _ -> 8;
             case CHAR -> 1;
@@ -117,6 +116,7 @@ public class Mcc {
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE}
 
     public static int preprocess(Path cFile, Path iFile) throws IOException, InterruptedException {
+        System.out.println(Arrays.asList("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()));
         ProcessBuilder pb = new ProcessBuilder("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()).inheritIO();
         return pb.start().waitFor();
     }

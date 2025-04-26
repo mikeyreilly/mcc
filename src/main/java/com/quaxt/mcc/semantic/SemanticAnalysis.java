@@ -620,9 +620,15 @@ public class SemanticAnalysis {
                 SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(initialValue, false)));
             return new VarDecl(new Var(decl.name().name(), decl.varType()), decl.init(), decl.varType(), decl.storageClass());
         } else {
-            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
-            var init = decl.init() != null ? typeCheckInit(decl.init(), decl.varType()) : null;
-            return new VarDecl(new Var(decl.name().name(), decl.varType()), init, decl.varType(), decl.storageClass());
+            Initializer init;
+            Type type = decl.varType();
+            if (decl.init() != null) {
+                init = typeCheckInit(decl.init(), decl.varType());
+                type = init.type();
+            } else init = null;
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(type, LOCAL_ATTR));
+
+            return new VarDecl(new Var(decl.name().name(), type), init, type, decl.storageClass());
         }
     }
 
@@ -666,16 +672,20 @@ public class SemanticAnalysis {
             case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
                 if (targetType instanceof Array(Type elementType,
                                                 Constant arraySize)) {
-                    long l = arraySize.toLong();
-                    if (inits.size() > l) {
-                        throw new Err("wrong number of values in initializer");
+                    long zerosToAdd = 0;
+                    if (arraySize != null) {
+                        long l = arraySize.toLong();
+                        if (inits.size() > l) {
+                            throw new Err("wrong number of values in initializer");
+                        }
+                        zerosToAdd = l - inits.size();
                     }
                     inits.replaceAll(i -> typeCheckInit(i, elementType));
-                    long zerosToAdd = l - inits.size();
+
                     for (long i = 0; i < zerosToAdd; i++) {
                         inits.add(zeroInitializer(elementType));
                     }
-                    yield new CompoundInit(inits, targetType);
+                    yield new CompoundInit(inits, arraySize == null ? new Array(elementType, new ConstULong(inits.size())) : targetType);
                 } else if (targetType instanceof Structure(String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     ArrayList<MemberEntry> members = structDef.members();
