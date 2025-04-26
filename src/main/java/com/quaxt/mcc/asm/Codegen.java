@@ -1,24 +1,27 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.parser.*;
+import com.quaxt.mcc.parser.Constant;
+import com.quaxt.mcc.parser.Var;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.Mcc.valToType;
+import static com.quaxt.mcc.UnaryOperator.SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.Nullary.RET;
-import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
+import static com.quaxt.mcc.asm.Reg.*;
 import static com.quaxt.mcc.semantic.Primitive.UCHAR;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
-import static com.quaxt.mcc.UnaryOperator.SHR;
 
 public class Codegen {
     static HashMap<Double, StaticConstant> CONSTANT_TABLE = new HashMap<>();
@@ -62,7 +65,7 @@ public class Codegen {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
 
                 List<Instruction> instructionAsms = functionAsm.instructions();
-                AtomicInteger offset = replacePseudoRegisters(instructionAsms, functionAsm.returnInMemory());
+                AtomicLong offset = replacePseudoRegisters(instructionAsms, functionAsm.returnInMemory());
                 fixUpInstructions(offset, instructionAsms);
             }
         }
@@ -103,9 +106,9 @@ public class Codegen {
         } : op1;
     }
 
-    private static AtomicInteger replacePseudoRegisters(List<Instruction> instructions, boolean returnInMemory) {
-        AtomicInteger offset = new AtomicInteger(returnInMemory ? -16 : -8);
-        Map<String, Integer> varTable = new HashMap<>();
+    private static AtomicLong replacePseudoRegisters(List<Instruction> instructions, boolean returnInMemory) {
+        AtomicLong offset = new AtomicLong(returnInMemory ? -16 : -8);
+        Map<String, Long> varTable = new HashMap<>();
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
             Instruction newInst = switch (oldInst) {
@@ -147,12 +150,12 @@ public class Codegen {
         return offset;
     }
 
-    private static void fixUpInstructions(AtomicInteger offset, List<Instruction> instructions) {
+    private static void fixUpInstructions(AtomicLong offset, List<Instruction> instructions) {
         // Fix up instructions
-        int stackSize = -offset.get();
+        long stackSize = -offset.get();
         // round up to next multiple of 16 (makes it easier to maintain
         // alignment during function calls
-        int remainder = stackSize % 16;
+        long remainder = stackSize % 16;
         if (remainder != 0) {
             stackSize += (16 - remainder);
         }
@@ -206,9 +209,15 @@ public class Codegen {
                     if (isRam(src) && isRam(dst)) {
                         instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
                         instructions.add(i + 1, new Mov(typeAsm, srcReg(typeAsm), dst));
-                    } else if (isRam(dst) && typeAsm == QUADWORD && src instanceof Imm imm && imm.isAwkward()) {
-                        instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
-                        instructions.add(i + 1, new Mov(typeAsm, srcReg(typeAsm), dst));
+                    } else if (src instanceof Imm imm) {
+                        if (typeAsm == QUADWORD) {
+                            if (imm.isAwkward() && isRam(dst)) {
+                                instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
+                                instructions.add(i + 1, new Mov(typeAsm, srcReg(typeAsm), dst));
+                            }
+                        } else {
+                            instructions.set(i, new Mov(typeAsm, imm.truncate(typeAsm), dst));
+                        }
                     }
                 }
                 case Lea(Operand src, Operand dst) -> {
@@ -329,14 +338,6 @@ public class Codegen {
         return toTypeAsm(valToType(val));
     }
 
-    private static Type valToType(ValIr val) {
-        return switch (val) {
-            case Constant constant -> constant.type();
-            case VarIr(String identifier) ->
-                    SYMBOL_TABLE.get(identifier).type();
-        };
-    }
-
     private static TypeAsm toTypeAsm(Type type) {
         return switch (type) {
             case Primitive.CHAR, UCHAR, Primitive.SCHAR -> BYTE;
@@ -366,18 +367,17 @@ public class Codegen {
 
     private static Operand toOperand(ValIr val) {
         return switch (val) {
-            case ConstChar(byte i) -> new Imm(i);
-            case ConstUChar(byte i) -> new Imm(i);
-            case ConstInt(int i) -> new Imm(i);
+            case CharInit(byte i) -> new Imm(i);
+            case UCharInit(byte i) -> new Imm(i & 0xff);
+            case IntInit(int i) -> new Imm(i);
             case VarIr(String identifier) -> {
                 Type t = valToType(val);
                 yield t instanceof Array || t instanceof Structure ? new PseudoMem(identifier, 0) : new Pseudo(identifier);
             }
-            case ConstLong(long l) -> new Imm(l);
-            case ConstUInt(int i) -> new Imm(i);
-            case ConstULong(long l) -> new Imm(l);
-            case ConstDouble(double d) -> resolveConstant(d);
-            default -> throw new Todo("can't yet handle" + val);
+            case LongInit(long l) -> new Imm(l);
+            case UIntInit(int i) -> new Imm(Integer.toUnsignedLong(i));
+            case ULongInit(long l) -> new Imm(l);
+            case DoubleInit(double d) -> resolveConstant(d);
         };
     }
 
@@ -393,8 +393,8 @@ public class Codegen {
         };
     }
 
-    private static Operand dePseudo(Operand in, Map<String, Integer> varTable, AtomicInteger offsetA) {
-        int offsetFromStartOfArray;
+    private static Operand dePseudo(Operand in, Map<String, Long> varTable, AtomicLong offsetA) {
+        long offsetFromStartOfArray;
         String identifier;
         switch (in) {
             case Imm _, Reg _, Memory _, DoubleReg _, Data _, Indexed _:
@@ -403,7 +403,7 @@ public class Codegen {
                 identifier = pIdentifier;
                 offsetFromStartOfArray = 0;
                 break;
-            case PseudoMem(String pIdentifier, int pOffsetFromStartOfArray):
+            case PseudoMem(String pIdentifier, long pOffsetFromStartOfArray):
                 identifier = pIdentifier;
                 offsetFromStartOfArray = pOffsetFromStartOfArray;
                 break;
@@ -412,19 +412,19 @@ public class Codegen {
         }
         if (BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry(
                 TypeAsm type, boolean isStatic, boolean _)) {
-            int size = type.size();
-            int alignment = type.alignment();
+            long size = type.size();
+            long alignment = type.alignment();
 
 
             if (isStatic) return new Data(identifier, offsetFromStartOfArray);
 
-            Integer varOffset = varTable.get(identifier);
+            Long varOffset = varTable.get(identifier);
             if (varOffset == null) {
                 // it starts ar -8 - we can use this for the first var
                 // when that var is written it will update bytes stack-8 to stack-1
                 varOffset = offsetA.get();
                 varOffset -= size;
-                int remainder = varOffset % alignment;
+                long remainder = varOffset % alignment;
                 if (remainder != 0) {
                     varOffset -= (alignment + remainder);
                 }
@@ -532,8 +532,8 @@ public class Codegen {
                 var assemblyType = integerArg.type();
 
                 Reg r = INTEGER_REGISTERS[regIndex];
-                if (assemblyType instanceof ByteArray(int size,
-                                                      int alignment)) {
+                if (assemblyType instanceof ByteArray(long size,
+                                                      long alignment)) {
                     copyBytesToReg(instructionAsms, integerArg.operand(), r, size);
                 } else {
                     instructionAsms.add(new Mov(assemblyType, integerArg.operand(), r));
@@ -549,8 +549,7 @@ public class Codegen {
                 TypedOperand to = stackArguments.get(i);
                 TypeAsm assemblyType = to.type();
                 Operand operand = to.operand();
-                if (assemblyType instanceof ByteArray(int size,
-                                                      int alignment)) {
+                if (assemblyType instanceof ByteArray(long size, long alignment)) {
                     instructionAsms.add(new Binary(SUB, QUADWORD, new Imm(8), SP));
                     copyBytes(instructionAsms, operand, new Memory(SP, 0), size);
                 } else if (operand instanceof Imm || operand instanceof Reg || assemblyType == QUADWORD || assemblyType == DOUBLE) {
@@ -574,7 +573,7 @@ public class Codegen {
                     TypeAsm t = intDest.type();
                     var op = intDest.operand();
                     Reg r = INTEGER_RETURN_REGISTERS[regIndex];
-                    if (t instanceof ByteArray(int size, int alignment)) {
+                    if (t instanceof ByteArray(long size, long alignment)) {
                         copyBytesFromReg(instructionAsms, r, op, size);
                     } else {
                         instructionAsms.add(new Mov(t, r, op));
@@ -591,8 +590,8 @@ public class Codegen {
         }
     }
 
-    private static void copyBytesFromReg(List<Instruction> ins, Reg srcReg, Operand dstOp, int byteCount) {
-        int offset = 0;
+    private static void copyBytesFromReg(List<Instruction> ins, Reg srcReg, Operand dstOp, long byteCount) {
+        long offset = 0;
         while (offset < byteCount) {
             Operand dstByte = dstOp.plus(offset);
             ins.add(new Mov(BYTE, srcReg, dstByte));
@@ -603,8 +602,8 @@ public class Codegen {
 
     }
 
-    private static void copyBytesToReg(List<Instruction> ins, Operand srcOp, Reg dstReg, int byteCount) {
-        int offset = byteCount - 1;
+    private static void copyBytesToReg(List<Instruction> ins, Operand srcOp, Reg dstReg, long byteCount) {
+        long offset = byteCount - 1;
         while (offset >= 0) {
             Operand srcByte = srcOp.plus(offset);
             ins.add(new Mov(BYTE, srcByte, dstReg));
@@ -639,7 +638,7 @@ public class Codegen {
 
         for (TypedOperand to : integerArguments) {
             TypeAsm paramType = to.type();
-            if (paramType instanceof ByteArray(int size, int alignment)) {
+            if (paramType instanceof ByteArray(long size, long alignment)) {
                 copyBytesFromReg(ins, INTEGER_REGISTERS[regIndex], to.operand(), size);
             } else
                 ins.add(new Mov(to.type(), INTEGER_REGISTERS[regIndex], to.operand()));
@@ -654,7 +653,7 @@ public class Codegen {
         for (int i = 0; i < stackArguments.size(); i++) {
             TypedOperand to = stackArguments.get(i);
             TypeAsm paramType = to.type();
-            if (paramType instanceof ByteArray(int size, int alignment)) {
+            if (paramType instanceof ByteArray(long size, long alignment)) {
                 Operand src = new Memory(BP, offset);
                 copyBytes(ins, src, to.operand(), size);
             } else
@@ -731,7 +730,7 @@ public class Codegen {
                     Operand dst = toOperand(dstV);
                     TypeAsm typeAsm = valToAsmType(srcV);
                     assert (typeAsm == valToAsmType(dstV));
-                    if (typeAsm instanceof ByteArray(int size, int alignment)) {
+                    if (typeAsm instanceof ByteArray(long size, long alignment)) {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
@@ -740,7 +739,7 @@ public class Codegen {
                     Operand dst = toOperand(dstV, (int) offset1);
                     TypeAsm typeAsm = valToAsmType(srcV);
                     assert (typeAsm == valToAsmType(dstV));
-                    if (typeAsm instanceof ByteArray(int size, int alignment)) {
+                    if (typeAsm instanceof ByteArray(long size, long alignment)) {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
@@ -763,8 +762,8 @@ public class Codegen {
                         ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
                     } else {
                         //p.335
-                        LabelIr label1 = newLabel("aub");
-                        LabelIr label2 = newLabel("endCmp");
+                        LabelIr label1 = newLabel(Mcc.makeTemporary(".Laub."));
+                        LabelIr label2 = newLabel(Mcc.makeTemporary(".LendCmp."));
                         ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
                         ins.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL, true, label1.label()));
                         ins.add(new Cvttsd2si(QUADWORD, toOperand(src), toOperand(dst)));
@@ -821,7 +820,7 @@ public class Codegen {
                     Operand dst = toOperand(dstV);
                     TypeAsm dstType = toTypeAsm(valToType(dstV));
                     ins.add(new Mov(QUADWORD, ptr, AX));
-                    if (dstType instanceof ByteArray(int size, int alignment)) {
+                    if (dstType instanceof ByteArray(long size, long alignment)) {
                         Operand src = new Memory(AX, 0);
                         copyBytes(ins, src, dst, size);
                     } else {
@@ -837,7 +836,7 @@ public class Codegen {
                     Operand ptr = toOperand(ptrV);
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     TypeAsm srcType = toTypeAsm(valToType(srcV));
-                    if (srcType instanceof ByteArray(int size, int alignment)) {
+                    if (srcType instanceof ByteArray(long size, long alignment)) {
                         Operand dst = new Memory(AX, 0);
                         copyBytes(ins, src, dst, size);
                     } else {
@@ -864,14 +863,16 @@ public class Codegen {
                         ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
                         ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
                     } else {
-                        LabelIr label1 = newLabel("outOfRange");
-                        LabelIr label2 = newLabel("end");
-                        ins.add(new Cmp(QUADWORD, new Imm(0), src));
+                        // see description on p. 320
+                        LabelIr label1 = newLabel(Mcc.makeTemporary(".LoutOfRange."));
+                        LabelIr label2 = newLabel(Mcc.makeTemporary(".Lend."));
+                        var asmSrcType = srcType == Primitive.UINT ? LONGWORD : QUADWORD;
+                        ins.add(new Cmp(asmSrcType, new Imm(0), src));
                         ins.add(new JmpCC(CmpOperator.LESS_THAN, false, label1.label()));
-                        ins.add(new Cvtsi2sd(QUADWORD, src, dst));
+                        ins.add(new Cvtsi2sd(asmSrcType, src, dst));
                         ins.add(new Jump(label2.label()));
                         ins.add(label1);
-                        ins.add(new Mov(QUADWORD, src, AX));
+                        ins.add(new Mov(asmSrcType, src, AX));
                         ins.add(new Mov(QUADWORD, AX, DX));
                         ins.add(new Unary(SHR, QUADWORD, DX));
                         ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));
@@ -910,11 +911,12 @@ public class Codegen {
                 case CopyFromOffset(ValIr srcV, long offset1, VarIr dstV) -> {
                     Operand src = toOperand(srcV, (int) offset1);
                     TypeAsm typeAsm = valToAsmType(dstV);
-                    if (typeAsm instanceof ByteArray(int size, int alignment)) {
+                    if (typeAsm instanceof ByteArray(long size, long alignment)) {
                         Operand dst = toOperand(dstV, 0);
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, toOperand(dstV)));
                 }
+                case Ignore.IGNORE -> {}
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
             }
@@ -943,7 +945,7 @@ public class Codegen {
                 Operand op = to.operand();
                 TypeAsm t = to.type();
                 var r = INTEGER_RETURN_REGISTERS[regIndex];
-                if (t instanceof ByteArray(int size, int alignment)) {
+                if (t instanceof ByteArray(long size, long alignment)) {
                     copyBytesToReg(ins, op, r, size);
                 } else {
                     ins.add(new Mov(t, op, r));
@@ -956,14 +958,14 @@ public class Codegen {
                 ins.add(new Mov(DOUBLE, op, r));
                 regIndex++;
             }
-//            TypeAsm returnType = valToAsmType(val);
+//            TypeAsm returnType = valToAsmType(src);
 //            ins.add(new Mov(returnType, retVal, returnType == DOUBLE ? XMM0 : AX));
         }
         ins.add(RET);
 
     }
 
-    private static void copyBytes(List<Instruction> ins, Operand src, Operand dst, int size) {
+    private static void copyBytes(List<Instruction> ins, Operand src, Operand dst, long size) {
         int offset = 0;
         while (size >= 8) {
             ins.add(new Mov(QUADWORD, src.plus(offset), dst.plus(offset)));
@@ -1007,10 +1009,10 @@ public class Codegen {
                 else stackArguments.add(to);
             } else { // struct
 
-                int offset = 0;
+                long offset = 0;
                 String identifier = switch (v) {
                     case Pseudo(String id) -> id;
-                    case PseudoMem(String id, int off) -> {
+                    case PseudoMem(String id, long off) -> {
                         assert (off == 0);
                         offset = off;
                         yield id;
@@ -1020,7 +1022,7 @@ public class Codegen {
                 Type t = SYMBOL_TABLE.get(identifier).type();
                 List<StructureType> classes = classifyStructure(Mcc.TYPE_TABLE.get(((Structure) t).tag()));
                 boolean useStack = true;
-                int structSize = type.size();
+                long structSize = type.size();
                 if (classes.getFirst() != StructureType.MEMORY) {
                     ArrayList<TypedOperand> tentativeInts = new ArrayList<>();
                     ArrayList<Operand> tentativeDoubles = new ArrayList<>();
@@ -1054,8 +1056,8 @@ public class Codegen {
         return new ParameterClassification(integerArguments, doubleArguments, stackArguments);
     }
 
-    private static TypeAsm getEightbyteType(int offset, int structSize) {
-        int bytesFromEnd = structSize - offset;
+    private static TypeAsm getEightbyteType(long offset, long structSize) {
+        long bytesFromEnd = structSize - offset;
         if (bytesFromEnd >= 8) return QUADWORD;
         if (bytesFromEnd == 4) return LONGWORD;
         if (bytesFromEnd == 1) return BYTE;

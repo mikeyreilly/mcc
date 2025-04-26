@@ -1,0 +1,3 @@
+package com.quaxt.mcc;
+
+public enum Optimization {FOLD_CONSTANTS, PROPAGATE_COPIES, ELIMINATE_UNREACHABLE_CODE, ELIMINATE_DEAD_STORES}
