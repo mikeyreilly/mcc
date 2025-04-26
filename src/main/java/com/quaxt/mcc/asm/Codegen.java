@@ -670,14 +670,17 @@ public class Codegen {
                     Operand index = toOperand(indexV);
                     Operand dst = toOperand(dstV);
                     ins.add(new Mov(QUADWORD, ptr, AX));
-                    ins.add(new Mov(QUADWORD, index, DX));
-                    switch (scale) {
-                        case 1, 2, 4, 8 ->
-                                ins.add(new Lea(new Indexed(AX, DX, scale), dst));
-                        default -> {
-                            // MR-TODO we can save an instruction when index is a constant. See table 15-2 p. 416
-                            ins.add(new Binary(IMUL, QUADWORD, new Imm(scale), DX));
-                            ins.add(new Lea(new Indexed(AX, DX, 1), dst));
+                    if (index instanceof Imm(long l)) {
+                        ins.add(new Lea(new Memory(AX, l * scale), dst));
+                    } else {
+                        ins.add(new Mov(QUADWORD, index, DX));
+                        switch (scale) {
+                            case 1, 2, 4, 8 ->
+                                    ins.add(new Lea(new Indexed(AX, DX, scale), dst));
+                            default -> {
+                                ins.add(new Binary(IMUL, QUADWORD, new Imm(scale), DX));
+                                ins.add(new Lea(new Indexed(AX, DX, 1), dst));
+                            }
                         }
                     }
                 }
