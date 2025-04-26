@@ -2,31 +2,27 @@ package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.*;
-import com.quaxt.mcc.tacky.CharInit;
-import com.quaxt.mcc.tacky.UCharInit;
+import com.quaxt.mcc.CharInit;
+import com.quaxt.mcc.UCharInit;
 
 public enum Primitive implements Type {
-    CHAR(new CharInit(0), new ConstChar((byte)0)), UCHAR(new UCharInit(0), new ConstUChar(0)), SCHAR(new CharInit(0), new ConstChar((byte)0)),
-    INT(new IntInit(0), new ConstInt(0)), UINT(new UIntInit(0), new ConstUInt(0)), LONG(new LongInit(0), new ConstLong(0L)),
-    ULONG(new ULongInit(0), new ConstULong(0L)), DOUBLE(new DoubleInit(0), new ConstDouble(0d)),
-    VOID(new UIntInit(0), new ConstUInt(0)),;
+    CHAR(new CharInit((byte) 0)), UCHAR(new UCharInit((byte) 0)), SCHAR(new CharInit((byte) 0)), INT(IntInit.ZERO), UINT(new UIntInit(0)), LONG(new LongInit(0)), ULONG(new ULongInit(0)), DOUBLE(new DoubleInit(0)), VOID(new UIntInit(0));
 
     private final StaticInit zero;
-    private final Constant zeroConstant;
-    public final SingleInit zeroInitializer;
+    public Initializer zeroInitializer;
 
-    Primitive(StaticInit zero, Constant zeroConstant) {
+    Primitive(StaticInit zero) {
         this.zero = zero;
-        this.zeroConstant = zeroConstant;
-        this.zeroInitializer = new SingleInit(zeroConstant, this);
+        this.zeroInitializer=new SingleInit((Constant)zero, this);
     }
+
     public StaticInit zero() {
         return zero;
     }
 
     @Override
     public boolean looseEquals(Type other) {
-        return other==this;
+        return other == this;
     }
 
     public static Type fromTokenType(TokenType tokenType) {

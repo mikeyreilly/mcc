@@ -1,0 +1,2 @@
+Incomplete implementation of a C compiler in Java. Owes its existence
+to Nora Sandler's [[https://nostarch.com/writing-c-compiler][Writing a C Compiler]].

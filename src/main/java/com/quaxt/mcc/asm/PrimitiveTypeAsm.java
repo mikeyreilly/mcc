@@ -13,7 +13,7 @@ public enum PrimitiveTypeAsm implements TypeAsm {
         this.suffix = suffix;
     }
 
-    public int size() {
+    public long size() {
         return size;
     }
 

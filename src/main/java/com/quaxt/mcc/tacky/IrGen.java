@@ -2,8 +2,12 @@ package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.*;
+import com.quaxt.mcc.semantic.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
@@ -12,8 +16,6 @@ import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
-
-import com.quaxt.mcc.semantic.*;
 
 public class IrGen {
 
@@ -54,7 +56,7 @@ public class IrGen {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
         FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions, function.funType().ret());
-        ReturnIr ret = new ReturnIr(new ConstInt(0));
+        ReturnIr ret = new ReturnIr(new IntInit(0));
         instructions.add(ret);
         return f;
     }
@@ -151,10 +153,10 @@ public class IrGen {
         long arrayLen = arraySize.toLong();
         long howManyCharsToCopy = Math.min(s.length(), arrayLen);
         for (int i = 0; i < howManyCharsToCopy; i++) {
-            instructions.add(new CopyToOffset(new ConstChar((byte) (s.charAt(i) & 0xff)), dst, offset + i));
+            instructions.add(new CopyToOffset(new CharInit((byte) (s.charAt(i) & 0xff)), dst, offset + i));
         }
         for (long i = howManyCharsToCopy; i < arrayLen; i++) {
-            instructions.add(new CopyToOffset(ConstChar.zero(), dst, offset + i));
+            instructions.add(new CopyToOffset(CharInit.zero(), dst, offset + i));
         }
     }
 
@@ -172,10 +174,10 @@ public class IrGen {
 
     private static void compileIfElse(Exp condition, Statement ifTrue, Statement ifFalse, List<InstructionIr> instructions) {
         ValIr c = emitTackyAndConvert(condition, instructions);
-        LabelIr e2Label = newLabel("e2");
+        LabelIr e2Label = newLabel(Mcc.makeTemporary(".Le2."));
         instructions.add(new JumpIfZero(c, e2Label.label()));
         compileStatement(ifTrue, instructions);
-        LabelIr endLabel = newLabel("end");
+        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
         instructions.add(new Jump(endLabel.label()));
         instructions.add(e2Label);
         compileStatement(ifFalse, instructions);
@@ -184,7 +186,7 @@ public class IrGen {
 
     private static void compileIf(Exp condition, Statement ifTrue, List<InstructionIr> instructions) {
         ValIr c = emitTackyAndConvert(condition, instructions);
-        LabelIr endLabel = newLabel("end");
+        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
         instructions.add(new JumpIfZero(c, endLabel.label()));
         compileStatement(ifTrue, instructions);
         instructions.add(endLabel);
@@ -218,14 +220,14 @@ public class IrGen {
             case Continue aContinue ->
                     instructions.add(new Jump(continueLabel(aContinue.label)));
             case DoWhile(Statement body, Exp condition, String label) -> {
-                LabelIr start = newLabel("start");
+                LabelIr start = newLabel(Mcc.makeTemporary(".Lstart."));
                 instructions.add(start);
                 compileStatement(body, instructions);
-                LabelIr continueLabel = new LabelIr(continueLabel(label));
+                LabelIr continueLabel = newLabel(continueLabel(label));
                 instructions.add(continueLabel);
                 ValIr v = emitTackyAndConvert(condition, instructions);
                 instructions.add(new JumpIfNotZero(v, start.label()));
-                LabelIr breakLabel = new LabelIr(breakLabel(label));
+                LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(breakLabel);
             }
             case For(ForInit init, Exp condition, Exp post, Statement body,
@@ -238,9 +240,9 @@ public class IrGen {
                     }
                 }
 
-                LabelIr start = new LabelIr(startLabel(label));
-                LabelIr continueLabel = new LabelIr(continueLabel(label));
-                LabelIr breakLabel = new LabelIr(breakLabel(label));
+                LabelIr start = newLabel(startLabel(label));
+                LabelIr continueLabel = newLabel(continueLabel(label));
+                LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(start);
                 if (condition != null) {
                     ValIr v = emitTackyAndConvert(condition, instructions);
@@ -253,10 +255,10 @@ public class IrGen {
                 instructions.add(breakLabel);
             }
             case While(Exp condition, Statement body, String label) -> {
-                LabelIr continueLabel = new LabelIr(continueLabel(label));
+                LabelIr continueLabel = newLabel(continueLabel(label));
                 instructions.add(continueLabel);
                 ValIr v = emitTackyAndConvert(condition, instructions);
-                LabelIr breakLabel = new LabelIr(breakLabel(label));
+                LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(new JumpIfZero(v, breakLabel.label()));
                 compileStatement(body, instructions);
                 instructions.add(new Jump(continueLabel.label()));
@@ -266,53 +268,53 @@ public class IrGen {
     }
 
     private static String startLabel(String label) {
-        return "start_" + label;
+        return label + ".start";
     }
 
     private static String continueLabel(String label) {
-        return "continue_" + label;
+        return label + ".continue";
     }
 
     private static String breakLabel(String label) {
-        return "break_" + label;
+        return label + ".break";
     }
 
     private static ExpResult emitTacky(Exp expr, List<InstructionIr> instructions) {
         switch (expr) {
             case null:
                 return null;
-            case ConstInt c:
+            case IntInit c:
                 return new PlainOperand(c);
-            case ConstLong c:
+            case LongInit c:
                 return new PlainOperand(c);
-            case ConstUInt c:
+            case UIntInit c:
                 return new PlainOperand(c);
-            case ConstULong c:
+            case ULongInit c:
                 return new PlainOperand(c);
-            case ConstDouble c:
+            case DoubleInit c:
                 return new PlainOperand(c);
-            case ConstChar c:
+            case CharInit c:
                 return new PlainOperand(c);
-            case ConstUChar c:
+            case UCharInit c:
                 return new PlainOperand(c);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
                 ValIr cond = emitTackyAndConvert(condition, instructions);
-                LabelIr e2Label = newLabel("e2");
+                LabelIr e2Label = newLabel(Mcc.makeTemporary(".Le2."));
                 instructions.add(new JumpIfZero(cond, e2Label.label()));
                 if (type == VOID) {
                     emitTackyAndConvert(ifTrue, instructions);
-                    LabelIr endLabel = newLabel("end");
+                    LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
                     instructions.add(new Jump(endLabel.label()));
                     instructions.add(e2Label);
                     emitTackyAndConvert(ifFalse, instructions);
                     instructions.add(endLabel);
-                    return null;//not used by caller (see p480)
+                    return null;//not used by caller (see p. 480)
                 } else {
                     ValIr e1 = emitTackyAndConvert(ifTrue, instructions);
-                    VarIr result = makeTemporary("result", type);
+                    VarIr result = makeTemporary("result.", type);
                     instructions.add(new Copy(e1, result));
-                    LabelIr endLabel = newLabel("end");
+                    LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
                     instructions.add(new Jump(endLabel.label()));
                     instructions.add(e2Label);
                     ValIr e2 = emitTackyAndConvert(ifFalse, instructions);
@@ -332,18 +334,18 @@ public class IrGen {
                     case AND -> {
                         VarIr result = makeTemporary("tmp.", INT);
 
-                        LabelIr falseLabel = newLabel("andFalse");
-                        LabelIr endLabel = newLabel("andEnd");
+                        LabelIr falseLabel = newLabel(Mcc.makeTemporary(".LandFalse."));
+                        LabelIr endLabel = newLabel(Mcc.makeTemporary(".LandEnd."));
                         ValIr v1 = emitTackyAndConvert(left, instructions);
                         instructions.add(new JumpIfZero(v1, falseLabel.label()));
 
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         instructions.add(new JumpIfZero(v2, falseLabel.label()));
-                        instructions.add(new Copy(new ConstInt(1), result));
+                        instructions.add(new Copy(new IntInit(1), result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(falseLabel);
-                        instructions.add(new Copy(new ConstInt(0), result));
+                        instructions.add(new Copy(new IntInit(0), result));
                         instructions.add(endLabel);
 
                         return new PlainOperand(result);
@@ -351,18 +353,18 @@ public class IrGen {
                     case OR -> {
                         VarIr result = makeTemporary("tmp.", INT);
 
-                        LabelIr trueLabel = newLabel("true");
-                        LabelIr endLabel = newLabel("end");
+                        LabelIr trueLabel = newLabel(Mcc.makeTemporary(".Ltrue."));
+                        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
                         ValIr v1 = emitTackyAndConvert(left, instructions);
                         instructions.add(new JumpIfNotZero(v1, trueLabel.label()));
 
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         instructions.add(new JumpIfNotZero(v2, trueLabel.label()));
-                        instructions.add(new Copy(new ConstInt(0), result));
+                        instructions.add(new Copy(new IntInit(0), result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(trueLabel);
-                        instructions.add(new Copy(new ConstInt(1), result));
+                        instructions.add(new Copy(new IntInit(1), result));
                         instructions.add(endLabel);
 
                         return new PlainOperand(result);
@@ -371,16 +373,16 @@ public class IrGen {
                         ValIr v1 = emitTackyAndConvert(left, instructions);
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         VarIr dstName = makeTemporary("tmp.", expr.type());
-                        ValIr ptr = null;
+                        VarIr ptr = null;
                         ValIr other = null;
                         Type ptrRefType = null;
                         if (left.type() instanceof Pointer(Type referenced)) {
-                            ptr = v1;
+                            ptr = (VarIr) v1;
                             other = v2;
                             ptrRefType = referenced;
                         } else if (right.type() instanceof Pointer(
                                 Type referenced)) {
-                            ptr = v2;
+                            ptr = (VarIr) v2;
                             other = v1;
                             ptrRefType = referenced;
                         }
@@ -391,7 +393,7 @@ public class IrGen {
                                         // ptr - ptr (left has to be pointer because type checker doesn't allow non-ptr - ptr)
                                         var diff = makeTemporary("tmp.", LONG);
                                         instructions.add(new BinaryIr(SUB, ptr, other, diff));
-                                        instructions.add(new BinaryIr(DIVIDE, diff, new ConstInt((int) (long) Mcc.size(ptrRefType)), dstName));
+                                        instructions.add(new BinaryIr(DIVIDE, diff, new IntInit((int) (long) Mcc.size(ptrRefType)), dstName));
                                     } else { // ptr - int
                                         var j = makeTemporary("tmp.", LONG);
                                         instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, other, j));
@@ -453,7 +455,7 @@ public class IrGen {
             }
             case Dereference(Exp exp, Type _): {
                 ValIr result = emitTackyAndConvert(exp, instructions);
-                return new DereferencedPointer(result);
+                return new DereferencedPointer((VarIr) result);
             }
             case AddrOf(Exp inner, Type _): {
                 ExpResult v = emitTacky(inner, instructions);
@@ -461,7 +463,7 @@ public class IrGen {
                     case PlainOperand(ValIr obj) -> {
                         assert (expr.type() instanceof Pointer);
                         VarIr dst = makeTemporary("addr.", expr.type());
-                        instructions.add(new GetAddress(obj, dst));
+                        instructions.add(new GetAddress((VarIr) obj, dst));
                         yield new PlainOperand(dst);
                     }
                     case DereferencedPointer(ValIr ptr) ->
@@ -470,7 +472,7 @@ public class IrGen {
                         var dst = makeTemporary("dst", expr.type());
                         instructions.add(new GetAddress(base, dst));
                         if (offset != 0)
-                            instructions.add(new AddPtr(dst, new ConstLong(offset), 1, dst));
+                            instructions.add(new AddPtr(dst, new LongInit(offset), 1, dst));
                         yield new PlainOperand(dst);
                     }
                 };
@@ -480,7 +482,7 @@ public class IrGen {
                 ValIr v1 = emitTackyAndConvert(left, instructions);
                 ValIr v2 = emitTackyAndConvert(right, instructions);
                 VarIr dstName = makeTemporary("tmp.", new Pointer(expr.type()));
-                ValIr ptr;
+                VarIr ptr;
                 ValIr other;
                 long scale;
                 // type checker ensures either left or right will be pointer
@@ -489,12 +491,12 @@ public class IrGen {
                 // On the other hand,  it's not all that complicated and it is nice
                 // having the AST closely resemble the corresponding code
                 if (left.type() instanceof Pointer(Type referenced)) {
-                    ptr = v1;
+                    ptr = (VarIr) v1;
                     other = v2;
                     scale = Mcc.size(referenced);
                 } else if (right.type() instanceof Pointer(
                         Type referenced)) { // else condition just for pattern match
-                    ptr = v2;
+                    ptr = (VarIr) v2;
                     other = v1;
                     scale = Mcc.size(referenced);
                 } else throw new AssertionError("");
@@ -509,10 +511,10 @@ public class IrGen {
                 return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions);
             }
             case SizeOf(Exp exp): {
-                return new PlainOperand(new ConstULong(Mcc.size(exp.type())));
+                return new PlainOperand(new ULongInit(Mcc.size(exp.type())));
             }
             case SizeOfT(Type t): {
-                return new PlainOperand(new ConstULong(Mcc.size(t)));
+                return new PlainOperand(new ULongInit(Mcc.size(t)));
             }
             case Dot(Exp structure, String member, Type type): {
                 StructDef structDef = Mcc.TYPE_TABLE.get(tag(structure));
@@ -522,7 +524,7 @@ public class IrGen {
                     case DereferencedPointer(ValIr ptr) -> {
                         if (memberOffset == 0) yield innerObject;
                         VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
-                        instructions.add(new AddPtr(ptr, new ConstLong(memberOffset), 1, dstPtr));
+                        instructions.add(new AddPtr((VarIr) ptr, new LongInit(memberOffset), 1, dstPtr));
                         yield new DereferencedPointer(dstPtr);
                     }
                     case PlainOperand(VarIr v) ->
@@ -539,9 +541,9 @@ public class IrGen {
                 int memberOffset = structDef.findMember(member).offset();
                 ValIr innerObject = emitTackyAndConvert(pointer, instructions);
                 if (memberOffset == 0)
-                    return new DereferencedPointer(innerObject);
+                    return new DereferencedPointer((VarIr) innerObject);
                 VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
-                instructions.add(new AddPtr(innerObject, new ConstLong(memberOffset), 1, dstPtr));
+                instructions.add(new AddPtr((VarIr) innerObject, new LongInit(memberOffset), 1, dstPtr));
                 return new DereferencedPointer(dstPtr);
             }
         }
@@ -590,7 +592,7 @@ public class IrGen {
                 instructions.add(new Copy(rval, obj));
                 yield lval;
             }
-            case DereferencedPointer(ValIr ptr) -> {
+            case DereferencedPointer(VarIr ptr) -> {
                 instructions.add(new Store(rval, ptr));
                 yield new PlainOperand(rval);
             }
@@ -607,7 +609,7 @@ public class IrGen {
     static AtomicLong labelCount = new AtomicLong(0L);
 
     public static LabelIr newLabel(String prefix) {
-        return new LabelIr(".L" + prefix + '.' + labelCount.getAndIncrement());
+        return new LabelIr(prefix);
     }
 
     private static VarIr makeTemporary(String prefix, Type t) {

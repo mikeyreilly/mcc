@@ -2,20 +2,20 @@ package com.quaxt.mcc;
 
 import com.quaxt.mcc.asm.Codegen;
 import com.quaxt.mcc.asm.ProgramAsm;
+import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Parser;
 import com.quaxt.mcc.parser.Program;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.IrGen;
 import com.quaxt.mcc.tacky.ProgramIr;
+import com.quaxt.mcc.tacky.ValIr;
+import com.quaxt.mcc.tacky.VarIr;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -112,11 +112,25 @@ public class Mcc {
         };
     }
 
+    public static Type valToType(ValIr val) {
+        return switch (val) {
+            case Constant constant -> constant.type();
+            case VarIr(String identifier) ->
+                    SYMBOL_TABLE.get(identifier).type();
+        };
+    }
 
-    enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE}
+    public static boolean isSigned(Type srcT) {
+        return switch (srcT) {
+            case CHAR, SCHAR, INT, LONG, DOUBLE -> true;
+            default -> false;
+        };
+    }
+
+    enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}
+
 
     public static int preprocess(Path cFile, Path iFile) throws IOException, InterruptedException {
-        System.out.println(Arrays.asList("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()));
         ProcessBuilder pb = new ProcessBuilder("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()).inheritIO();
         return pb.start().waitFor();
     }
@@ -133,11 +147,12 @@ public class Mcc {
     }
 
     public static void main(String[] args0) throws Exception {
-        logger.info("started with args " + Arrays.toString(args0));
+        logger.info("started with args " + String.join(" ", args0));
         ArrayList<String> args = Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;
         List<String> libs = new ArrayList<>();
+        EnumSet<Optimization> optimizations = EnumSet.noneOf(Optimization.class);
         for (int i = args.size() - 1; i >= 0; i--) {
             String arg = args.get(i);
             Mode newMode = switch (arg) {
@@ -146,21 +161,42 @@ public class Mcc {
                 case "--validate" -> Mode.VALIDATE;
                 case "--codegen" -> Mode.CODEGEN;
                 case "--tacky" -> Mode.TACKY;
-                case "-S" -> Mode.COMPILE;
+                case "--fold-constants" -> {
+                    optimizations.add(Optimization.FOLD_CONSTANTS);
+                    yield Mode.DUMMY;
+                }
+                case "--propagate-copies" -> {
+                    optimizations.add(Optimization.PROPAGATE_COPIES);
+                    yield Mode.DUMMY;
+                }
+                case "--eliminate-unreachable-code" -> {
+                    optimizations.add(Optimization.ELIMINATE_UNREACHABLE_CODE);
+                    yield Mode.DUMMY;
+                }
+                case "--eliminate-dead-stores" -> {
+                    optimizations.add(Optimization.ELIMINATE_DEAD_STORES);
+                    yield Mode.DUMMY;
+                }
+                case "--optimize" -> {
+                    optimizations = EnumSet.allOf(Optimization.class);
+                    yield Mode.DUMMY;
+                }
+                case "-S", "-s" -> Mode.COMPILE;
                 case "-c" -> {
                     doNotCompile = true;
-                    args.remove(i);
-                    yield null;
+                    yield Mode.DUMMY;
                 }
                 default -> {
                     if (arg.startsWith("-l")) {
                         libs.addFirst(arg);
-                        args.remove(i);
+                        yield Mode.DUMMY;
                     }
                     yield null;
                 }
             };
-            if (newMode != null) {
+            if (newMode == Mode.DUMMY) {
+                args.remove(i);
+            } else if (newMode != null) {
                 mode = newMode;
                 args.remove(i);
             }
@@ -199,6 +235,10 @@ public class Mcc {
         ProgramIr programIr = IrGen.programIr(program);
         if (mode == Mode.TACKY) {
             return;
+        }
+        //MR-TODO uncomment
+        if (!optimizations.isEmpty()) {
+            programIr = Optimizer.optimize(programIr, optimizations);
         }
         ProgramAsm programAsm = Codegen.generateProgramAssembly(programIr);
         if (mode == Mode.CODEGEN) {
