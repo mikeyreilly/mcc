@@ -2,10 +2,10 @@ package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.*;
-import com.quaxt.mcc.tacky.CharInit;
+import com.quaxt.mcc.CharInit;
 import com.quaxt.mcc.tacky.PointerInit;
 import com.quaxt.mcc.tacky.StringInit;
-import com.quaxt.mcc.tacky.UCharInit;
+import com.quaxt.mcc.UCharInit;
 
 import java.util.*;
 
@@ -381,7 +381,7 @@ public class SemanticAnalysis {
         return (long) d;
     }
 
-    private static StaticInit convertConst(StaticInit init, Type type) {
+    public static StaticInit convertConst(StaticInit init, Type type) {
         if (init instanceof DoubleInit(double d)) {
             return switch (type) {
                 case DOUBLE -> init;
@@ -390,9 +390,8 @@ public class SemanticAnalysis {
                 case ULONG -> new ULongInit(doubleToUnsignedLong(d));
                 // casting directly to int would be wrong result for doubles > 2^31
                 case UINT -> new UIntInit((int) (long) d);
-                case CHAR, SCHAR -> new CharInit((int) (long) d & 0xff);
-                case UCHAR ->
-                        new CharInit((int) doubleToUnsignedLong(d) & 0xff);
+                case CHAR, SCHAR -> new CharInit((byte) (long) d);
+                case UCHAR -> new UCharInit((byte) doubleToUnsignedLong(d));
                 default ->
                         throw new IllegalArgumentException("not a const:" + init);
             };
@@ -414,8 +413,8 @@ public class SemanticAnalysis {
             case INT -> new IntInit((int) initL);
             case ULONG -> new ULongInit(initL);
             case UINT -> new UIntInit((int) initL);
-            case CHAR, SCHAR -> new CharInit((int) initL & 0xff);
-            case UCHAR -> new UCharInit((int) initL & 0xff);
+            case CHAR, SCHAR -> new CharInit((byte) initL);
+            case UCHAR -> new UCharInit((byte) initL);
             case Pointer _ -> new ULongInit((int) initL);
             default -> null;
         };
@@ -611,7 +610,7 @@ public class SemanticAnalysis {
                 if (referenced == CHAR) {
                     String uniqueName = makeTemporary(decl.name().name() + ".string.");
                     /* TODO: this logic is probably not going to handle arrays of char* well*/
-                    SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new IntInit(strlen(staticInits))), new StaticAttributes(initialValue, false)));
+                    SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new IntInit((int)strlen(staticInits))), new StaticAttributes(initialValue, false)));
                     SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false)));
                 } else
                     throw new Err("Can't initialize pointer to " + referenced + " with string literal");
@@ -642,12 +641,12 @@ public class SemanticAnalysis {
         return l.getFirst() instanceof PointerInit;
     }
 
-    private static int strlen(ArrayList<StaticInit> l) {
+    private static long strlen(ArrayList<StaticInit> l) {
         /* this logic is probably not going to handle arrays of char* well*/
-        int len = 0;
+        long len = 0;
         for (StaticInit s : l) {
             len += switch (s) {
-                case ZeroInit(int bytes) -> bytes;
+                case ZeroInit(long bytes) -> bytes;
                 case StringInit(String str, boolean nullTerminated) ->
                         str.length();
 
@@ -742,6 +741,9 @@ public class SemanticAnalysis {
 
     private static Exp convertTo(Exp e, Type t) {
         if (e == null || e.type() == t) return e;
+        if (e instanceof Constant && e instanceof StaticInit s) {
+            return (Exp) convertConst(s, t);
+        }
         return new Cast(t, e);
     }
 

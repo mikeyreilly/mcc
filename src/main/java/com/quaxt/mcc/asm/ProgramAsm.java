@@ -24,8 +24,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case SetCC _ -> reg.b;
                 default -> reg.d;
             };
-            case Memory(Reg reg, int offset) -> offset + "(%" + reg.q + ")";
-            case Data(String identifier, int offset) -> {
+            case Memory(Reg reg, long offset) -> offset + "(%" + reg.q + ")";
+            case Data(String identifier, long offset) -> {
                 boolean isConstant = BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
                 StringBuilder sb = new StringBuilder();
                 if (isConstant) sb.append(".L");
@@ -103,7 +103,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case UIntInit(int l) -> ".long " + Integer.toUnsignedString(l);
             case ULongInit(long l) -> ".quad " + Long.toUnsignedString(l);
             case ZeroInit(long l) -> ".zero " + l;
-            case CharInit(int i) -> ".byte " + (i & 0xff);
+            case CharInit(byte i) -> ".byte " + (i & 0xff);
             case PointerInit(String label) -> ".quad " + label;
             case StringInit(String s, boolean nullTerminated) -> {
                 StringBuilder sb = new StringBuilder();
@@ -122,14 +122,14 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 sb.append('\"');
                 yield sb;
             }
-            case UCharInit(int i) -> ".byte " + (i & 0xff);
+            case UCharInit(byte i) -> ".byte " + (i & 0xff);
         });
     }
 
     private void emitStaticVariableAsm(PrintWriter out, StaticVariableAsm v) {
         boolean global = v.global();
         if (v.init().size() == 1 && v.init().getFirst() instanceof ZeroInit(
-                int bytes)) {
+                long bytes)) {
             String name = v.name();
             if (global) out.println("                .globl	" + name);
             out.println("                .bss");

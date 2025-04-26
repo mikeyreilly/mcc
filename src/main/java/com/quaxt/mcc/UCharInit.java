@@ -4,20 +4,18 @@ import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
-import static com.quaxt.mcc.ArithmeticOperator.SHR_TWO_OP;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CmpOperator.GREATER_THAN;
-import static com.quaxt.mcc.semantic.Primitive.UINT;
+import static com.quaxt.mcc.semantic.Primitive.UCHAR;
 
-public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
+public record UCharInit(byte i) implements StaticInit, Constant<UCharInit> {
     @Override
     public Type type() {
-        return UINT;
+        return UCHAR;
     }
 
-    @Override
-    public String toString() {
-        return "ConstUInt[i=" + Integer.toUnsignedString(i) + "]";
+    public byte i() {
+        return i;
     }
 
     @Override
@@ -25,14 +23,20 @@ public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
         return i == 0;
     }
 
+    @Override
+    public String toString() {
+        return "(uchar)" + (char) (i & 0xff);
+    }
+
+
     public long toLong() {
         return i;
     }
 
     @Override
-    public Constant<?> apply(BinaryOperator op, UIntInit v2) {
-        int a = i;
-        int b = v2.i;
+    public Constant<?> apply(BinaryOperator op, UCharInit v2) {
+        int a = i & 0xff;
+        int b = v2.i & 0xff;
         int c;
         switch (op) {
             case EQUALS -> {
@@ -56,8 +60,9 @@ public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
             case SUB, DOUBLE_SUB -> c = a - b;
             case ADD, DOUBLE_ADD -> c = a + b;
             case IMUL, DOUBLE_MUL -> c = a * b;
-            case DIVIDE, DOUBLE_DIVIDE -> c = b == 0 ? 0 :Integer.divideUnsigned(a, b); //div by 0 is UB
-            case REMAINDER -> c = b == 0 ? 0 : Integer.remainderUnsigned(a, b); //div by 0 is UB
+            case DIVIDE, DOUBLE_DIVIDE ->
+                    c = b == 0 ? 0 : a / b; // division by zero is UB
+            case REMAINDER -> c = b == 0 ? 0 : a % b; // division by zero is UB
             case AND -> c = a & b;
             case OR -> c = a | b;
             case BITWISE_XOR -> c = a ^ b;
@@ -67,24 +72,22 @@ public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
                 return null;
             }
         }
-        return new UIntInit(c);
+        return new UCharInit((byte) (c & 0xff));
     }
 
     @Override
-    public UIntInit apply(UnaryOperator op) {
-        int a = i;
-        int c;
+    public UCharInit apply(UnaryOperator op) {
+        byte a = i;
+        byte c;
         switch (op) {
-            case BITWISE_NOT -> c = ~a;
-            case UNARY_MINUS -> c = -a;
-            case NOT -> c = a == 0 ? 1 : 0;
-            case SHR -> c = a >> 1;
+            case BITWISE_NOT -> c = (byte) ~i;
+            case UNARY_MINUS -> c = (byte) -a;
+            case NOT -> c = (byte) (a == 0 ? 1 : 0);
+            case SHR -> c = (byte) (a >> 1);
             default -> {
                 return null;
             }
         }
-        return new UIntInit(c);
+        return new UCharInit(c);
     }
 }
-
-
