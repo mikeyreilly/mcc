@@ -1,7 +1,6 @@
 package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.tacky.*;
 
@@ -18,35 +17,115 @@ public class Optimizer {
         for (int i = 0; i < programIr.topLevels().size(); i++) {
             TopLevel topLevel = programIr.topLevels().get(i);
             if (topLevel instanceof FunctionIr f) {
-                programIr.topLevels().set(i, optimizeFunction2(f, optimizations));
+                programIr.topLevels().set(i, optimizeFunction(f, optimizations));
             }
         }
         return programIr;
     }
 
-    private static TopLevel optimizeFunction2(FunctionIr f, EnumSet<Optimization> optimizations) {
-        return new FunctionIr(f.name(), f.global(), f.type(), optimizeFunction(f.instructions(), optimizations), f.returnType());
-    }
-
-    private static List<InstructionIr> optimizeFunction(List<InstructionIr> instructions, EnumSet<Optimization> optimizations) {
+    private static TopLevel optimizeFunction(FunctionIr f, EnumSet<Optimization> optimizations) {
+        List<InstructionIr> instructions = f.instructions();
         boolean updated = true;
         while (updated) {
             updated = false;
             if (optimizations.contains(FOLD_CONSTANTS)) {
-                updated |= foldConstants(instructions);
+                updated = foldConstants(instructions);
             }
-            List<Node> nodes = makeCFG(instructions);
+            List<Node> cfg = makeCFG(instructions);
             if (optimizations.contains(ELIMINATE_UNREACHABLE_CODE)) {
-                updated |= eliminateUnreachableCode(nodes);
+                updated |= eliminateUnreachableCode(cfg);
             }
+            instructions = cfgToInstructions(cfg);
 
+        }
+        return new FunctionIr(f.name(), f.global(), f.type(), instructions, f.returnType());
+    }
+
+
+    private static List<InstructionIr> cfgToInstructions(List<Node> nodes) {
+        ArrayList<InstructionIr> instructions = new ArrayList<>();
+        for (Node n : nodes) {
+            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
+                                        ArrayList<Node> _, ArrayList<Node> _)) {
+                instructions.addAll(ins);
+            }
         }
         return instructions;
     }
 
-
     private static boolean eliminateUnreachableCode(List<Node> nodes) {
-        throw new Todo();
+        boolean updated = eliminateUnreachableBlocks(nodes);
+        updated |= removeUselessJumps(nodes);
+        updated |= removeUselessLabels(nodes);
+        return updated;
+    }
+
+    private static boolean removeUselessLabels(List<Node> nodes) {
+        // iterate through all BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
+        boolean updated = false;
+        for (int i = 1; i < nodes.size() - 1; i++) {
+            BasicBlock b = (BasicBlock) nodes.get(i);
+            var instrs = b.instructions();
+            if (instrs.isEmpty()) continue;
+            InstructionIr instr = instrs.getFirst();
+            if (instr instanceof LabelIr) {
+                boolean keepLabel = false;
+                var defaultPredecessor = nodes.get(i - 1).nodeId();
+                for (var pred : b.predecessors()) {
+                    if (pred.nodeId() != defaultPredecessor) {
+                        keepLabel = true;
+                        break;
+                    }
+                }
+                if (!keepLabel) {
+                    instrs.removeFirst();
+                    updated = true;
+                }
+            }
+
+        }
+        return updated;
+    }
+
+    private static boolean removeUselessJumps(List<Node> nodes) {
+        // iterate through all but the last BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
+        boolean updated = false;
+        for (int i = 1; i < nodes.size() - 2; i++) {
+            BasicBlock b = (BasicBlock) nodes.get(i);
+            var instrs = b.instructions();
+            InstructionIr instr = instrs.getLast();
+            if (instr instanceof Jump || instr instanceof JumpIfZero || instr instanceof JumpIfNotZero) {
+                boolean keepJump = false;
+                var defaultSuccessor = nodes.get(i + 1).nodeId();
+                for (var succ : b.successors()) {
+                    if (succ.nodeId() != defaultSuccessor) {
+                        keepJump = true;
+                        break;
+                    }
+                }
+                if (!keepJump) {
+                    instrs.removeLast();
+                    updated = true;
+                }
+            }
+
+        }
+        return updated;
+    }
+
+    private static boolean eliminateUnreachableBlocks(List<Node> nodes) {
+        Set<Integer> nodesToKeep = new HashSet<>();
+        nodesToKeep.add(nodes.getLast().nodeId());// always keep the exit node, even if there's an infinite loop
+        nodesToKeep(nodesToKeep, nodes, nodes.getFirst());
+        return nodes.removeIf(n -> !nodesToKeep.contains(n.nodeId()));
+    }
+
+    private static void nodesToKeep(Set<Integer> nodesToKeep, List<Node> nodes, Node node) {
+        nodesToKeep.add(node.nodeId());
+        for (var n : node.successors()) {
+            if (!nodesToKeep.contains(n.nodeId()))
+                nodesToKeep(nodesToKeep, nodes, n);
+        }
     }
 
     private static List<Node> makeCFG(List<InstructionIr> instructions) {
@@ -56,30 +135,31 @@ public class Optimizer {
         ExitNode exitNode = new ExitNode(new ArrayList<>());
         nodes.add(entryNode);
         int max = blocks.size() - 1;
-        Map<String, Integer> labelToNodeId = new HashMap<>();
+        Map<String, Node> labelToNodeId = new HashMap<>();
         for (int i = 0; i <= max; i++) {
             var block = blocks.get(i);
             int blockId = i + 1;
-            nodes.add(new BasicBlock(blockId, block, new ArrayList<>(), new ArrayList<>()));
+            var bb = new BasicBlock(blockId, block, new ArrayList<>(), new ArrayList<>());
+            nodes.add(bb);
             if (block.getFirst() instanceof LabelIr(String label)) {
-                labelToNodeId.put(label, blockId);
+                labelToNodeId.put(label, bb);
             }
         }
         nodes.add(exitNode);
-        addEdge(nodes, 0, 1);
+        addEdge(nodes, entryNode, nodes.get(1));
         for (int i = 0; i <= max; i++) {
-            int nodeId = i + 1;
-            int nextId;
+            Node nodeId = nodes.get(i + 1);
+            Node nextId;
             if (i == max) {
-                nextId = Integer.MAX_VALUE;
+                nextId = exitNode;
             } else {
-                nextId = nodeId + 1;
+                nextId = nodes.get(i + 2);
             }
-            BasicBlock node = (BasicBlock) nodes.get(nodeId);
+            BasicBlock node = (BasicBlock) nodeId;
             InstructionIr instr = node.instructions().getLast();
             switch (instr) {
                 case ReturnIr _ -> {
-                    addEdge(nodes, nodeId, Integer.MAX_VALUE);
+                    addEdge(nodes, nodeId, exitNode);
                 }
                 case Jump(String label) -> {
                     addEdge(nodes, nodeId, labelToNodeId.get(label));
@@ -100,16 +180,9 @@ public class Optimizer {
         return nodes;
     }
 
-    private static void addEdge(List<Node> nodes, int from, int to) {
-        if (to == Integer.MAX_VALUE) to = nodes.size() - 1;
-        nodes.get(from).successors().add(to);
-        getNode(nodes, to).predecessors().add(from);
-
-    }
-
-    private static Node getNode(List<Node> nodes, int to) {
-        var m = nodes.get(to);
-        return m;
+    private static void addEdge(List<Node> nodes, Node from, Node to) {
+        from.successors().add(to);
+        to.predecessors().add(from);
     }
 
     private static List<List<InstructionIr>> partitionIntoBasicBlocks(List<InstructionIr> instructions) {

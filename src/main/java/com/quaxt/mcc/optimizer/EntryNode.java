@@ -7,9 +7,14 @@ import java.util.Collections;
 import java.util.List;
 
 
-public record EntryNode(ArrayList<Integer> successors) implements Node {
+public record EntryNode(ArrayList<Node> successors) implements Node {
     @Override
-    public List<Integer> predecessors() {
+    public List<Node> predecessors() {
         return Collections.emptyList();
+    }
+
+    @Override
+    public int nodeId() {
+        return 0;
     }
 }

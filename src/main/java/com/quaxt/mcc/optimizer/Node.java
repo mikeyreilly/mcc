@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public sealed interface Node permits BasicBlock, EntryNode, ExitNode {
-    List<Integer> successors();
+    List<Node> successors();
 
-    List<Integer> predecessors();
+    List<Node> predecessors();
+
+    int nodeId();
 }

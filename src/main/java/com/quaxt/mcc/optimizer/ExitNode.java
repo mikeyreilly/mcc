@@ -4,9 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Collections;
 
-public record ExitNode(ArrayList<Integer> predecessors) implements Node {
+public record ExitNode(ArrayList<Node> predecessors) implements Node {
     @Override
-    public List<Integer> successors() {
+    public List<Node> successors() {
         return Collections.emptyList();
+    }
+
+    @Override
+    public int nodeId() {
+        return Integer.MAX_VALUE;
     }
 }
