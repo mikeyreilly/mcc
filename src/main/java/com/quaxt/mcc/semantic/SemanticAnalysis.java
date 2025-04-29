@@ -182,7 +182,7 @@ public class SemanticAnalysis {
         long size = 1;
         out:
         while (true) switch (targetType) {
-            case Array(Type element, Constant arraySize) -> {
+            case Array(Type element, Constant<?> arraySize) -> {
                 size *= arraySize.toLong();
                 targetType = element;
             }

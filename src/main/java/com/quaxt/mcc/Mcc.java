@@ -2,6 +2,7 @@ package com.quaxt.mcc;
 
 import com.quaxt.mcc.asm.Codegen;
 import com.quaxt.mcc.asm.ProgramAsm;
+import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Parser;
 import com.quaxt.mcc.parser.Program;
