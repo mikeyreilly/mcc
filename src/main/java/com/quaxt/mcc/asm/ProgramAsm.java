@@ -181,7 +181,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     String dstF = formatOperand(t, instruction, dst);
                     yield instruction.format(t) + srcF + ", " + dstF;
                 }
-                case Jump(String label) -> "jmp\t" + label;
+                case Jump(String label) -> {
+                    yield "jmp\t" + label;
+                }
                 case LabelIr(String label) -> label + ":";
                 case SetCC(CmpOperator cmpOperator, boolean unsigned,
                            Operand o) ->

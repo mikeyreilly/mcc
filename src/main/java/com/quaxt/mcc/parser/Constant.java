@@ -11,6 +11,10 @@ sealed public interface Constant<C extends Constant<C>> extends Exp, ValIr permi
     boolean isZero();
 
    Constant apply(UnaryOperator op);
+
+   default boolean isStatic() {
+       return false;
+   }
 }
 
 

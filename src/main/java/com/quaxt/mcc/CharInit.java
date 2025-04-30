@@ -28,7 +28,7 @@ public record CharInit(byte i) implements StaticInit, Constant<CharInit> {
     }
     @Override
     public String toString() {
-        return String.valueOf((char) i);
+        return String.valueOf(i);
     }
 
 

@@ -120,6 +120,12 @@ public class Mcc {
         };
     }
 
+    public static boolean isSigned(Type srcT) {
+        return switch (srcT) {
+            case CHAR, SCHAR, INT, LONG, DOUBLE -> true;
+            default -> false;
+        };
+    }
 
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}
 
@@ -141,7 +147,7 @@ public class Mcc {
     }
 
     public static void main(String[] args0) throws Exception {
-        logger.info("started with args " + Arrays.toString(args0));
+        logger.info("started with args " + String.join(" ", args0));
         ArrayList<String> args = Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;

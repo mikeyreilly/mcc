@@ -762,8 +762,8 @@ public class Codegen {
                         ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
                     } else {
                         //p.335
-                        LabelIr label1 = newLabel("aub");
-                        LabelIr label2 = newLabel("endCmp");
+                        LabelIr label1 = newLabel(Mcc.makeTemporary(".Laub."));
+                        LabelIr label2 = newLabel(Mcc.makeTemporary(".LendCmp."));
                         ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
                         ins.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL, true, label1.label()));
                         ins.add(new Cvttsd2si(QUADWORD, toOperand(src), toOperand(dst)));
@@ -863,8 +863,8 @@ public class Codegen {
                         ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
                         ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
                     } else {
-                        LabelIr label1 = newLabel("outOfRange");
-                        LabelIr label2 = newLabel("end");
+                        LabelIr label1 = newLabel(Mcc.makeTemporary(".LoutOfRange."));
+                        LabelIr label2 = newLabel(Mcc.makeTemporary(".Lend."));
                         ins.add(new Cmp(QUADWORD, new Imm(0), src));
                         ins.add(new JmpCC(CmpOperator.LESS_THAN, false, label1.label()));
                         ins.add(new Cvtsi2sd(QUADWORD, src, dst));
@@ -914,7 +914,7 @@ public class Codegen {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, toOperand(dstV)));
                 }
-                case Ignore() -> {}
+                case Ignore.IGNORE -> {}
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
             }
@@ -956,7 +956,7 @@ public class Codegen {
                 ins.add(new Mov(DOUBLE, op, r));
                 regIndex++;
             }
-//            TypeAsm returnType = valToAsmType(val);
+//            TypeAsm returnType = valToAsmType(src);
 //            ins.add(new Mov(returnType, retVal, returnType == DOUBLE ? XMM0 : AX));
         }
         ins.add(RET);

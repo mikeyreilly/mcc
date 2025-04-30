@@ -75,14 +75,14 @@ public class SemanticAnalysis {
                 yield statement;
             }
             case DoWhile(Statement body, Exp condition, String _) -> {
-                String newLabel = makeTemporary("do");
+                String newLabel = makeTemporary(".Ldo.");
                 yield (T) new DoWhile(loopLabelStatement(body, newLabel), condition, newLabel);
 
             }
             case Exp _ -> statement;
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String _) -> {
-                String newLabel = makeTemporary("for");
+                String newLabel = makeTemporary(".Lfor.");
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
                     case VarDecl declaration ->
@@ -102,7 +102,7 @@ public class SemanticAnalysis {
             case Return(Exp exp) ->
                     (T) new Return(loopLabelStatement(exp, currentLabel));
             case While(Exp condition, Statement body, String _) -> {
-                String newLabel = makeTemporary("while");
+                String newLabel = makeTemporary(".Lwhile.");
                 yield (T) new While(condition, loopLabelStatement(body, newLabel), newLabel);
 
             }
@@ -381,6 +381,11 @@ public class SemanticAnalysis {
         return (long) d;
     }
 
+    public static void main(String[] args) {
+        var v = convertConst(new UCharInit((byte) -1), INT);
+        System.out.println(v);
+    }
+
     public static StaticInit convertConst(StaticInit init, Type type) {
         if (init instanceof DoubleInit(double d)) {
             return switch (type) {
@@ -398,6 +403,8 @@ public class SemanticAnalysis {
         }
         long initL = switch (init) {
             case IntInit(int i) -> i;
+            case CharInit(byte i) -> i;
+            case UCharInit(byte i) -> i & 0xff;
             case LongInit(long l) -> l;
             case UIntInit(int i) -> Integer.toUnsignedLong(i);
             case ULongInit(long l) -> l;
@@ -610,7 +617,7 @@ public class SemanticAnalysis {
                 if (referenced == CHAR) {
                     String uniqueName = makeTemporary(decl.name().name() + ".string.");
                     /* TODO: this logic is probably not going to handle arrays of char* well*/
-                    SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new IntInit((int)strlen(staticInits))), new StaticAttributes(initialValue, false)));
+                    SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(referenced, new IntInit((int) strlen(staticInits))), new StaticAttributes(initialValue, false)));
                     SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(decl.varType(), new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false)));
                 } else
                     throw new Err("Can't initialize pointer to " + referenced + " with string literal");
