@@ -3,7 +3,6 @@ package com.quaxt.mcc.optimizer;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
-import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
@@ -11,7 +10,7 @@ import java.util.function.Predicate;
 
 import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.Optimization.*;
-import static com.quaxt.mcc.semantic.Primitive.*;
+import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
 public class Optimizer {
@@ -40,7 +39,7 @@ public class Optimizer {
             }
             List<Node> cfg = makeCFG(instructions);
             if (optimizations.contains(PROPAGATE_COPIES)) {
-                updated |= propagateCopies(cfg, aliasedVars);
+                updated |= PropagateCopies.propagateCopies(cfg, aliasedVars);
             }
             if (optimizations.contains(ELIMINATE_DEAD_STORES)) {
                 updated |= eliminateDeadStores(cfg, aliasedVars);
@@ -58,13 +57,13 @@ public class Optimizer {
         Set<VarIr> aliasedVars = new HashSet<>();
         for (var instr : instructions) {
             switch (instr) {
-                case GetAddress(VarIr obj, VarIr dst) -> aliasedVars.add(obj);
+                case GetAddress(VarIr obj, VarIr _) -> aliasedVars.add(obj);
                 case Ignore ignore -> {}
-                case AddPtr(VarIr ptr, ValIr index, int scale, VarIr dst) -> {
+                case AddPtr(VarIr ptr, ValIr _, int _, VarIr dst) -> {
                     if (ptr.isStatic()) aliasedVars.add(ptr);
                     if (dst.isStatic()) aliasedVars.add(ptr);
                 }
-                case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
+                case BinaryIr(BinaryOperator _, ValIr v1, ValIr v2,
                               VarIr dstName) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
@@ -77,12 +76,12 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dstName.isStatic()) aliasedVars.add(dstName);
                 }
-                case CopyFromOffset(ValIr v1, long offset, VarIr dstName) -> {
+                case CopyFromOffset(ValIr v1, long _, VarIr dstName) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
                     if (dstName.isStatic()) aliasedVars.add(dstName);
                 }
-                case CopyToOffset(ValIr v1, VarIr dstName, long offset) -> {
+                case CopyToOffset(ValIr v1, VarIr dstName, long _) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
                     if (dstName.isStatic()) aliasedVars.add(dstName);
@@ -97,7 +96,7 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
-                case FunCall(String name, ArrayList<ValIr> args, VarIr dst) -> {
+                case FunCall(String _, ArrayList<ValIr> args, VarIr dst) -> {
                     for (var v1 : args) {
                         if (v1 instanceof VarIr var1 && var1.isStatic())
                             aliasedVars.add(var1);
@@ -109,16 +108,16 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
-                case Jump jump -> {}
-                case JumpIfNotZero(ValIr v1, String label) -> {
+                case Jump _ -> {}
+                case JumpIfNotZero(ValIr v1, String _) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
                 }
-                case JumpIfZero(ValIr v1, String label) -> {
+                case JumpIfZero(ValIr v1, String _) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
                 }
-                case LabelIr labelIr -> {}
+                case LabelIr _ -> {}
                 case Load(ValIr v1, VarIr dst) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
@@ -148,7 +147,7 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
-                case UnaryIr(UnaryOperator op, ValIr v1, VarIr dst) -> {
+                case UnaryIr(UnaryOperator _, ValIr v1, VarIr dst) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);
@@ -167,277 +166,19 @@ public class Optimizer {
         throw new Todo();
     }
 
-    /**
-     * based on rewriteInstructions p598
-     */
-    private static boolean propagateCopies(List<Node> cfg, Set<VarIr> aliasedVars) {
-        HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS = new HashMap<>();
-        HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS = new HashMap<>();
-        findReachingCopies(cfg, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
-        boolean updated = false;
-        for (int i = 0; i < cfg.size(); i++) {
-            Node n = cfg.get(i);
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
-                                        ArrayList<Node> _, ArrayList<Node> _)) {
-                BasicBlock b = (BasicBlock) n;
-                for (int j = 0; j < ins.size(); j++) {
-                    InstructionIr instr = b.instructions().get(j);
-                    Set<Copy> reachingCopies = getInstructionAnnotation(b.nodeId(), j, INSTRUCTION_ANNOTATIONS);
-
-                    var newInstr = switch (instr) {
-                        case Copy(ValIr src, VarIr dst) -> {
-                            for (Copy copy : reachingCopies) {
-                                //MR-TODO uncomment last two compares
-                                if (copy.equals(instr) || (copy.src().equals(dst) && copy.dst().equals(src))) {
-                                    yield Ignore.IGNORE;
-                                }
-                            }
-                            yield new Copy(replaceOperand(src, reachingCopies), dst);
-                        }
-                        case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
-                                      VarIr dst) ->
-                                new BinaryIr(op, replaceOperand(v1, reachingCopies), replaceOperand(v2, reachingCopies), dst);
-                        case ReturnIr(ValIr v) ->
-                                new ReturnIr(replaceOperand(v, reachingCopies));
-                        case UnaryIr(UnaryOperator op, ValIr v1, VarIr dst) ->
-                                new UnaryIr(op, replaceOperand(v1, reachingCopies), dst);
-                        case FunCall(String name, ArrayList<ValIr> args,
-                                     ValIr dst) -> {
-                            args.replaceAll(op -> replaceOperand(op, reachingCopies));
-                            yield instr;
-                        }
-                        case JumpIfZero(ValIr v, String label) ->
-                                new JumpIfZero(replaceOperand(v, reachingCopies), label);
-                        case JumpIfNotZero(ValIr v, String label) ->
-                                new JumpIfNotZero(replaceOperand(v, reachingCopies), label);
-                        case Load(ValIr ptr, VarIr dst) ->
-                                new Load(replaceOperand(ptr, reachingCopies), dst);
-                        case Store(ValIr v, VarIr dst) ->
-                                new Store(replaceOperand(v, reachingCopies), dst);
-                        case GetAddress(ValIr obj, VarIr dst) -> instr;
-                        case LabelIr _, Jump _ -> instr;
-                        case Ignore.IGNORE -> instr;
-
-                        case AddPtr(VarIr ptr, ValIr index, int scale,
-                                    VarIr dst) ->
-                                new AddPtr(ptr, index, scale, dst);
-                        case CopyFromOffset(VarIr v1, long offset,
-                                            VarIr dstName) ->
-                                new CopyFromOffset((VarIr) replaceOperand(v1, reachingCopies), offset, dstName);
-                        case CopyToOffset(ValIr v1, VarIr dstName,
-                                          long offset) ->
-                                new CopyToOffset(replaceOperand(v1, reachingCopies), (VarIr) replaceOperand(dstName, reachingCopies), offset);
-                        case DoubleToInt(ValIr v1, VarIr dstName) ->
-                                new DoubleToInt(replaceOperand(v1, reachingCopies), dstName);
-                        case DoubleToUInt(ValIr v1, VarIr dst) ->
-                                new DoubleToUInt(replaceOperand(v1, reachingCopies), dst);
-                        case IntToDouble(ValIr v1, VarIr dst) ->
-                                new IntToDouble(replaceOperand(v1, reachingCopies), dst);
-                        case SignExtendIr(ValIr v1, VarIr dst) ->
-                                new SignExtendIr(replaceOperand(v1, reachingCopies), dst);
-                        case TruncateIr(ValIr v1, VarIr dst) ->
-                                new TruncateIr(replaceOperand(v1, reachingCopies), dst);
-                        case UIntToDouble(ValIr v1, VarIr dst) ->
-                                new UIntToDouble(replaceOperand(v1, reachingCopies), dst);
-                        case ZeroExtendIr(ValIr v1, VarIr dst) ->
-                                new ZeroExtendIr(replaceOperand(v1, reachingCopies), dst);
-
-                    };
-                    if (!instr.equals(newInstr)) {
-                        ins.set(j, newInstr);
-                        updated = true;
-                    }
-                }
-            }
-        }
-        return updated;
-    }
-
-    private static ValIr replaceOperand(ValIr op, Set<Copy> reachingCopies) {
-        if (op == null || op instanceof Constant) return op;
-        for (Copy copy : reachingCopies) {
-            if (copy.dst().equals(op)) {
-                return copy.src();
-            }
-        }
-        return op;
-    }
-
-    private static Set<Copy> getInstructionAnnotation(int nodeId, int i, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS) {
-        return INSTRUCTION_ANNOTATIONS.get(nodeId).get(i);
-    }
-
-
-    /*
-    Takes all the copy instuctions that reach the beginning of a block and calculates which copies reach individual instructions within the block
-    p591*/
-    private static void transfer(BasicBlock block, Set<Copy> initialReachingCopies, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
-        var currentReachingCopies = new HashSet<>(initialReachingCopies);
-        List<InstructionIr> instructions = block.instructions();
-        INSTRUCTION_ANNOTATIONS.put(block.nodeId(), new ArrayList<>());
-        for (int i = 0; i < instructions.size(); i++) {
-            var instruction = instructions.get(i);
-            annotateInstruction(block.nodeId(), currentReachingCopies, INSTRUCTION_ANNOTATIONS);
-            switch (instruction) {
-                case Copy(ValIr src, VarIr dst) -> {
-                    if (currentReachingCopies.contains(instruction)) {
-                        continue;
-                    }
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                    Type srcT = valToType(src);
-                    Type dstT = valToType(dst);
-                    if (srcT.equals(dstT) || Mcc.isSigned(srcT) == Mcc.isSigned(dstT))
-                        currentReachingCopies.add((Copy) instruction);
-                }
-                case FunCall(String _, ArrayList<ValIr> _, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()) || (dst != null && (copy.src().equals(dst) || copy.dst().equals(dst))));
-                }
-                case Store(ValIr src, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()));
-                }
-                case UnaryIr(UnaryOperator op, ValIr _, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
-                              VarIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case Load(ValIr ptr, VarIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-
-                case GetAddress(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case SignExtendIr(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case CopyFromOffset(ValIr v, long _, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case CopyToOffset(ValIr src, VarIr dst, long offset) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case ZeroExtendIr(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case DoubleToInt(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case DoubleToUInt(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case IntToDouble(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case UIntToDouble(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case TruncateIr(ValIr v, ValIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case AddPtr(VarIr ptr, ValIr index, int scale, VarIr dst) -> {
-                    currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                }
-                case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
-                     ReturnIr _, Ignore _ -> {}
-                default -> throw new Todo();
-            }
-
-        }
-        annotateBlock(block.nodeId(), currentReachingCopies, BLOCK_ANNOTATIONS);
-    }
 
     /**
      * return a new ArrayList like in but with items matching pred removed. Doesn't change in.
      */
-    private static HashSet<Copy> removeIf(HashSet<Copy> in, Predicate<? super Copy> pred) {
+    public static HashSet<Copy> removeIf(HashSet<Copy> in, Predicate<? super Copy> pred) {
         HashSet<Copy> out = new HashSet<>(in);
         out.removeIf(pred);
         return out;
     }
 
-    private static void annotateInstruction(int blockId, HashSet<Copy> currentReachingCopies, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS) {
-        INSTRUCTION_ANNOTATIONS.get(blockId).add(currentReachingCopies);
-    }
-
-    private static void findReachingCopies(List<Node> cfg, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
-        HashSet<Copy> allCopies = findAllCopyInstructions(cfg);
-        ArrayDeque<BasicBlock> workList = new ArrayDeque<>();//MR-TODO getting more bang for your block p.597
-        for (Node n : cfg) {
-            if (n instanceof BasicBlock node) {
-                workList.add(node);
-                annotateBlock(node.nodeId(), allCopies, BLOCK_ANNOTATIONS);
-            }
-        }
-        while (!workList.isEmpty()) {
-            BasicBlock block = workList.removeFirst();
-            HashSet<Copy> oldAnnotations = getBlockAnnotation(block.nodeId(), BLOCK_ANNOTATIONS);
-            Set<Copy> incomingCopies = meet(block, allCopies, BLOCK_ANNOTATIONS);
-            transfer(block, incomingCopies, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
-            if (!oldAnnotations.equals(getBlockAnnotation(block.nodeId(), BLOCK_ANNOTATIONS))) {
-                for (Node succ : block.successors()) {
-                    switch (succ) {
-                        case BasicBlock basicBlock -> {
-                            if (!workList.contains(basicBlock))
-                                workList.add(basicBlock);
-                        }
-                        case EntryNode _ -> {
-                            throw new Err("Malformed control flow graph");
-                        }
-                        case ExitNode _ -> {}
-                    }
-                }
-            }
-        }
-    }
-
-    /*p592*/
-    private static Set<Copy> meet(BasicBlock block, HashSet<Copy> allCopies, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS) {
-        var incomingCopies = allCopies;
-        for (var pred : block.predecessors()) {
-            switch (pred) {
-                case BasicBlock basicBlock -> {
-                    var predOutCopies = getBlockAnnotation(basicBlock.nodeId(), BLOCK_ANNOTATIONS);
-                    incomingCopies = intersection(incomingCopies, predOutCopies);
-                }
-                case EntryNode entryNode -> {return Collections.emptySet();}
-                case ExitNode exitNode -> {
-                    throw new Err("Malformed control flow graph");
-                }
-            }
-        }
-        return incomingCopies;
-    }
-
-    private static HashSet<Copy> intersection(HashSet<Copy> a, HashSet<Copy> b) {
+    public static HashSet<Copy> intersection(HashSet<Copy> a, HashSet<Copy> b) {
         return removeIf(a, c -> !b.contains(c));
     }
-
-
-    private static HashSet<Copy> getBlockAnnotation(int nodeId, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS) {
-        return BLOCK_ANNOTATIONS.get(nodeId);
-    }
-
-    private static void annotateBlock(int nodeId, HashSet<Copy> allCopies, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS) {
-        BLOCK_ANNOTATIONS.put(nodeId, allCopies);
-    }
-
-    private static HashSet<Copy> findAllCopyInstructions(List<Node> cfg) {
-        HashSet<Copy> allCopies = new HashSet<>();
-        for (Node n : cfg) {
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
-                                        ArrayList<Node> _, ArrayList<Node> _)) {
-                for (var in : ins) {
-                    if (in instanceof Copy copy) {
-                        allCopies.add(copy);
-                    }
-                }
-            }
-        }
-        return allCopies;
-    }
-
 
     private static List<InstructionIr> cfgToInstructions(List<Node> cfg) {
         ArrayList<InstructionIr> instructions = new ArrayList<>();
@@ -559,12 +300,8 @@ public class Optimizer {
             BasicBlock node = (BasicBlock) nodeId;
             InstructionIr instr = node.instructions().getLast();
             switch (instr) {
-                case ReturnIr _ -> {
-                    addEdge(nodes, nodeId, exitNode);
-                }
-                case Jump(String label) -> {
-                    addEdge(nodes, nodeId, labelToNodeId.get(label));
-                }
+                case ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
+                case Jump(String label) -> addEdge(nodes, nodeId, labelToNodeId.get(label));
                 case JumpIfNotZero(ValIr _, String label) -> {
                     addEdge(nodes, nodeId, labelToNodeId.get(label));
                     addEdge(nodes, nodeId, nextId);
@@ -573,9 +310,7 @@ public class Optimizer {
                     addEdge(nodes, nodeId, labelToNodeId.get(label));
                     addEdge(nodes, nodeId, nextId);
                 }
-                default -> {
-                    addEdge(nodes, nodeId, nextId);
-                }
+                default -> addEdge(nodes, nodeId, nextId);
             }
         }
         return nodes;

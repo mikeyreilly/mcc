@@ -1,8 +1,0 @@
-
-<2025-04-25 Fri> All tests in chapter 18 passing but there are regressions for chapters
-
-* TODO 8
-* TODO 15
-* TODO 16
-
-
