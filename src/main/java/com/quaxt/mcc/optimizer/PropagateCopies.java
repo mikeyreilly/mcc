@@ -17,7 +17,7 @@ public class PropagateCopies {
      * based on rewriteInstructions p. 598
      */
     public static boolean propagateCopies(List<Node> cfg, Set<VarIr> aliasedVars) {
-        HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS = new HashMap<>();
+        HashMap<Integer, HashSet<Copy>[]>  INSTRUCTION_ANNOTATIONS= new HashMap<>();
         HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS = new HashMap<>();
         findReachingCopies(cfg, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
         boolean updated = false;
@@ -26,14 +26,14 @@ public class PropagateCopies {
             if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
                                         ArrayList<Node> _, ArrayList<Node> _)) {
                 BasicBlock b = (BasicBlock) n;
-                ArrayList<HashSet<Copy>> annotations = INSTRUCTION_ANNOTATIONS.get(b.nodeId());
+                HashSet<Copy>[] annotations = INSTRUCTION_ANNOTATIONS.get(b.nodeId());
                 if (annotations == null)
                     continue; // because we initialize the worklist by doing a traversal of cfg, we don't annotate orphan nodes
                 for (int j = 0; j < ins.size(); j++) {
 
 
                     InstructionIr instr = b.instructions().get(j);
-                    Set<Copy> reachingCopies = annotations.get(j);
+                    Set<Copy> reachingCopies = annotations[j];
 
                     var newInstr = switch (instr) {
                         case Copy(ValIr src, VarIr dst) -> {
@@ -117,13 +117,13 @@ public class PropagateCopies {
     Takes all the copy instructions that reach the beginning of a block and
     calculates which copies reach individual instructions within the block.
     See p. 591*/
-    private static void transfer(BasicBlock block, Set<Copy> initialReachingCopies, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
+    private static void transfer(BasicBlock block, Set<Copy> initialReachingCopies, HashMap<Integer, HashSet<Copy>[]>  INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
         var currentReachingCopies = new HashSet<>(initialReachingCopies);
         List<InstructionIr> instructions = block.instructions();
-        INSTRUCTION_ANNOTATIONS.put(block.nodeId(), new ArrayList<>());
+        INSTRUCTION_ANNOTATIONS.put(block.nodeId(), new HashSet[instructions.size()]);
         for (int i = 0; i < instructions.size(); i++) {
             var instruction = instructions.get(i);
-            annotateInstruction(block.nodeId(), currentReachingCopies, INSTRUCTION_ANNOTATIONS);
+            annotateInstruction(block.nodeId(), i, currentReachingCopies, INSTRUCTION_ANNOTATIONS);
             switch (instruction) {
                 case Copy(ValIr src, VarIr dst) -> {
                     if (currentReachingCopies.contains(instruction)) {
@@ -177,8 +177,8 @@ public class PropagateCopies {
     }
 
 
-    private static void annotateInstruction(int blockId, HashSet<Copy> currentReachingCopies, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS) {
-        INSTRUCTION_ANNOTATIONS.get(blockId).add(currentReachingCopies);
+    private static void annotateInstruction(int blockId, int instructionIndex, HashSet<Copy> currentReachingCopies, HashMap<Integer, HashSet<Copy>[]> INSTRUCTION_ANNOTATIONS) {
+        INSTRUCTION_ANNOTATIONS.get(blockId)[instructionIndex]=currentReachingCopies;
     }
 
     private static void addNodesInReversePostOrder(Node node, ArrayDeque<BasicBlock> workList, Set<Integer> alreadySeen) {
@@ -193,7 +193,9 @@ public class PropagateCopies {
     }
 
 
-    private static void findReachingCopies(List<Node> cfg, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
+    private static void findReachingCopies(List<Node> cfg,
+                                           HashMap<Integer, HashSet<Copy>[]>  INSTRUCTION_ANNOTATIONS
+            , HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
         HashSet<Copy> allCopies = findAllCopyInstructions(cfg);
 
         var alreadySeen = new HashSet<Integer>();
