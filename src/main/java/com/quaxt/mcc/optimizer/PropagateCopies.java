@@ -169,7 +169,7 @@ public class PropagateCopies {
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
                      ReturnIr _, Ignore _ -> {}
-                default -> throw new Todo();
+
             }
 
         }
