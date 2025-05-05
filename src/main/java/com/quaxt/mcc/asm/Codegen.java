@@ -211,7 +211,7 @@ public class Codegen {
                         instructions.add(i + 1, new Mov(typeAsm, srcReg(typeAsm), dst));
                     } else if (src instanceof Imm imm) {
                         if (typeAsm == QUADWORD) {
-                            if (imm.isAwkward()) {
+                            if (imm.isAwkward() && isRam(dst)) {
                                 instructions.set(i, new Mov(typeAsm, src, srcReg(typeAsm)));
                                 instructions.add(i + 1, new Mov(typeAsm, srcReg(typeAsm), dst));
                             }
@@ -375,7 +375,7 @@ public class Codegen {
                 yield t instanceof Array || t instanceof Structure ? new PseudoMem(identifier, 0) : new Pseudo(identifier);
             }
             case LongInit(long l) -> new Imm(l);
-            case UIntInit(int i) -> new Imm(i);
+            case UIntInit(int i) -> new Imm(Integer.toUnsignedLong(i));
             case ULongInit(long l) -> new Imm(l);
             case DoubleInit(double d) -> resolveConstant(d);
         };
@@ -863,14 +863,16 @@ public class Codegen {
                         ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
                         ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
                     } else {
+                        // see description on p. 320
                         LabelIr label1 = newLabel(Mcc.makeTemporary(".LoutOfRange."));
                         LabelIr label2 = newLabel(Mcc.makeTemporary(".Lend."));
-                        ins.add(new Cmp(QUADWORD, new Imm(0), src));
+                        var asmSrcType = srcType == Primitive.UINT ? LONGWORD : QUADWORD;
+                        ins.add(new Cmp(asmSrcType, new Imm(0), src));
                         ins.add(new JmpCC(CmpOperator.LESS_THAN, false, label1.label()));
-                        ins.add(new Cvtsi2sd(QUADWORD, src, dst));
+                        ins.add(new Cvtsi2sd(asmSrcType, src, dst));
                         ins.add(new Jump(label2.label()));
                         ins.add(label1);
-                        ins.add(new Mov(QUADWORD, src, AX));
+                        ins.add(new Mov(asmSrcType, src, AX));
                         ins.add(new Mov(QUADWORD, AX, DX));
                         ins.add(new Unary(SHR, QUADWORD, DX));
                         ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));

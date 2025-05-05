@@ -75,7 +75,8 @@ public class PropagateCopies {
                                 new CopyFromOffset((VarIr) replaceOperand(v1, reachingCopies), offset, dstName);
                         case CopyToOffset(ValIr v1, VarIr dstName,
                                           long offset) ->
-                                new CopyToOffset(replaceOperand(v1, reachingCopies), (VarIr) replaceOperand(dstName, reachingCopies), offset);
+                                new CopyToOffset(replaceOperand(v1, reachingCopies),
+                                        dstName, offset);
                         case DoubleToInt(ValIr v1, VarIr dstName) ->
                                 new DoubleToInt(replaceOperand(v1, reachingCopies), dstName);
                         case DoubleToUInt(ValIr v1, VarIr dst) ->

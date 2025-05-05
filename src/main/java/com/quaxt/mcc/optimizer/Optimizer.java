@@ -3,6 +3,7 @@ package com.quaxt.mcc.optimizer;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
+import com.quaxt.mcc.semantic.Pointer;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
@@ -11,6 +12,7 @@ import java.util.function.Predicate;
 import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.Optimization.*;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
+import static com.quaxt.mcc.semantic.Primitive.ULONG;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
 public class Optimizer {
@@ -235,6 +237,7 @@ public class Optimizer {
         for (int i = 1; i < nodes.size() - 2; i++) {
             BasicBlock b = (BasicBlock) nodes.get(i);
             var instrs = b.instructions();
+            if (instrs.isEmpty()) continue;
             InstructionIr instr = instrs.getLast();
             if (instr instanceof Jump || instr instanceof JumpIfZero || instr instanceof JumpIfNotZero) {
                 boolean keepJump = false;
@@ -301,7 +304,8 @@ public class Optimizer {
             InstructionIr instr = node.instructions().getLast();
             switch (instr) {
                 case ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
-                case Jump(String label) -> addEdge(nodes, nodeId, labelToNodeId.get(label));
+                case Jump(String label) ->
+                        addEdge(nodes, nodeId, labelToNodeId.get(label));
                 case JumpIfNotZero(ValIr _, String label) -> {
                     addEdge(nodes, nodeId, labelToNodeId.get(label));
                     addEdge(nodes, nodeId, nextId);
@@ -358,7 +362,7 @@ public class Optimizer {
                              VarIr dstName) when v1 instanceof Constant c1 -> {
                     Constant co = c1.apply(op);
                     if (co == null) yield null;
-                    yield new Copy(co, dstName);
+                    yield new Copy((ValIr) convertConst((StaticInit) co, valToType(dstName)), dstName);
                 }
 
                 case DoubleToInt(ValIr src,
@@ -386,7 +390,7 @@ public class Optimizer {
                               VarIr dstName) when v1 instanceof Constant c1 && v2 instanceof Constant c2 -> {
                     Constant<?> co = c1.apply(op, c2);
                     if (co == null) yield null;
-                    yield new Copy(co, dstName);
+                    yield new Copy((ValIr) convertConst((StaticInit) co, valToType(dstName)), dstName);
                 }
                 case JumpIfZero(ValIr v,
                                 String label) when v instanceof Constant<?> c -> {
@@ -402,7 +406,17 @@ public class Optimizer {
                     }
                     yield Ignore.IGNORE;
                 }
+
+                case Copy(ValIr src,
+                          VarIr dst) when src instanceof StaticInit c1 -> {
+                    var dstT = valToType(dst);
+                    var srcT = valToType(src);
+                    if (srcT.equals(dstT) || (srcT.isSigned() == dstT.isSigned()))
+                        yield null;
+                    yield new Copy((ValIr) convertConst(c1, dstT), dst);
+                }
                 default -> null;
+
             };
             if (newIn != null) {
                 instructions.set(i, newIn);

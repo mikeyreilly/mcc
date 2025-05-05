@@ -11,21 +11,14 @@ import static com.quaxt.mcc.optimizer.Optimizer.removeIf;
 
 public class EliminateDeadStores {
 
-    /**
-     * based on rewriteInstructions p. 598
-     */
-    public static boolean eliminateDeadStores(List<Node> cfg, Set<VarIr> aliasedVars) {
-        HashMap<Integer, HashSet<VarIr>[]> INSTRUCTION_ANNOTATIONS = new HashMap<>();
-        HashMap<Integer, HashSet<VarIr>> BLOCK_ANNOTATIONS = new HashMap<>();
-
-
-        iterativeAlgorithm(cfg, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
-        boolean updated = false;
-        return updated;
-    }
-
     /* the iterative algorithm described on p. 607*/
     private static void iterativeAlgorithm(List<Node> cfg, HashMap<Integer, HashSet<VarIr>[]> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<VarIr>> blockAnnotations, Set<VarIr> aliasedVars) {
+        var staticVars = new HashSet<VarIr>();
+        for (var v : aliasedVars) {
+            if (v.isStatic()) {
+                staticVars.add(v);
+            }
+        }
         HashSet<VarIr> liveVars = new HashSet<>();
         ArrayDeque<BasicBlock> workList = new ArrayDeque<>();
         // MR-TODO initialize the worklist in reverse post order
@@ -38,7 +31,7 @@ public class EliminateDeadStores {
         while (!workList.isEmpty()) {
             BasicBlock block = workList.removeFirst();
             HashSet<VarIr> oldAnnotations = getBlockAnnotation(block.nodeId(), blockAnnotations);
-            Set<VarIr> incomingLiveVars = meet(block, blockAnnotations, aliasedVars);
+            Set<VarIr> incomingLiveVars = meet(block, blockAnnotations, staticVars);
             transfer(block, incomingLiveVars, INSTRUCTION_ANNOTATIONS, blockAnnotations, aliasedVars);
             if (!oldAnnotations.equals(getBlockAnnotation(block.nodeId(), blockAnnotations))) {
                 for (Node pred : block.predecessors()) {
@@ -49,7 +42,7 @@ public class EliminateDeadStores {
                         }
                         case ExitNode _ ->
                                 throw new Err("Malformed control flow graph");
-                        case EntryNode  _ -> {}
+                        case EntryNode _ -> {}
                     }
                 }
             }
@@ -66,8 +59,8 @@ public class EliminateDeadStores {
     }
 
 
-    private static Set<Copy> getInstructionAnnotation(int nodeId, int i, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS) {
-        return INSTRUCTION_ANNOTATIONS.get(nodeId).get(i);
+    private static Set<VarIr> getInstructionAnnotation(int nodeId, int i, HashMap<Integer, HashSet<VarIr>[]> INSTRUCTION_ANNOTATIONS) {
+        return INSTRUCTION_ANNOTATIONS.get(nodeId)[i];
     }
 
 
@@ -79,16 +72,16 @@ public class EliminateDeadStores {
         INSTRUCTION_ANNOTATIONS.put(block.nodeId(), new HashSet[instructions.size()]);
         for (int i = instructions.size() - 1; i >= 0; i--) {
             var instruction = instructions.get(i);
-            annotateInstruction(block.nodeId(), i, currentLiveVars, INSTRUCTION_ANNOTATIONS);
+            annotateInstruction(block.nodeId(), i, new HashSet<>(currentLiveVars), INSTRUCTION_ANNOTATIONS);
             switch (instruction) {
                 case BinaryIr(BinaryOperator _, ValIr src1, ValIr src2,
                               VarIr dst) -> {
                     currentLiveVars.remove(dst);
-                    if (src1 instanceof VarIr v) {
-                        currentLiveVars.add(v);
+                    if (src1 instanceof VarIr v1) {
+                        currentLiveVars.add(v1);
                     }
-                    if (src2 instanceof VarIr v) {
-                        currentLiveVars.remove(v);
+                    if (src2 instanceof VarIr v2) {
+                        currentLiveVars.add(v2);
                     }
                 }
                 case Copy(ValIr src, VarIr dst) -> {
@@ -107,8 +100,10 @@ public class EliminateDeadStores {
                     currentLiveVars.addAll(aliasedVars);
                 }
                 case Store(ValIr src, ValIr dst) -> {
-                    currentLiveVars.remove(dst);
                     if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                    if (dst instanceof VarIr v) {
                         currentLiveVars.add(v);
                     }
                 }
@@ -123,12 +118,13 @@ public class EliminateDeadStores {
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
                     }
+                    currentLiveVars.addAll(aliasedVars);
                 }
                 case GetAddress(ValIr src, ValIr dst) -> {
                     currentLiveVars.remove(dst);
-                    if (src instanceof VarIr v) {
-                        currentLiveVars.add(v);
-                    }
+//                    if (src instanceof VarIr v) {
+//                        currentLiveVars.add(v);
+//                    }
                 }
                 case SignExtendIr(ValIr src, ValIr dst) -> {
                     currentLiveVars.remove(dst);
@@ -143,7 +139,6 @@ public class EliminateDeadStores {
                     }
                 }
                 case CopyToOffset(ValIr src, VarIr dst, long _) -> {
-                    currentLiveVars.remove(dst);
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
                     }
@@ -219,7 +214,7 @@ public class EliminateDeadStores {
     }
 
     /* p. 607 */
-    private static Set<VarIr> meet(BasicBlock block, HashMap<Integer, HashSet<VarIr>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
+    private static Set<VarIr> meet(BasicBlock block, HashMap<Integer, HashSet<VarIr>> BLOCK_ANNOTATIONS, Set<VarIr> staticVars) {
         Set<VarIr> liveVars = new HashSet<>();
         for (var succ : block.successors()) {
             switch (succ) {
@@ -229,10 +224,89 @@ public class EliminateDeadStores {
                 }
                 case EntryNode _ ->
                         throw new Err("Malformed control-flow graph");
-                case ExitNode _ -> liveVars.addAll(aliasedVars);
+                case ExitNode _ -> liveVars.addAll(staticVars);
             }
         }
         return liveVars;
+    }
+
+    static boolean DEBUG = false;
+
+    /**
+     * based on rewriteInstructions p. 598
+     */
+    public static boolean eliminateDeadStores(List<Node> cfg, Set<VarIr> aliasedVars) {
+        if (DEBUG)
+            System.out.println("===========eliminateDeadStores============== " + Optimizer.CURRENT_FUNCTION_NAME);
+        HashMap<Integer, HashSet<VarIr>[]> INSTRUCTION_ANNOTATIONS = new HashMap<>();
+        HashMap<Integer, HashSet<VarIr>> BLOCK_ANNOTATIONS = new HashMap<>();
+
+
+        iterativeAlgorithm(cfg, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
+
+
+        boolean updated = false;
+        for (int i = 0; i < cfg.size(); i++) {
+            Node n = cfg.get(i);
+            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
+                                        ArrayList<Node> _, ArrayList<Node> _)) {
+                BasicBlock b = (BasicBlock) n;
+                HashSet<VarIr>[] annotations = INSTRUCTION_ANNOTATIONS.get(b.nodeId());
+                if (annotations == null)
+                    continue; // because we initialize the worklist by doing a traversal of cfg, we don't annotate orphan nodes
+                int copyTo = 0;
+                for (int j = 0; j < ins.size(); j++) {
+                    InstructionIr instr = ins.get(j);
+                    HashSet<VarIr> liveVars = annotations[j];
+                    boolean isDeadStore = switch (instr) {
+                        case BinaryIr(BinaryOperator _, ValIr src1, ValIr src2,
+                                      VarIr dst) -> !liveVars.contains(dst);
+                        case Copy(ValIr src, VarIr dst) ->
+                                !liveVars.contains(dst);
+                        case UnaryIr(UnaryOperator _, ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case Load(ValIr src, VarIr dst) ->
+                                !liveVars.contains(dst);
+                        case GetAddress(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case SignExtendIr(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case CopyFromOffset(ValIr src, long _, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case CopyToOffset(ValIr src, VarIr dst, long _) ->
+                                !liveVars.contains(dst);
+                        case ZeroExtendIr(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case DoubleToInt(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case DoubleToUInt(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case IntToDouble(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case UIntToDouble(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case TruncateIr(ValIr src, ValIr dst) ->
+                                !liveVars.contains(dst);
+                        case AddPtr(VarIr src1, ValIr src2, int _, VarIr dst) ->
+                                !liveVars.contains(dst);
+                        default -> false;
+                    };
+                    if (!isDeadStore) {
+                        if (copyTo != j) ins.set(copyTo, instr);
+                        copyTo++;
+                    }
+                    if (DEBUG)
+                        System.out.println((isDeadStore ? "KILL" : "    ") + "\tBLOCK " + i + "\t INSTR" + j + "\t" + instr + "\t" + liveVars);
+                }
+                int oldSize = ins.size();
+                int newSize = copyTo;
+                if (newSize != oldSize) {
+                    ins.subList(newSize, oldSize).clear();
+                    updated = true;
+                }
+            }
+        }
+        return updated;
     }
 
 
