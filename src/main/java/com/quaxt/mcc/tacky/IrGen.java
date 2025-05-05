@@ -309,7 +309,7 @@ public class IrGen {
                     instructions.add(e2Label);
                     emitTackyAndConvert(ifFalse, instructions);
                     instructions.add(endLabel);
-                    return null;//not used by caller (see p480)
+                    return null;//not used by caller (see p. 480)
                 } else {
                     ValIr e1 = emitTackyAndConvert(ifTrue, instructions);
                     VarIr result = makeTemporary("result.", type);

@@ -42,7 +42,7 @@ public class Optimizer {
                 updated |= PropagateCopies.propagateCopies(cfg, aliasedVars);
             }
             if (optimizations.contains(ELIMINATE_DEAD_STORES)) {
-                updated |= eliminateDeadStores(cfg, aliasedVars);
+              //  updated |= EliminateDeadStores.eliminateDeadStores(cfg, aliasedVars);
             }
             if (optimizations.contains(ELIMINATE_UNREACHABLE_CODE)) {
                 updated |= eliminateUnreachableCode(cfg);

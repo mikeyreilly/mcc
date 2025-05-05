@@ -14,7 +14,7 @@ import static com.quaxt.mcc.optimizer.Optimizer.removeIf;
 public class PropagateCopies {
 
     /**
-     * based on rewriteInstructions p598
+     * based on rewriteInstructions p. 598
      */
     public static boolean propagateCopies(List<Node> cfg, Set<VarIr> aliasedVars) {
         HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS = new HashMap<>();
@@ -26,14 +26,18 @@ public class PropagateCopies {
             if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
                                         ArrayList<Node> _, ArrayList<Node> _)) {
                 BasicBlock b = (BasicBlock) n;
+                ArrayList<HashSet<Copy>> annotations = INSTRUCTION_ANNOTATIONS.get(b.nodeId());
+                if (annotations == null)
+                    continue; // because we initialize the worklist by doing a traversal of cfg, we don't annotate orphan nodes
                 for (int j = 0; j < ins.size(); j++) {
+
+
                     InstructionIr instr = b.instructions().get(j);
-                    Set<Copy> reachingCopies = getInstructionAnnotation(b.nodeId(), j, INSTRUCTION_ANNOTATIONS);
+                    Set<Copy> reachingCopies = annotations.get(j);
 
                     var newInstr = switch (instr) {
                         case Copy(ValIr src, VarIr dst) -> {
                             for (Copy copy : reachingCopies) {
-                                //MR-TODO uncomment last two compares
                                 if (copy.equals(instr) || (copy.src().equals(dst) && copy.dst().equals(src))) {
                                     yield Ignore.IGNORE;
                                 }
@@ -108,15 +112,11 @@ public class PropagateCopies {
         return op;
     }
 
-    private static Set<Copy> getInstructionAnnotation(int nodeId, int i, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS) {
-        return INSTRUCTION_ANNOTATIONS.get(nodeId).get(i);
-    }
-
 
     /*
     Takes all the copy instructions that reach the beginning of a block and
     calculates which copies reach individual instructions within the block.
-    See p591*/
+    See p. 591*/
     private static void transfer(BasicBlock block, Set<Copy> initialReachingCopies, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
         var currentReachingCopies = new HashSet<>(initialReachingCopies);
         List<InstructionIr> instructions = block.instructions();
@@ -141,8 +141,7 @@ public class PropagateCopies {
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()));
                 case UnaryIr(UnaryOperator _, ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                case BinaryIr(BinaryOperator _, ValIr _, ValIr _,
-                              VarIr dst) ->
+                case BinaryIr(BinaryOperator _, ValIr _, ValIr _, VarIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case Load(ValIr _, VarIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
@@ -178,17 +177,30 @@ public class PropagateCopies {
     }
 
 
-
     private static void annotateInstruction(int blockId, HashSet<Copy> currentReachingCopies, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS) {
         INSTRUCTION_ANNOTATIONS.get(blockId).add(currentReachingCopies);
     }
 
+    private static void addNodesInReversePostOrder(Node node, ArrayDeque<BasicBlock> workList, Set<Integer> alreadySeen) {
+        if (alreadySeen.contains(node.nodeId())) return;
+        alreadySeen.add(node.nodeId());
+        for (var succ : node.successors()) {
+            addNodesInReversePostOrder(succ, workList, alreadySeen);
+        }
+        if (node instanceof BasicBlock bb) {
+            workList.addFirst(bb);
+        }
+    }
+
+
     private static void findReachingCopies(List<Node> cfg, HashMap<Integer, ArrayList<HashSet<Copy>>> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
         HashSet<Copy> allCopies = findAllCopyInstructions(cfg);
-        ArrayDeque<BasicBlock> workList = new ArrayDeque<>();//MR-TODO getting more bang for your block p.597
+
+        var alreadySeen = new HashSet<Integer>();
+        ArrayDeque<BasicBlock> workList =new ArrayDeque<>();
+        addNodesInReversePostOrder(cfg.getFirst(), workList, alreadySeen);
         for (Node n : cfg) {
             if (n instanceof BasicBlock node) {
-                workList.add(node);
                 annotateBlock(node.nodeId(), allCopies, BLOCK_ANNOTATIONS);
             }
         }
@@ -204,13 +216,15 @@ public class PropagateCopies {
                             if (!workList.contains(basicBlock))
                                 workList.add(basicBlock);
                         }
-                        case EntryNode _ -> throw new Err("Malformed control flow graph");
+                        case EntryNode _ ->
+                                throw new Err("Malformed control flow graph");
                         case ExitNode _ -> {}
                     }
                 }
             }
         }
     }
+
 
     /*p592*/
     private static Set<Copy> meet(BasicBlock block, HashSet<Copy> allCopies, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS) {
