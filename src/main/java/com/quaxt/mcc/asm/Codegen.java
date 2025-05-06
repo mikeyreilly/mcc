@@ -3,6 +3,7 @@ package com.quaxt.mcc.asm;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Var;
+import com.quaxt.mcc.registerallocator.RegisterAllocator;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
@@ -63,7 +64,7 @@ public class Codegen {
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
                 List<Instruction> instructionAsms = functionAsm.instructions();
-                allocateRegisters(instructionAsms);
+                RegisterAllocator.allocateRegisters(instructionAsms);
                 AtomicLong offset = replacePseudoRegisters(instructionAsms, functionAsm.returnInMemory());
                 fixUpInstructions(offset, instructionAsms);
             }
@@ -72,9 +73,6 @@ public class Codegen {
         return new ProgramAsm(topLevels);
     }
 
-    private static void allocateRegisters(List<Instruction> instructionAsms) {
-        System.out.println("MR-TODO");
-    }
 
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE = new HashMap<>();
 
