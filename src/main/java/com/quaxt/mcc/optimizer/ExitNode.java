@@ -4,9 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Collections;
 
-public record ExitNode(ArrayList<Node> predecessors) implements Node {
+public record ExitNode(ArrayList<CfgNode> predecessors) implements CfgNode {
     @Override
-    public List<Node> successors() {
+    public List<CfgNode> successors() {
         return Collections.emptyList();
     }
 

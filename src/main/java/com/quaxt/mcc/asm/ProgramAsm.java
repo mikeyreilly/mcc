@@ -4,6 +4,7 @@ import com.quaxt.mcc.*;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.List;
 
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
@@ -17,14 +18,13 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private static String formatOperand(Instruction s, Operand o) {
         return switch (o) {
             case Imm(long i) -> "$" + i;
-            case Pseudo _ ->
-                    throw new IllegalArgumentException("broken compiler error: pseudo instructions should not occur here");
-            case Reg reg -> "%" + switch (s) {
-                case Push _ -> reg.q;
+            case Pseudo p -> p.identifier;
+            case HardReg reg -> "%" + switch (s) {
+                case Push _, Pop _ -> reg.q;
                 case SetCC _ -> reg.b;
                 default -> reg.d;
             };
-            case Memory(Reg reg, long offset) -> offset + "(%" + reg.q + ")";
+            case Memory(HardReg reg, long offset) -> offset + "(%" + reg.q + ")";
             case Data(String identifier, long offset) -> {
                 boolean isConstant = BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
                 StringBuilder sb = new StringBuilder();
@@ -38,15 +38,17 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield sb.toString();
             }
             case DoubleReg reg -> reg.toString();
-            case Indexed(Reg base, Reg index, int scale) ->
+            case Indexed(HardReg base, HardReg index, int scale) ->
                     "(%" + base.q + ",%" + index.q + "," + scale + ")";
             default ->
                     throw new IllegalStateException("Unexpected value: " + o);
         };
     }
 
-    private String formatOperand(TypeAsm t, Instruction s, Operand o) {
-        if (o instanceof Reg reg) {
+
+
+    private static String formatOperand(TypeAsm t, Instruction s, Operand o) {
+        if (o instanceof HardReg reg) {
             return "%" + switch (t) {
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
@@ -149,83 +151,96 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     }
 
     private void emitFunctionAsm(PrintWriter out, FunctionAsm functionAsm) {
-        String name = functionAsm.name();
-        if (functionAsm.global())
+        String name = functionAsm.name;
+        if (functionAsm.global)
             out.println("                .globl	" + name);
         out.println("                .text");
         out.println(name + ":");
-        List<Instruction> instructions = functionAsm.instructions();
+        List<Instruction> instructions = functionAsm.instructions;
         printIndent(out, "pushq\t%rbp");
         printIndent(out, "movq\t%rsp, %rbp");
         for (Instruction instruction : instructions) {
-            String s = switch (instruction) {
-                case Mov(TypeAsm t, Operand src, Operand dst) ->
-                        instruction.format(t) + formatOperand(t, instruction, src) + ", " + formatOperand(t, instruction, dst);
-                case Lea(Operand src, Operand dst) ->
-                        "leaq\t" + formatOperand(QUADWORD, instruction, src) + ", " + formatOperand(QUADWORD, instruction, dst);
-                case Push(Operand arg) ->
-                        "pushq\t" + formatOperand(instruction, arg);
-
-                case Nullary.RET -> {
-                    printIndent(out, "movq\t%rbp, %rsp");
-                    printIndent(out, "popq\t%rbp");
-                    yield "ret";
-                }
-                case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
-                        instruction.format(t) + formatOperand(t, instruction, operand);
-                case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
-                        instruction.format(t) + formatOperand(t, instruction, subtrahend) + ", " + formatOperand(t, instruction, minuend);
-                case Binary(ArithmeticOperator op, TypeAsm t, Operand src,
-                            Operand dst) -> {
-                    String srcF = formatOperand(t, instruction, src);
-                    String dstF = formatOperand(t, instruction, dst);
-                    yield instruction.format(t) + srcF + ", " + dstF;
-                }
-                case Jump(String label) -> {
-                    yield "jmp\t" + label;
-                }
-                case LabelIr(String label) -> label + ":";
-                case SetCC(CmpOperator cmpOperator, boolean unsigned,
-                           Operand o) ->
-                        "set" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + formatOperand(instruction, o);
-                case JmpCC(CmpOperator cmpOperator, boolean unsigned,
-                           String label) ->
-                        "j" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + label;
-                case Call(String functionName) ->
-                        "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
-                case Cdq(TypeAsm t) -> instruction.format(t);
-                case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
-                           Operand dst) -> {
-                    String srcF = formatOperand(srcType, instruction, src);
-                    String dstF = formatOperand(dstType, instruction, dst);
-                    yield "movs" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
-                }
-                case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
-                                   Operand src, Operand dst) -> {
-                    String srcF = formatOperand(srcType, instruction, src);
-                    String dstF = formatOperand(dstType, instruction, dst);
-                    yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
-                }
-                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
-                    String srcF = formatOperand(DOUBLE, instruction, src);
-                    String dstF = formatOperand(dstType, instruction, dst);
-                    yield (dstType == QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF + ", " + dstF;
-                }
-                case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
-                    String srcF = formatOperand(srcType, instruction, src);
-                    String dstF = formatOperand(DOUBLE, instruction, dst);
-                    yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
-                }
-                case Comment(String comment) -> "# "+comment;
-            };
-            if (instruction instanceof LabelIr) {
-                out.println(s);
-            } else {
-                printIndent(out, s);
-            }
+            emitInstruction(out, instruction);
 
         }
 
+    }
+
+    public static String formatInstruction(Instruction instruction) {
+        StringWriter sw = new StringWriter();
+        try (PrintWriter p = new PrintWriter(sw)) {
+            emitInstruction(p, instruction);
+        }
+        return sw.toString();
+    }
+
+    private  static void emitInstruction(PrintWriter out, Instruction instruction) {
+        String s = switch (instruction) {
+            case Mov(TypeAsm t, Operand src, Operand dst) ->
+                    instruction.format(t) + formatOperand(t, instruction, src) + ", " + formatOperand(t, instruction, dst);
+            case Lea(Operand src, Operand dst) ->
+                    "leaq\t" + formatOperand(QUADWORD, instruction, src) + ", " + formatOperand(QUADWORD, instruction, dst);
+            case Push(Operand arg) ->
+                    "pushq\t" + formatOperand(QUADWORD, instruction, arg);
+
+            case Nullary.RET -> {
+                printIndent(out, "movq\t%rbp, %rsp");
+                printIndent(out, "popq\t%rbp");
+                yield "ret";
+            }
+            case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
+                    instruction.format(t) + formatOperand(t, instruction, operand);
+            case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
+                    instruction.format(t) + formatOperand(t, instruction, subtrahend) + ", " + formatOperand(t, instruction, minuend);
+            case Binary(ArithmeticOperator op, TypeAsm t, Operand src,
+                        Operand dst) -> {
+                String srcF = formatOperand(t, instruction, src);
+                String dstF = formatOperand(t, instruction, dst);
+                yield instruction.format(t) + srcF + ", " + dstF;
+            }
+            case Jump(String label) -> {
+                yield "jmp\t" + label;
+            }
+            case LabelIr(String label) -> label + ":";
+            case SetCC(CmpOperator cmpOperator, boolean unsigned,
+                       Operand o) ->
+                    "set" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + formatOperand(instruction, o);
+            case JmpCC(CmpOperator cmpOperator, boolean unsigned,
+                       String label) ->
+                    "j" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + label;
+            case Call(String functionName) ->
+                    "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
+            case Cdq(TypeAsm t) -> instruction.format(t);
+            case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
+                       Operand dst) -> {
+                String srcF = formatOperand(srcType, instruction, src);
+                String dstF = formatOperand(dstType, instruction, dst);
+                yield "movs" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
+            }
+            case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
+                               Operand src, Operand dst) -> {
+                String srcF = formatOperand(srcType, instruction, src);
+                String dstF = formatOperand(dstType, instruction, dst);
+                yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
+            }
+            case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
+                String srcF = formatOperand(DOUBLE, instruction, src);
+                String dstF = formatOperand(dstType, instruction, dst);
+                yield (dstType == QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF + ", " + dstF;
+            }
+            case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
+                String srcF = formatOperand(srcType, instruction, src);
+                String dstF = formatOperand(DOUBLE, instruction, dst);
+                yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
+            }
+            case Comment(String comment) -> "# "+comment;
+            case Pop(HardReg arg) -> "popq\t" + formatOperand(instruction, arg);
+        };
+        if (instruction instanceof LabelIr) {
+            out.println(s);
+        } else {
+            printIndent(out, s);
+        }
     }
 
 }

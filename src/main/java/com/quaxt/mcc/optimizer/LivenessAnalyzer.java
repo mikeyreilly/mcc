@@ -1,0 +1,488 @@
+package com.quaxt.mcc.optimizer;
+
+import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.*;
+import com.quaxt.mcc.tacky.*;
+
+import java.util.*;
+
+import static com.quaxt.mcc.asm.Codegen.DOUBLE_REGISTERS;
+import static com.quaxt.mcc.asm.Codegen.INTEGER_RETURN_REGISTERS;
+import static com.quaxt.mcc.asm.DoubleReg.*;
+import static com.quaxt.mcc.asm.HardReg.*;
+
+public class LivenessAnalyzer {
+
+    /* the iterative algorithm described on p. 607*/
+    public static <V extends AbstractValue, I extends AbstractInstruction> void analyzeLiveness(
+            List<CfgNode> cfg,
+            HashMap<Integer, Set<V>[]> instructionAnnotations,
+            HashMap<Integer, Set<V>> blockAnnotations, Object otherArgs,
+            MeetFunction<V> meet, TransferFunction<V> transfer) {
+        var staticVars = new HashSet<V>();
+        if (otherArgs instanceof Set aliasedVars) {
+            for (var v : aliasedVars) {
+                if (v instanceof VarIr varIr && varIr.isStatic()) {
+                    staticVars.add((V) varIr);
+                }
+            }
+            // MR-TODO do this on the caller side
+            otherArgs = staticVars;
+        }
+        Set<V> liveVars = new HashSet<>();
+        ArrayDeque<BasicBlock<I>> workList = new ArrayDeque<>();
+        // MR-TODO initialize the worklist in reverse post order
+        for (CfgNode n : cfg) {
+            if (n instanceof BasicBlock<?> node) {
+                workList.add((BasicBlock<I>) node);
+                annotateBlock(node.nodeId(), liveVars, blockAnnotations);
+            }
+        }
+        while (!workList.isEmpty()) {
+            BasicBlock block = workList.removeFirst();
+            var oldAnnotations = getBlockAnnotation(block.nodeId(),
+                    blockAnnotations);
+            Set<V> incomingLiveVars = meet.meet(block, blockAnnotations,
+                    otherArgs);
+            transfer.transfer(block, incomingLiveVars, instructionAnnotations
+                    , blockAnnotations, otherArgs);
+            if (!oldAnnotations.equals(getBlockAnnotation(block.nodeId(),
+                    blockAnnotations))) {
+                for (Object pred : block.predecessors()) {
+                    switch (pred) {
+                        case BasicBlock<?> basicBlock -> {
+                            if (!workList.contains(basicBlock))
+                                workList.add((BasicBlock<I>) basicBlock);
+                        }
+                        case ExitNode _ ->
+                                throw new Err("Malformed control flow graph");
+                        case EntryNode _ -> {}
+                        default ->
+                                throw new IllegalStateException("Unexpected " + "value: " + pred);
+                    }
+                }
+            }
+        }
+    }
+
+    /* p. 607 */
+    public static Set<VarIr> livenessIrMeetFunction(BasicBlock block,
+                                                    HashMap<Integer,
+                                                            Set<VarIr>> blockAnnotations,
+                                                    Object otherArg) {
+        Set<VarIr> staticVars = (Set<VarIr>) otherArg;
+        Set<VarIr> liveVars = new HashSet<>();
+        for (var succ : block.successors()) {
+            switch (succ) {
+                case BasicBlock bb -> {
+                    var succLiveVars = getBlockAnnotation(bb.nodeId(),
+                            blockAnnotations);
+                    liveVars.addAll(succLiveVars);
+                }
+                case EntryNode _ ->
+                        throw new Err("Malformed control-flow graph");
+                case ExitNode _ -> liveVars.addAll(staticVars);
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + succ);
+            }
+        }
+        return liveVars;
+    }
+   
+
+        /*
+See p. 606 */
+
+    public static void livenessIrTransferFunction(
+            BasicBlock<InstructionIr> block, Set<VarIr> endLiveVars,
+            HashMap<Integer, Set<VarIr>[]> instructionAnnotations,
+            HashMap<Integer, Set<VarIr>> blockAnnotations, Object otherArg) {
+        Set<VarIr> aliasedVars = (Set<VarIr>) otherArg;
+        HashSet<VarIr> currentLiveVars = new HashSet<>(endLiveVars);
+        List<InstructionIr> instructions = block.instructions();
+        instructionAnnotations.put(block.nodeId(),
+                new HashSet[instructions.size()]);
+        for (int i = instructions.size() - 1; i >= 0; i--) {
+            var instruction = instructions.get(i);
+            LivenessAnalyzer.annotateInstruction(block.nodeId(), i,
+                    new HashSet<>(currentLiveVars), instructionAnnotations);
+            switch (instruction) {
+                case BinaryIr(BinaryOperator _, ValIr src1, ValIr src2,
+                              VarIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src1 instanceof VarIr v1) {
+                        currentLiveVars.add(v1);
+                    }
+                    if (src2 instanceof VarIr v2) {
+                        currentLiveVars.add(v2);
+                    }
+                }
+                case Copy(ValIr src, VarIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case FunCall(String _, ArrayList<ValIr> args, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    for (var src : args) {
+                        if (src instanceof VarIr v) {
+                            currentLiveVars.add(v);
+                        }
+                    }
+                    currentLiveVars.addAll(aliasedVars);
+                }
+                case Store(ValIr src, ValIr dst) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                    if (dst instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case UnaryIr(UnaryOperator _, ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case Load(ValIr src, VarIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                    currentLiveVars.addAll(aliasedVars);
+                }
+                case GetAddress(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case SignExtendIr(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case CopyFromOffset(ValIr src, long _, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case CopyToOffset(ValIr src, VarIr dst, long _) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case ZeroExtendIr(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case DoubleToInt(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case DoubleToUInt(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case IntToDouble(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case UIntToDouble(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case TruncateIr(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case AddPtr(VarIr src1, ValIr src2, int _, VarIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    currentLiveVars.add(src1);
+                    if (src2 instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case JumpIfZero(ValIr src, String _) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+
+                case JumpIfNotZero(ValIr src, String _) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case ReturnIr(ValIr src) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case LabelIr _, Jump _, Ignore _ -> {}
+
+            }
+        }
+        annotateBlock(block.nodeId(), currentLiveVars, blockAnnotations);
+    }
+
+    ;
+
+
+    private static <V extends AbstractValue> Set<V> getBlockAnnotation(
+            int nodeId, HashMap<Integer, Set<V>> blockAnnotations) {
+        return blockAnnotations.get(nodeId);
+    }
+
+    /* Annotate a block in the cfg with the vars that are live before the
+    first instruction in the block*/
+    private static <V extends AbstractValue> void annotateBlock(int nodeId,
+                                                                Set<V> liveVars,
+                                                                HashMap<Integer, Set<V>> blockAnnotations) {
+        blockAnnotations.put(nodeId, liveVars);
+    }
+
+    /**
+     * Listing 20.20 p. 634
+     */
+    public static Set<Operand> livenessAsmMeetFunction(
+            BasicBlock<Instruction> block,
+            HashMap<Integer, Set<Operand>> blockAnnotations, Object otherArg) {
+        Set<Operand> liveVars = new HashSet<>();
+        for (var succ : block.successors()) {
+            switch (succ) {
+                case BasicBlock bb -> {
+                    var succLiveVars = getBlockAnnotation(bb.nodeId(),
+                            blockAnnotations);
+                    liveVars.addAll(succLiveVars);
+                }
+                case EntryNode _ ->
+                        throw new Err("Malformed control-flow graph");
+                //MR-TODO move code from Codegen line 1140
+                case ExitNode _ -> {
+                    Pair<Integer, Integer> returnRegsSize = (Pair<Integer,
+                            Integer>) otherArg;
+                    int intDestsSize = returnRegsSize.key();
+                    int doubleDestsSize = returnRegsSize.value();
+                    for (int i = 0; i < intDestsSize; i++) {
+                        liveVars.add(INTEGER_RETURN_REGISTERS[i]);
+                    }
+                    for (int i = 0; i < doubleDestsSize; i++) {
+                        liveVars.add(DOUBLE_REGISTERS[i]);
+                    }
+
+                }
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + succ);
+            }
+        }
+        return liveVars;
+    }
+
+    private static <V extends AbstractValue> void annotateInstruction(
+            int blockId, int instructionIndex, Set<V> liveVars,
+            HashMap<Integer, Set<V>[]> instructionAnnotations) {
+
+        instructionAnnotations.get(blockId)[instructionIndex] = liveVars;
+    }
+
+    /**
+     * MR-TODO description starts p. 634
+     */
+    public static void livenessAsmTransferFunction(
+            BasicBlock<Instruction> block, Set<Operand> endLiveRegisters,
+            HashMap<Integer, Set<Operand>[]> instructionAnnotations,
+            HashMap<Integer, Set<Operand>> blockAnnotations, Object otherArg) {
+
+        HashSet<Operand> currentLiveRegisters = new HashSet<>(endLiveRegisters);
+        List<Instruction> instructions = block.instructions();
+        instructionAnnotations.put(block.nodeId(),
+                new Set[instructions.size()]);
+
+
+        for (int i = instructions.size() - 1; i >= 0; i--) {
+            var instr = instructions.get(i);
+
+
+            LivenessAnalyzer.annotateInstruction(block.nodeId(), i,
+                    new HashSet<>(currentLiveRegisters),
+                    instructionAnnotations);
+
+            var usedAndUpdated = findUsedAndUpdated(instr);
+            var used = usedAndUpdated.key();
+            var updated = usedAndUpdated.value();
+
+            for (var v : updated) {
+                if (v instanceof Reg) {
+                    currentLiveRegisters.remove(v);
+                }
+            }
+            for (var v : used) {
+                if (v instanceof Reg) {
+                    currentLiveRegisters.add(v);
+                }
+            }
+
+        }
+
+        annotateBlock(block.nodeId(), currentLiveRegisters, blockAnnotations);
+    }
+
+    /* p. 634 */
+    public static Pair<Set<? extends Operand>, Set<? extends Operand>> findUsedAndUpdated(
+            Instruction instr) {
+        switch (instr) {
+            case Binary(ArithmeticOperator op, TypeAsm type, Operand src,
+                        Operand dst) -> {
+                if (op == ArithmeticOperator.DIVIDE) {
+                    throw new Todo();
+                }
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+            case Call(String name) -> {
+                ParameterClassification pc =
+                        Codegen.PARAMETER_CLASSIFICATION_MAP.get(name);
+                int len = pc.integerArguments().size();
+                Set<Reg> used = new HashSet<>();
+                for (int i = 0; i < len; i++) {
+                    used.add(Codegen.INTEGER_REGISTERS[i]);
+                }
+                len = pc.doubleArguments().size();
+                for (int i = 0; i < len; i++) {
+                    used.add(Codegen.DOUBLE_REGISTERS[i]);
+                }
+                return new Pair<>(used, Set.of(DI, SI, DX, CX, R8, R9, AX,
+                        XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8,
+                        XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15));
+            }
+            case Cdq cdq -> {
+                return new Pair<>(EnumSet.of(AX), EnumSet.of(DX));
+
+            }
+            case Cmp(TypeAsm type, Operand subtrahend, Operand minuend) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(subtrahend);
+                used.add(minuend);
+                addMemoryAndIndexedRegsToUsed(subtrahend, used);
+                addMemoryAndIndexedRegsToUsed(minuend, used);
+                return new Pair<>(used, Set.of());
+            }
+            case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+            case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+            case JmpCC jmpCC -> {}
+            case Lea(Operand src, Operand dst) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+            case Mov(TypeAsm type, Operand src, Operand dst) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+            case MovZeroExtend(TypeAsm srcType, TypeAsm dstType, Operand src,
+                               Operand dst) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+            case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
+                       Operand dst) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+
+            case Pop(Reg operand) -> {
+                Set<Operand> used = new HashSet<>();
+                addMemoryAndIndexedRegsToUsed(operand, used);
+                return new Pair<>(used, Set.of(operand));
+            }
+            case SetCC(CmpOperator cmpOperator, boolean unsigned,
+                       Operand operand) -> {
+                Set<Operand> used = new HashSet<>();
+                addMemoryAndIndexedRegsToUsed(operand, used);
+                return new Pair<>(used, Set.of(operand));
+            }
+            case Unary(UnaryOperator op, TypeAsm type, Operand operand) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(operand);
+                addMemoryAndIndexedRegsToUsed(operand, used);
+
+                switch (op) {
+                    case UnaryOperator.DIV, UnaryOperator.IDIV -> {
+                        used.add(AX);
+                        used.add(DX);
+                        return new Pair<>(used, Set.of(AX,
+                                DX));
+                    }
+                    case BITWISE_NOT, NOT, SHR, UNARY_MINUS -> {
+                        return new Pair<>(used, Set.of(operand));
+                    }
+                }
+            }
+            case Push(Operand op) ->{
+                Set<Operand> used = new HashSet<>();
+                used.add(op);
+                addMemoryAndIndexedRegsToUsed(op, used);
+                return new Pair<>(used, Set.of());
+            }
+            case LabelIr _, Jump _, Comment _, Nullary _ -> {}
+        }
+        return EMPTY_PAIR;
+    }
+
+    private static void addMemoryAndIndexedRegsToUsed(Operand src, Set<Operand> used) {
+        if (src instanceof Memory(HardReg reg, long _)) {
+            used.add(reg);
+        }
+        if (src instanceof Indexed(HardReg base, HardReg index,
+                                   int _)) {
+            used.add(base);
+            used.add(index);
+        }
+    }
+
+    private static final Pair<Set<? extends Operand>, Set<? extends Operand>> EMPTY_PAIR = new Pair<>(Set.of(), Set.of());
+
+}

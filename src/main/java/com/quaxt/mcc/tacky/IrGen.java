@@ -435,7 +435,7 @@ public class IrGen {
                 if (t == innerType || t == VOID) {
                     return new PlainOperand(result);
                 }
-                VarIr dst = makeTemporary("dst", t);
+                VarIr dst = makeTemporary("dst.", t);
                 if (t == DOUBLE) {
                     instructions.add(innerType.isSigned() ? new IntToDouble(result, dst) : new UIntToDouble(result, dst));
                 } else if (innerType == DOUBLE) {
@@ -469,7 +469,7 @@ public class IrGen {
                     case DereferencedPointer(ValIr ptr) ->
                             new PlainOperand(ptr);
                     case SubObject(VarIr base, int offset) -> {
-                        var dst = makeTemporary("dst", expr.type());
+                        var dst = makeTemporary("dst.", expr.type());
                         instructions.add(new GetAddress(base, dst));
                         if (offset != 0)
                             instructions.add(new AddPtr(dst, new LongInit(offset), 1, dst));

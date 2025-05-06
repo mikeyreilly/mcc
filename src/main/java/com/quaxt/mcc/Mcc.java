@@ -24,16 +24,22 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 import java.util.logging.*;
 
 public class Mcc {
-    private static final Logger logger = Logger.getLogger(Mcc.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
-    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>() {
+    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE =
+            new HashMap<>() {
         @Override
         public SymbolTableEntry put(String key, SymbolTableEntry value) {
             return super.put(key, value);
         }
     };
 
-    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>() {
+    public static void setAliased(String identifier) {
+        SYMBOL_TABLE.get(identifier).aliased = true;
+    }
+
+    public static final HashMap<String, StructDef> TYPE_TABLE =
+            new HashMap<>() {
         @Override
         public StructDef put(String key, StructDef value) {
             return super.put(key, value);
@@ -50,7 +56,8 @@ public class Mcc {
         return switch (type) {
             case Array(Type element, Constant _) -> {
                 long size = Mcc.size(type);
-                yield size < 16L && element.isScalar() ? (int) Mcc.size(element) : 16;
+                yield size < 16L && element.isScalar() ?
+                        (int) Mcc.size(element) : 16;
             }
             case FunType _ -> 0;
             case Pointer _ -> 8;
@@ -130,29 +137,40 @@ public class Mcc {
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}
 
 
-    public static int preprocess(Path cFile, Path iFile) throws IOException, InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder("gcc", "-E", "-P", cFile.toString(), "-o", iFile.toString()).inheritIO();
+    public static int preprocess(Path cFile,
+                                 Path iFile) throws IOException,
+            InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder("gcc", "-E", "-P",
+                cFile.toString(), "-o", iFile.toString()).inheritIO();
         return pb.start().waitFor();
     }
 
-    private static int assembleAndLink(Path asmFile, String bareFileName, boolean doNotCompile, List<String> libs) throws InterruptedException, IOException {
-        List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc", asmFile.toString()));
+    private static int assembleAndLink(Path asmFile, String bareFileName,
+                                       boolean doNotCompile,
+                                       List<String> libs) throws InterruptedException, IOException {
+        List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc",
+                asmFile.toString()));
         if (doNotCompile) {
             gccArgs.add("-c");
         }
-        gccArgs.addAll(Arrays.asList("-o", asmFile.resolveSibling(bareFileName + (doNotCompile ? ".o" : "")).toString()));
+        gccArgs.addAll(Arrays.asList("-o",
+                asmFile.resolveSibling(bareFileName + (doNotCompile ? ".o" :
+                        "")).toString()));
         gccArgs.addAll(libs);
-        ProcessBuilder pb = new ProcessBuilder(gccArgs.toArray(new String[0])).inheritIO();
+        ProcessBuilder pb =
+                new ProcessBuilder(gccArgs.toArray(new String[0])).inheritIO();
         return pb.start().waitFor();
     }
 
     public static void main(String[] args0) throws Exception {
-        logger.info("started with args " + String.join(" ", args0));
-        ArrayList<String> args = Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
+        LOGGER.info("started with args " + String.join(" ", args0));
+        ArrayList<String> args =
+                Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;
         List<String> libs = new ArrayList<>();
-        EnumSet<Optimization> optimizations = EnumSet.noneOf(Optimization.class);
+        EnumSet<Optimization> optimizations =
+                EnumSet.noneOf(Optimization.class);
         for (int i = args.size() - 1; i >= 0; i--) {
             String arg = args.get(i);
             Mode newMode = switch (arg) {
@@ -236,7 +254,6 @@ public class Mcc {
         if (mode == Mode.TACKY) {
             return;
         }
-        //MR-TODO uncomment
         if (!optimizations.isEmpty()) {
             programIr = Optimizer.optimize(programIr, optimizations);
         }
@@ -245,7 +262,8 @@ public class Mcc {
             return;
         }
         Path asmFile = srcFile.resolveSibling(bareFileName + ".s");
-        try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(asmFile))) {
+        try (PrintWriter pw =
+                     new PrintWriter(Files.newBufferedWriter(asmFile))) {
             programAsm.emitAsm(pw);
             pw.flush();
         }
@@ -253,7 +271,8 @@ public class Mcc {
         if (mode == Mode.COMPILE) {
             return;
         }
-        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile, libs);
+        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile,
+                libs);
 //        if (exitCode == 0) {
         Files.delete(asmFile);
 //        }
@@ -266,6 +285,7 @@ public class Mcc {
         if (fileName.endsWith(ending)) {
             return fileName.substring(0, fileName.length() - ending.length());
         }
-        throw new IllegalArgumentException(fileName + " does not have ending " + ending);
+        throw new IllegalArgumentException(fileName + " does not have ending "
+                + ending);
     }
 }
