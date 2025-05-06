@@ -1,7 +1,6 @@
 package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
@@ -16,15 +15,15 @@ public class PropagateCopies {
     /**
      * based on rewriteInstructions p. 598
      */
-    public static boolean propagateCopies(List<Node> cfg, Set<VarIr> aliasedVars) {
+    public static boolean propagateCopies(List<CfgNode> cfg, Set<VarIr> aliasedVars) {
         HashMap<Integer, HashSet<Copy>[]>  INSTRUCTION_ANNOTATIONS= new HashMap<>();
         HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS = new HashMap<>();
         findReachingCopies(cfg, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
         boolean updated = false;
         for (int i = 0; i < cfg.size(); i++) {
-            Node n = cfg.get(i);
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
-                                        ArrayList<Node> _, ArrayList<Node> _)) {
+            CfgNode n = cfg.get(i);
+            if (n instanceof BasicBlock(int _, List ins,
+                                        ArrayList<CfgNode> _, ArrayList<CfgNode> _)) {
                 BasicBlock b = (BasicBlock) n;
                 HashSet<Copy>[] annotations = INSTRUCTION_ANNOTATIONS.get(b.nodeId());
                 if (annotations == null)
@@ -32,7 +31,7 @@ public class PropagateCopies {
                 for (int j = 0; j < ins.size(); j++) {
 
 
-                    InstructionIr instr = b.instructions().get(j);
+                    InstructionIr instr = (InstructionIr) b.instructions().get(j);
                     Set<Copy> reachingCopies = annotations[j];
 
                     var newInstr = switch (instr) {
@@ -182,7 +181,7 @@ public class PropagateCopies {
         INSTRUCTION_ANNOTATIONS.get(blockId)[instructionIndex]=currentReachingCopies;
     }
 
-    private static void addNodesInReversePostOrder(Node node, ArrayDeque<BasicBlock> workList, Set<Integer> alreadySeen) {
+    private static void addNodesInReversePostOrder(CfgNode node, ArrayDeque<BasicBlock> workList, Set<Integer> alreadySeen) {
         if (alreadySeen.contains(node.nodeId())) return;
         alreadySeen.add(node.nodeId());
         for (var succ : node.successors()) {
@@ -194,7 +193,7 @@ public class PropagateCopies {
     }
 
 
-    private static void findReachingCopies(List<Node> cfg,
+    private static void findReachingCopies(List<CfgNode> cfg,
                                            HashMap<Integer, HashSet<Copy>[]>  INSTRUCTION_ANNOTATIONS
             , HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
         HashSet<Copy> allCopies = findAllCopyInstructions(cfg);
@@ -202,7 +201,7 @@ public class PropagateCopies {
         var alreadySeen = new HashSet<Integer>();
         ArrayDeque<BasicBlock> workList =new ArrayDeque<>();
         addNodesInReversePostOrder(cfg.getFirst(), workList, alreadySeen);
-        for (Node n : cfg) {
+        for (CfgNode n : cfg) {
             if (n instanceof BasicBlock node) {
                 annotateBlock(node.nodeId(), allCopies, BLOCK_ANNOTATIONS);
             }
@@ -213,7 +212,8 @@ public class PropagateCopies {
             Set<Copy> incomingCopies = meet(block, allCopies, BLOCK_ANNOTATIONS);
             transfer(block, incomingCopies, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
             if (!oldAnnotations.equals(getBlockAnnotation(block.nodeId(), BLOCK_ANNOTATIONS))) {
-                for (Node succ : block.successors()) {
+                for (Object succObj : block.successors()) {
+                    CfgNode succ = (CfgNode)succObj;
                     switch (succ) {
                         case BasicBlock basicBlock -> {
                             if (!workList.contains(basicBlock))
@@ -242,6 +242,8 @@ public class PropagateCopies {
                 case ExitNode _ -> {
                     throw new Err("Malformed control flow graph");
                 }
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + pred);
             }
         }
         return incomingCopies;
@@ -255,11 +257,11 @@ public class PropagateCopies {
         BLOCK_ANNOTATIONS.put(nodeId, allCopies);
     }
 
-    private static HashSet<Copy> findAllCopyInstructions(List<Node> cfg) {
+    private static HashSet<Copy> findAllCopyInstructions(List<CfgNode> cfg) {
         HashSet<Copy> allCopies = new HashSet<>();
-        for (Node n : cfg) {
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
-                                        ArrayList<Node> _, ArrayList<Node> _)) {
+        for (CfgNode n : cfg) {
+            if (n instanceof BasicBlock(int _, List ins,
+                                        ArrayList<CfgNode> _, ArrayList<CfgNode> _)) {
                 for (var in : ins) {
                     if (in instanceof Copy copy) {
                         allCopies.add(copy);

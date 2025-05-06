@@ -1,9 +1,10 @@
 package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.JmpCC;
+import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
-import com.quaxt.mcc.semantic.Pointer;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
@@ -11,8 +12,8 @@ import java.util.function.Predicate;
 
 import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.Optimization.*;
+import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
-import static com.quaxt.mcc.semantic.Primitive.ULONG;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
 public class Optimizer {
@@ -39,7 +40,7 @@ public class Optimizer {
             if (optimizations.contains(FOLD_CONSTANTS)) {
                 updated = foldConstants(instructions);
             }
-            List<Node> cfg = makeCFG(instructions);
+            List<CfgNode> cfg = makeCFG(instructions);
             if (optimizations.contains(PROPAGATE_COPIES)) {
                 updated |= PropagateCopies.propagateCopies(cfg, aliasedVars);
             }
@@ -55,7 +56,7 @@ public class Optimizer {
         return new FunctionIr(f.name(), f.global(), f.type(), instructions, f.returnType());
     }
 
-    private static Set<VarIr> addressTakenAnalysis(List<InstructionIr> instructions) {
+    public static Set<VarIr> addressTakenAnalysis(List<InstructionIr> instructions) {
         Set<VarIr> aliasedVars = new HashSet<>();
         for (var instr : instructions) {
             switch (instr) {
@@ -164,7 +165,7 @@ public class Optimizer {
         return aliasedVars;
     }
 
-    private static boolean eliminateDeadStores(List<Node> cfg, Set<VarIr> aliasedVars) {
+    private static boolean eliminateDeadStores(List<CfgNode> cfg, Set<VarIr> aliasedVars) {
         throw new Todo();
     }
 
@@ -182,14 +183,14 @@ public class Optimizer {
         return removeIf(a, c -> !b.contains(c));
     }
 
-    private static List<InstructionIr> cfgToInstructions(List<Node> cfg) {
-        ArrayList<InstructionIr> instructions = new ArrayList<>();
-        for (Node n : cfg) {
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
-                                        ArrayList<Node> _, ArrayList<Node> _)) {
+    private static <T extends AbstractInstruction> List<T> cfgToInstructions(List<CfgNode> cfg) {
+        ArrayList<T> instructions = new ArrayList<>();
+        for (CfgNode n : cfg) {
+            if (n instanceof BasicBlock(int _, List ins,
+                                        ArrayList<CfgNode> _, ArrayList<CfgNode> _)) {
                 for (var i : ins) {
                     if (!(i instanceof Ignore)) {
-                        instructions.add(i);
+                        instructions.add((T) i);
                     }
                 }
             }
@@ -197,25 +198,25 @@ public class Optimizer {
         return instructions;
     }
 
-    private static boolean eliminateUnreachableCode(List<Node> cfg) {
+    private static boolean eliminateUnreachableCode(List<CfgNode> cfg) {
         boolean updated = eliminateUnreachableBlocks(cfg);
         updated |= removeUselessJumps(cfg);
         updated |= removeUselessLabels(cfg);
         return updated;
     }
 
-    private static boolean removeUselessLabels(List<Node> nodes) {
+    private static <T extends AbstractInstruction> boolean removeUselessLabels(List<CfgNode> nodes) {
         // iterate through all BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 1; i++) {
-            BasicBlock b = (BasicBlock) nodes.get(i);
-            var instrs = b.instructions();
+            BasicBlock<T> b = (BasicBlock<T>) nodes.get(i);
+            List<T> instrs = b.instructions();
             if (instrs.isEmpty()) continue;
-            InstructionIr instr = instrs.getFirst();
+            T instr = instrs.getFirst();
             if (instr instanceof LabelIr) {
                 boolean keepLabel = false;
                 var defaultPredecessor = nodes.get(i - 1).nodeId();
-                for (var pred : b.predecessors()) {
+                for (CfgNode pred : b.predecessors()) {
                     if (pred.nodeId() != defaultPredecessor) {
                         keepLabel = true;
                         break;
@@ -231,14 +232,14 @@ public class Optimizer {
         return updated;
     }
 
-    private static boolean removeUselessJumps(List<Node> nodes) {
+    private static <T extends AbstractInstruction> boolean removeUselessJumps(List<CfgNode> nodes) {
         // iterate through all but the last BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 2; i++) {
-            BasicBlock b = (BasicBlock) nodes.get(i);
+            BasicBlock<T> b = (BasicBlock<T>) nodes.get(i);
             var instrs = b.instructions();
             if (instrs.isEmpty()) continue;
-            InstructionIr instr = instrs.getLast();
+            T instr = instrs.getLast();
             if (instr instanceof Jump || instr instanceof JumpIfZero || instr instanceof JumpIfNotZero) {
                 boolean keepJump = false;
                 var defaultSuccessor = nodes.get(i + 1).nodeId();
@@ -258,14 +259,14 @@ public class Optimizer {
         return updated;
     }
 
-    private static boolean eliminateUnreachableBlocks(List<Node> nodes) {
+    private static boolean eliminateUnreachableBlocks(List<CfgNode> nodes) {
         Set<Integer> nodesToKeep = new HashSet<>();
         nodesToKeep.add(nodes.getLast().nodeId());// always keep the exit node, even if there's an infinite loop
         nodesToKeep(nodesToKeep, nodes, nodes.getFirst());
         return nodes.removeIf(n -> !nodesToKeep.contains(n.nodeId()));
     }
 
-    private static void nodesToKeep(Set<Integer> nodesToKeep, List<Node> nodes, Node node) {
+    private static void nodesToKeep(Set<Integer> nodesToKeep, List<CfgNode> nodes, CfgNode node) {
         nodesToKeep.add(node.nodeId());
         for (var n : node.successors()) {
             if (!nodesToKeep.contains(n.nodeId()))
@@ -273,18 +274,18 @@ public class Optimizer {
         }
     }
 
-    private static List<Node> makeCFG(List<InstructionIr> instructions) {
-        List<List<InstructionIr>> blocks = partitionIntoBasicBlocks(instructions);
+    public static <T extends AbstractInstruction> List<CfgNode> makeCFG(List<T> instructions) {
+        List<List<T>> blocks = partitionIntoBasicBlocks(instructions);
         EntryNode entryNode = new EntryNode(new ArrayList<>());
-        List<Node> nodes = new ArrayList<>();
+        List<CfgNode> nodes = new ArrayList<>();
         ExitNode exitNode = new ExitNode(new ArrayList<>());
         nodes.add(entryNode);
         int max = blocks.size() - 1;
-        Map<String, Node> labelToNodeId = new HashMap<>();
+        Map<String, CfgNode> labelToNodeId = new HashMap<>();
         for (int i = 0; i <= max; i++) {
             var block = blocks.get(i);
             int blockId = i + 1;
-            var bb = new BasicBlock(blockId, block, new ArrayList<>(), new ArrayList<>());
+            var bb = new BasicBlock<T>(blockId, block, new ArrayList<>(), new ArrayList<>());
             nodes.add(bb);
             if (block.getFirst() instanceof LabelIr(String label)) {
                 labelToNodeId.put(label, bb);
@@ -293,19 +294,25 @@ public class Optimizer {
         nodes.add(exitNode);
         addEdge(nodes, entryNode, nodes.get(1));
         for (int i = 0; i <= max; i++) {
-            Node nodeId = nodes.get(i + 1);
-            Node nextId;
+            CfgNode nodeId = nodes.get(i + 1);
+            CfgNode nextId;
             if (i == max) {
                 nextId = exitNode;
             } else {
                 nextId = nodes.get(i + 2);
             }
-            BasicBlock node = (BasicBlock) nodeId;
-            InstructionIr instr = node.instructions().getLast();
+            BasicBlock<T> node = (BasicBlock<T>) nodeId;
+            T instr = node.instructions().getLast();
             switch (instr) {
-                case ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
+                /** RET is the only Nullary */
+                case Nullary _, ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
                 case Jump(String label) ->
                         addEdge(nodes, nodeId, labelToNodeId.get(label));
+                case JmpCC(CmpOperator cmpOperator, boolean unsigned,
+                           String label) ->{
+                    addEdge(nodes, nodeId, labelToNodeId.get(label));
+                    addEdge(nodes, nodeId, nextId);
+                }
                 case JumpIfNotZero(ValIr _, String label) -> {
                     addEdge(nodes, nodeId, labelToNodeId.get(label));
                     addEdge(nodes, nodeId, nextId);
@@ -320,15 +327,15 @@ public class Optimizer {
         return nodes;
     }
 
-    private static void addEdge(List<Node> nodes, Node from, Node to) {
+    private static void addEdge(List<CfgNode> nodes, CfgNode from, CfgNode to) {
         from.successors().add(to);
         to.predecessors().add(from);
     }
 
-    private static List<List<InstructionIr>> partitionIntoBasicBlocks(List<InstructionIr> instructions) {
-        List<List<InstructionIr>> finishedBlocks = new ArrayList<>();
-        List<InstructionIr> currentBlock = new ArrayList<>();
-        for (InstructionIr instr : instructions) {
+    private static <T extends AbstractInstruction> List<List<T>> partitionIntoBasicBlocks(List<T> instructions) {
+        List<List<T>> finishedBlocks = new ArrayList<>();
+        List<T> currentBlock = new ArrayList<>();
+        for (T instr : instructions) {
             if (instr instanceof LabelIr) {
                 if (!currentBlock.isEmpty()) {
                     finishedBlocks.add(currentBlock);
@@ -336,7 +343,7 @@ public class Optimizer {
                 currentBlock = new ArrayList<>();
                 currentBlock.add(instr);
             } else switch (instr) {
-                case Jump _, JumpIfNotZero _, JumpIfZero _, ReturnIr _ -> {
+                case Nullary _, JmpCC _, Jump _, JumpIfNotZero _, JumpIfZero _, ReturnIr _ -> {
                     currentBlock.add(instr);
                     finishedBlocks.add(currentBlock);
                     currentBlock = new ArrayList<>();

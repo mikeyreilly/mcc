@@ -1,5 +1,6 @@
-* TODO <2025-04-26 Sat> ch19
 * TODO <2025-04-26 Sat> ch20
+** handling non int
+*** separate base graph for each register class
 * TODO <2025-04-26 Sat> unions
 * TODO <2025-04-26 Sat> typedef
 * TODO <2025-04-26 Sat> varargs

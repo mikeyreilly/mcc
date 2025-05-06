@@ -2,7 +2,7 @@ package com.quaxt.mcc.asm;
 
 import java.util.Arrays;
 
-public enum DoubleReg implements Operand {
+public enum DoubleReg implements Reg {
     XMM0("xmm0"),
     XMM1("xmm1"),
     XMM2("xmm2"),
