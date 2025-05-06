@@ -7,7 +7,6 @@ import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
@@ -63,14 +62,18 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-
                 List<Instruction> instructionAsms = functionAsm.instructions();
+                allocateRegisters(instructionAsms);
                 AtomicLong offset = replacePseudoRegisters(instructionAsms, functionAsm.returnInMemory());
                 fixUpInstructions(offset, instructionAsms);
             }
         }
 
         return new ProgramAsm(topLevels);
+    }
+
+    private static void allocateRegisters(List<Instruction> instructionAsms) {
+        System.out.println("MR-TODO");
     }
 
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE = new HashMap<>();
@@ -144,6 +147,7 @@ public class Codegen {
                 case Lea(Operand src, Operand dst) ->
                         new Lea(dePseudo(src, varTable, offset), dePseudo(dst, varTable, offset));
                 case Comment comment -> comment;
+                case Pop pop -> throw new Todo();
             };
             instructions.set(i, newInst);
         }

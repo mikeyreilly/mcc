@@ -30,7 +30,7 @@ public enum ArithmeticOperator implements BinaryOperator {
 
     public String toString() {
         return switch(this){
-            case ADD -> "+";
+            case ADD,DOUBLE_ADD -> "+";
             case IMUL -> "*";
             case OR -> "|";
             case SHL -> "SHL";

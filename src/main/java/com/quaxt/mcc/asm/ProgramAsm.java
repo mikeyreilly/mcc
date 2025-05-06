@@ -217,6 +217,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
                 }
                 case Comment(String comment) -> "# "+comment;
+                case Pop pop -> throw new Todo();
             };
             if (instruction instanceof LabelIr) {
                 out.println(s);
