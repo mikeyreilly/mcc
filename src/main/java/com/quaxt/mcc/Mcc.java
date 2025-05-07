@@ -24,7 +24,7 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 import java.util.logging.*;
 
 public class Mcc {
-    private static final Logger logger = Logger.getLogger(Mcc.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
     public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>() {
         @Override
@@ -147,7 +147,7 @@ public class Mcc {
     }
 
     public static void main(String[] args0) throws Exception {
-        logger.info("started with args " + String.join(" ", args0));
+        LOGGER.info("started with args " + String.join(" ", args0));
         ArrayList<String> args = Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class Node {
+    public Node(){}
     Operand operand;
     List<Node> neighbours;
     double spillCost;

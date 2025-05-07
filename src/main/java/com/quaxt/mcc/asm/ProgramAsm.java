@@ -19,12 +19,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Imm(long i) -> "$" + i;
             case Pseudo _ ->
                     throw new IllegalArgumentException("broken compiler error: pseudo instructions should not occur here");
-            case Reg reg -> "%" + switch (s) {
-                case Push _ -> reg.q;
+            case HardReg reg -> "%" + switch (s) {
+                case Push _, Pop _ -> reg.q;
                 case SetCC _ -> reg.b;
                 default -> reg.d;
             };
-            case Memory(Reg reg, long offset) -> offset + "(%" + reg.q + ")";
+            case Memory(HardReg reg, long offset) -> offset + "(%" + reg.q + ")";
             case Data(String identifier, long offset) -> {
                 boolean isConstant = BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
                 StringBuilder sb = new StringBuilder();
@@ -38,7 +38,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield sb.toString();
             }
             case DoubleReg reg -> reg.toString();
-            case Indexed(Reg base, Reg index, int scale) ->
+            case Indexed(HardReg base, HardReg index, int scale) ->
                     "(%" + base.q + ",%" + index.q + "," + scale + ")";
             default ->
                     throw new IllegalStateException("Unexpected value: " + o);
@@ -46,7 +46,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     }
 
     private String formatOperand(TypeAsm t, Instruction s, Operand o) {
-        if (o instanceof Reg reg) {
+        if (o instanceof HardReg reg) {
             return "%" + switch (t) {
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
@@ -149,12 +149,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     }
 
     private void emitFunctionAsm(PrintWriter out, FunctionAsm functionAsm) {
-        String name = functionAsm.name();
-        if (functionAsm.global())
+        String name = functionAsm.name;
+        if (functionAsm.global)
             out.println("                .globl	" + name);
         out.println("                .text");
         out.println(name + ":");
-        List<Instruction> instructions = functionAsm.instructions();
+        List<Instruction> instructions = functionAsm.instructions;
         printIndent(out, "pushq\t%rbp");
         printIndent(out, "movq\t%rsp, %rbp");
         for (Instruction instruction : instructions) {
@@ -217,7 +217,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
                 }
                 case Comment(String comment) -> "# "+comment;
-                case Pop pop -> throw new Todo();
+                case Pop(HardReg arg) -> "popq\t" + formatOperand(instruction, arg);
             };
             if (instruction instanceof LabelIr) {
                 out.println(s);

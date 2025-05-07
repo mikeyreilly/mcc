@@ -19,7 +19,7 @@ import static com.quaxt.mcc.UnaryOperator.SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
-import static com.quaxt.mcc.asm.Reg.*;
+import static com.quaxt.mcc.asm.HardReg.*;
 import static com.quaxt.mcc.semantic.Primitive.UCHAR;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
@@ -28,11 +28,16 @@ public class Codegen {
     private static final Data NEGATIVE_ZERO;
     private static final Data UPPER_BOUND;
 
-    private static String toHexString(double d) {
-        return Double.toHexString(d).replaceAll("-", "_");
-    }
+    public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE =
+            new HashMap<>();
 
     private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L << 63);
+
+    private final static HardReg[] INTEGER_RETURN_REGISTERS = new HardReg[]{AX, DX};
+    public final static HardReg[] INTEGER_REGISTERS = new HardReg[]{DI, SI, DX, CX,
+            R8, R9};
+    private final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
+            XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
 
     static {
         double negative_zero = -0.0;
@@ -43,6 +48,11 @@ public class Codegen {
         NEGATIVE_ZERO = resolveConstant(-0.0d);
         UPPER_BOUND = resolveConstant(0x1.0p63);
     }
+
+    private static String toHexString(double d) {
+        return Double.toHexString(d).replaceAll("-", "_");
+    }
+
 
     public static ProgramAsm generateProgramAssembly(ProgramIr programIr) {
         ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
@@ -67,20 +77,16 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-                List<Instruction> instructionAsms = functionAsm.instructions();
-                RegisterAllocator.allocateRegisters(instructionAsms);
+                List<Instruction> instructionAsms = functionAsm.instructions;
+                RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(instructionAsms,
-                        functionAsm.returnInMemory());
-                fixUpInstructions(offset, instructionAsms);
+                        functionAsm.returnInMemory);
+                fixUpInstructions(offset, functionAsm);
             }
         }
 
         return new ProgramAsm(topLevels);
     }
-
-
-    public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE =
-            new HashMap<>();
 
     private static void generateBackendSymbolTable() {
         for (Map.Entry<String, SymbolTableEntry> e : SYMBOL_TABLE.entrySet()) {
@@ -173,8 +179,28 @@ public class Codegen {
         return offset;
     }
 
+    public static long calculateStackAdjustment(long bytesForLocals,
+                                                long calleeSavedCount) {
+        long calleeSavedBytes = 8 * calleeSavedCount;
+        long totalStackBytes = calleeSavedBytes + bytesForLocals;
+        long adjustedStackBytes = roundAwayFromZero(totalStackBytes, 16);
+
+        return adjustedStackBytes - calleeSavedBytes;
+    }
+
+    /**
+     * If both args are same sign then rounds away from zero, if args are not
+     * same sign does something you probably don't want.
+     */
+    private static long roundAwayFromZero(long dividend, long divisor) {
+        long remainder = dividend % divisor;
+        if (remainder == 0) return dividend;
+        return dividend + divisor - remainder;
+    }
+
     private static void fixUpInstructions(AtomicLong offset,
-                                          List<Instruction> instructions) {
+                                          FunctionAsm function) {
+        var instructions = function.instructions;
         // Fix up instructions
         long stackSize = -offset.get();
         // round up to next multiple of 16 (makes it easier to maintain
@@ -183,18 +209,33 @@ public class Codegen {
         if (remainder != 0) {
             stackSize += (16 - remainder);
         }
-        instructions.addFirst(new Binary(SUB, QUADWORD, new Imm(stackSize),
-                SP));
+        HardReg[] calleeSavedRegs = function.calleeSavedRegs;
+        int calleeSavedCount = calleeSavedRegs.length;
+        // push in reverse direction so we can pop in forward direction
+        for (HardReg r : calleeSavedRegs) {
+            instructions.addFirst(new Push(r));
+        }
+        instructions.addFirst(new Binary(SUB, QUADWORD,
+                new Imm(calculateStackAdjustment(stackSize, calleeSavedCount)), SP));
+
         // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
         for (int i = instructions.size() - 1; i >= 0; i--) {
             Instruction oldInst = instructions.get(i);
             switch (oldInst) {
+                case RET -> {
+                    if(calleeSavedCount>0) {
+                        for (int j = calleeSavedCount - 1; j >= 0; j--) {
+                            HardReg r = calleeSavedRegs[j];
+                            instructions.add(i, new Pop(r));
+                        }
+                    }
+                }
                 case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
                                    Operand src, Operand dst) -> {
                     // if srcType is not byte we rewrite as Mov
                     if (srcType == BYTE) {
                         //   boolean mustFixSrc = src instanceof Imm;
-                        boolean mustFixDst = !(dst instanceof Reg);
+                        boolean mustFixDst = !(dst instanceof HardReg);
 
                         if (src instanceof Imm(long i1)) {
                             src = new Imm(i1 & 0xff);
@@ -225,7 +266,7 @@ public class Codegen {
                             if (srcType == LONGWORD) src = new Imm((int) i1);
                         }
 
-                        if (dst instanceof Reg) {
+                        if (dst instanceof HardReg) {
                             instructions.set(i, new Mov(srcType, src, dst));
                         } else {
                             instructions.set(i, new Mov(srcType, src,
@@ -265,7 +306,7 @@ public class Codegen {
                     }
                 }
                 case Lea(Operand src, Operand dst) -> {
-                    if (!(dst instanceof Reg)) {
+                    if (!(dst instanceof HardReg)) {
                         instructions.set(i, new Lea(src, dstReg(QUADWORD)));
                         instructions.add(i + 1, new Mov(QUADWORD,
                                 dstReg(QUADWORD), dst));
@@ -428,12 +469,6 @@ public class Codegen {
         return src instanceof Memory || src instanceof Indexed || src instanceof Data;
     }
 
-    private final static Reg[] INTEGER_RETURN_REGISTERS = new Reg[]{AX, DX};
-    private final static Reg[] INTEGER_REGISTERS = new Reg[]{DI, SI, DX, CX,
-            R8, R9};
-    private final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
-            XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
-
     public static Data resolveConstant(double d) {
         StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d,
                 _ -> new StaticConstant("c." + toHexString(d), 8,
@@ -475,7 +510,7 @@ public class Codegen {
         long offsetFromStartOfArray;
         String identifier;
         switch (in) {
-            case Imm _, Reg _, Memory _, DoubleReg _, Data _, Indexed _:
+            case Imm _, HardReg _, Memory _, DoubleReg _, Data _, Indexed _:
                 return in;
             case Pseudo(String pIdentifier):
                 identifier = pIdentifier;
@@ -580,7 +615,7 @@ public class Codegen {
         if (funCall instanceof FunCall(String name, ArrayList<ValIr> args,
                                        ValIr dst)) {
 
-            boolean returnInMemory = false;
+            final boolean returnInMemory;
             List<TypedOperand> intDests = Collections.emptyList();
             List<Operand> doubleDests = Collections.emptyList();
             int regIndex = 0;
@@ -589,6 +624,8 @@ public class Codegen {
                 intDests = r.intDests;
                 doubleDests = r.doubleDests;
                 returnInMemory = r.returnInMemory;
+            } else {
+                returnInMemory = false;
             }
 
             if (returnInMemory) {
@@ -597,14 +634,16 @@ public class Codegen {
                 regIndex = 1;
             }
 
-            List<TypedOperand> operands = new ArrayList<>();
+            final List<TypedOperand> operands = new ArrayList<>();
             for (ValIr arg : args) {
                 TypeAsm typeAsm = valToAsmType(arg);
                 Operand operand = toOperand(arg);
                 operands.add(new TypedOperand(typeAsm, operand));
             }
             ParameterClassification classifiedArgs =
-                    classifyParameters(operands, returnInMemory);
+                    PARAMETER_CLASSIFICATION_MAP.computeIfAbsent(name,
+                            (k) -> classifyParameters(operands,
+                                    returnInMemory));
             ArrayList<TypedOperand> integerArguments =
                     classifiedArgs.integerArguments();
             ArrayList<Operand> doubleArguments =
@@ -622,7 +661,7 @@ public class Codegen {
             for (TypedOperand integerArg : integerArguments) {
                 var assemblyType = integerArg.type();
 
-                Reg r = INTEGER_REGISTERS[regIndex];
+                HardReg r = INTEGER_REGISTERS[regIndex];
                 if (assemblyType instanceof ByteArray(long size,
                                                       long alignment)) {
                     copyBytesToReg(instructionAsms, integerArg.operand(), r,
@@ -648,7 +687,7 @@ public class Codegen {
                             SP));
                     copyBytes(instructionAsms, operand, new Memory(SP, 0),
                             size);
-                } else if (operand instanceof Imm || operand instanceof Reg || assemblyType == QUADWORD || assemblyType == DOUBLE) {
+                } else if (operand instanceof Imm || operand instanceof HardReg || assemblyType == QUADWORD || assemblyType == DOUBLE) {
                     instructionAsms.add(new Push(operand));
                 } else {
                     instructionAsms.add(new Mov(assemblyType, operand, AX));
@@ -671,7 +710,7 @@ public class Codegen {
                 for (var intDest : intDests) {
                     TypeAsm t = intDest.type();
                     var op = intDest.operand();
-                    Reg r = INTEGER_RETURN_REGISTERS[regIndex];
+                    HardReg r = INTEGER_RETURN_REGISTERS[regIndex];
                     if (t instanceof ByteArray(long size, long alignment)) {
                         copyBytesFromReg(instructionAsms, r, op, size);
                     } else {
@@ -689,7 +728,7 @@ public class Codegen {
         }
     }
 
-    private static void copyBytesFromReg(List<Instruction> ins, Reg srcReg,
+    private static void copyBytesFromReg(List<Instruction> ins, HardReg srcReg,
                                          Operand dstOp, long byteCount) {
         long offset = 0;
         while (offset < byteCount) {
@@ -703,7 +742,7 @@ public class Codegen {
     }
 
     private static void copyBytesToReg(List<Instruction> ins, Operand srcOp,
-                                       Reg dstReg, long byteCount) {
+                                       HardReg dstReg, long byteCount) {
         long offset = byteCount - 1;
         while (offset >= 0) {
             Operand srcByte = srcOp.plus(offset);
@@ -733,9 +772,9 @@ public class Codegen {
             regIndex = 1;
         }
 
-
         ParameterClassification classifiedParameters =
-                classifyParameters(operands, returnInMemory);
+                PARAMETER_CLASSIFICATION_MAP.computeIfAbsent(functionIr.name(), (k) -> classifyParameters(operands, returnInMemory));
+
         ArrayList<TypedOperand> integerArguments =
                 classifiedParameters.integerArguments();
         ArrayList<Operand> doubleArguments =
@@ -891,8 +930,8 @@ public class Codegen {
                     } else {
                         //p.335
                         LabelIr label1 = newLabel(Mcc.makeTemporary(".Laub."));
-                        LabelIr label2 = newLabel(Mcc.makeTemporary(".LendCmp" +
-                                "."));
+                        LabelIr label2 = newLabel(Mcc.makeTemporary(".LendCmp"
+                                + "."));
                         ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
                         ins.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,
                                 true, label1.label()));
@@ -1140,13 +1179,6 @@ public class Codegen {
         }
     }
 
-    private record TypedOperand(TypeAsm type, Operand operand) {}
-
-    private record ParameterClassification(
-            ArrayList<TypedOperand> integerArguments,
-            ArrayList<Operand> doubleArguments,
-            ArrayList<TypedOperand> stackArguments) {}
-
     /*classify parameters or arguments*/
     private static ParameterClassification classifyParameters(
             List<TypedOperand> operands, boolean returnInMemory) {
@@ -1218,6 +1250,8 @@ public class Codegen {
         return new ParameterClassification(integerArguments, doubleArguments,
                 stackArguments);
     }
+
+    public static final Map<String, ParameterClassification> PARAMETER_CLASSIFICATION_MAP = new HashMap<>();
 
     private static TypeAsm getEightbyteType(long offset, long structSize) {
         long bytesFromEnd = structSize - offset;
