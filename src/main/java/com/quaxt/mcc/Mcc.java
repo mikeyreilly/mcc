@@ -236,7 +236,6 @@ public class Mcc {
         if (mode == Mode.TACKY) {
             return;
         }
-        //MR-TODO uncomment
         if (!optimizations.isEmpty()) {
             programIr = Optimizer.optimize(programIr, optimizations);
         }

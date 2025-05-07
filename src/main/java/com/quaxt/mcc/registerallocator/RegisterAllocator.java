@@ -91,7 +91,6 @@ public class RegisterAllocator {
                     }
                 }
                 case Jump _, LabelIr _, Call _, Nullary _, JmpCC _, Comment _ -> {}
-
             }
         }
     }
@@ -134,7 +133,7 @@ public class RegisterAllocator {
         return null;
     }
 
-    private static Reg[] BASE_GRAPH_REGISTERS = new Reg[]{AX, BX, CX, DX, DI, SI, R8, R9, R12, R13, R14, R15,};
+    private static final Reg[] BASE_GRAPH_REGISTERS = new Reg[]{AX, BX, CX, DX, DI, SI, R8, R9, R12, R13, R14, R15,};
 
     private static List<Node> baseGraph() {
 
