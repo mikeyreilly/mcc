@@ -34,7 +34,7 @@ public class EliminateDeadStores {
             Set<VarIr> incomingLiveVars = meet(block, blockAnnotations, staticVars);
             transfer(block, incomingLiveVars, INSTRUCTION_ANNOTATIONS, blockAnnotations, aliasedVars);
             if (!oldAnnotations.equals(getBlockAnnotation(block.nodeId(), blockAnnotations))) {
-                for (Node pred : block.predecessors()) {
+                for (Object pred : block.predecessors()) {
                     switch (pred) {
                         case BasicBlock basicBlock -> {
                             if (!workList.contains(basicBlock))
@@ -43,6 +43,8 @@ public class EliminateDeadStores {
                         case ExitNode _ ->
                                 throw new Err("Malformed control flow graph");
                         case EntryNode _ -> {}
+                        default ->
+                                throw new IllegalStateException("Unexpected value: " + pred);
                     }
                 }
             }
@@ -218,13 +220,15 @@ public class EliminateDeadStores {
         Set<VarIr> liveVars = new HashSet<>();
         for (var succ : block.successors()) {
             switch (succ) {
-                case BasicBlock _ -> {
-                    HashSet<VarIr> succLiveVars = getBlockAnnotation(succ.nodeId(), BLOCK_ANNOTATIONS);
+                case BasicBlock bb -> {
+                    HashSet<VarIr> succLiveVars = getBlockAnnotation(bb.nodeId(), BLOCK_ANNOTATIONS);
                     liveVars.addAll(succLiveVars);
                 }
                 case EntryNode _ ->
                         throw new Err("Malformed control-flow graph");
                 case ExitNode _ -> liveVars.addAll(staticVars);
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + succ);
             }
         }
         return liveVars;
@@ -248,15 +252,15 @@ public class EliminateDeadStores {
         boolean updated = false;
         for (int i = 0; i < cfg.size(); i++) {
             Node n = cfg.get(i);
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
+            if (n instanceof BasicBlock(int _, List ins,
                                         ArrayList<Node> _, ArrayList<Node> _)) {
-                BasicBlock b = (BasicBlock) n;
-                HashSet<VarIr>[] annotations = INSTRUCTION_ANNOTATIONS.get(b.nodeId());
+
+                HashSet<VarIr>[] annotations = INSTRUCTION_ANNOTATIONS.get(n.nodeId());
                 if (annotations == null)
                     continue; // because we initialize the worklist by doing a traversal of cfg, we don't annotate orphan nodes
                 int copyTo = 0;
                 for (int j = 0; j < ins.size(); j++) {
-                    InstructionIr instr = ins.get(j);
+                    InstructionIr instr = (InstructionIr) ins.get(j);
                     HashSet<VarIr> liveVars = annotations[j];
                     boolean isDeadStore = switch (instr) {
                         case BinaryIr(BinaryOperator _, ValIr src1, ValIr src2,

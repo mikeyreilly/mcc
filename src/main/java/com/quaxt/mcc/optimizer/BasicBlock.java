@@ -1,5 +1,6 @@
 package com.quaxt.mcc.optimizer;
 
+import com.quaxt.mcc.AbstractInstruction;
 import com.quaxt.mcc.Err;
 import com.quaxt.mcc.tacky.InstructionIr;
 
@@ -7,9 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public record BasicBlock(int nodeId, List<InstructionIr> instructions,
-                         ArrayList<Node> predecessors,
-                         ArrayList<Node> successors) implements Node {
+public record BasicBlock<T extends AbstractInstruction>(int nodeId, List<T> instructions,
+                                                        ArrayList<Node> predecessors,
+                                                        ArrayList<Node> successors) implements Node {
 
     // helper for toString. The default toString method would cause stackoverflow
     private static String stringifyNodes(ArrayList<Node> nodes) {

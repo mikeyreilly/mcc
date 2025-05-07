@@ -23,7 +23,7 @@ public class PropagateCopies {
         boolean updated = false;
         for (int i = 0; i < cfg.size(); i++) {
             Node n = cfg.get(i);
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
+            if (n instanceof BasicBlock(int _, List ins,
                                         ArrayList<Node> _, ArrayList<Node> _)) {
                 BasicBlock b = (BasicBlock) n;
                 HashSet<Copy>[] annotations = INSTRUCTION_ANNOTATIONS.get(b.nodeId());
@@ -32,7 +32,7 @@ public class PropagateCopies {
                 for (int j = 0; j < ins.size(); j++) {
 
 
-                    InstructionIr instr = b.instructions().get(j);
+                    InstructionIr instr = (InstructionIr) b.instructions().get(j);
                     Set<Copy> reachingCopies = annotations[j];
 
                     var newInstr = switch (instr) {
@@ -213,7 +213,8 @@ public class PropagateCopies {
             Set<Copy> incomingCopies = meet(block, allCopies, BLOCK_ANNOTATIONS);
             transfer(block, incomingCopies, INSTRUCTION_ANNOTATIONS, BLOCK_ANNOTATIONS, aliasedVars);
             if (!oldAnnotations.equals(getBlockAnnotation(block.nodeId(), BLOCK_ANNOTATIONS))) {
-                for (Node succ : block.successors()) {
+                for (Object succObj : block.successors()) {
+                    Node succ = (Node)succObj;
                     switch (succ) {
                         case BasicBlock basicBlock -> {
                             if (!workList.contains(basicBlock))
@@ -242,6 +243,8 @@ public class PropagateCopies {
                 case ExitNode _ -> {
                     throw new Err("Malformed control flow graph");
                 }
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + pred);
             }
         }
         return incomingCopies;
@@ -258,7 +261,7 @@ public class PropagateCopies {
     private static HashSet<Copy> findAllCopyInstructions(List<Node> cfg) {
         HashSet<Copy> allCopies = new HashSet<>();
         for (Node n : cfg) {
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
+            if (n instanceof BasicBlock(int _, List ins,
                                         ArrayList<Node> _, ArrayList<Node> _)) {
                 for (var in : ins) {
                     if (in instanceof Copy copy) {

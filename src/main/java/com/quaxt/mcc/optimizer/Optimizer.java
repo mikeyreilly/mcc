@@ -182,14 +182,14 @@ public class Optimizer {
         return removeIf(a, c -> !b.contains(c));
     }
 
-    private static List<InstructionIr> cfgToInstructions(List<Node> cfg) {
-        ArrayList<InstructionIr> instructions = new ArrayList<>();
+    private static <T extends AbstractInstruction> List<T> cfgToInstructions(List<Node> cfg) {
+        ArrayList<T> instructions = new ArrayList<>();
         for (Node n : cfg) {
-            if (n instanceof BasicBlock(int _, List<InstructionIr> ins,
+            if (n instanceof BasicBlock(int _, List ins,
                                         ArrayList<Node> _, ArrayList<Node> _)) {
                 for (var i : ins) {
                     if (!(i instanceof Ignore)) {
-                        instructions.add(i);
+                        instructions.add((T) i);
                     }
                 }
             }
@@ -204,18 +204,18 @@ public class Optimizer {
         return updated;
     }
 
-    private static boolean removeUselessLabels(List<Node> nodes) {
+    private static <T extends AbstractInstruction> boolean removeUselessLabels(List<Node> nodes) {
         // iterate through all BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 1; i++) {
-            BasicBlock b = (BasicBlock) nodes.get(i);
-            var instrs = b.instructions();
+            BasicBlock<T> b = (BasicBlock<T>) nodes.get(i);
+            List<T> instrs = b.instructions();
             if (instrs.isEmpty()) continue;
-            InstructionIr instr = instrs.getFirst();
+            T instr = instrs.getFirst();
             if (instr instanceof LabelIr) {
                 boolean keepLabel = false;
                 var defaultPredecessor = nodes.get(i - 1).nodeId();
-                for (var pred : b.predecessors()) {
+                for (Node pred : b.predecessors()) {
                     if (pred.nodeId() != defaultPredecessor) {
                         keepLabel = true;
                         break;
@@ -231,14 +231,14 @@ public class Optimizer {
         return updated;
     }
 
-    private static boolean removeUselessJumps(List<Node> nodes) {
+    private static <T extends AbstractInstruction> boolean removeUselessJumps(List<Node> nodes) {
         // iterate through all but the last BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 2; i++) {
-            BasicBlock b = (BasicBlock) nodes.get(i);
+            BasicBlock<T> b = (BasicBlock<T>) nodes.get(i);
             var instrs = b.instructions();
             if (instrs.isEmpty()) continue;
-            InstructionIr instr = instrs.getLast();
+            T instr = instrs.getLast();
             if (instr instanceof Jump || instr instanceof JumpIfZero || instr instanceof JumpIfNotZero) {
                 boolean keepJump = false;
                 var defaultSuccessor = nodes.get(i + 1).nodeId();
@@ -273,8 +273,8 @@ public class Optimizer {
         }
     }
 
-    private static List<Node> makeCFG(List<InstructionIr> instructions) {
-        List<List<InstructionIr>> blocks = partitionIntoBasicBlocks(instructions);
+    private static <T extends AbstractInstruction> List<Node> makeCFG(List<T> instructions) {
+        List<List<T>> blocks = partitionIntoBasicBlocks(instructions);
         EntryNode entryNode = new EntryNode(new ArrayList<>());
         List<Node> nodes = new ArrayList<>();
         ExitNode exitNode = new ExitNode(new ArrayList<>());
@@ -284,7 +284,7 @@ public class Optimizer {
         for (int i = 0; i <= max; i++) {
             var block = blocks.get(i);
             int blockId = i + 1;
-            var bb = new BasicBlock(blockId, block, new ArrayList<>(), new ArrayList<>());
+            var bb = new BasicBlock<T>(blockId, block, new ArrayList<>(), new ArrayList<>());
             nodes.add(bb);
             if (block.getFirst() instanceof LabelIr(String label)) {
                 labelToNodeId.put(label, bb);
@@ -300,8 +300,8 @@ public class Optimizer {
             } else {
                 nextId = nodes.get(i + 2);
             }
-            BasicBlock node = (BasicBlock) nodeId;
-            InstructionIr instr = node.instructions().getLast();
+            BasicBlock<T> node = (BasicBlock<T>) nodeId;
+            T instr = node.instructions().getLast();
             switch (instr) {
                 case ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
                 case Jump(String label) ->
@@ -325,10 +325,10 @@ public class Optimizer {
         to.predecessors().add(from);
     }
 
-    private static List<List<InstructionIr>> partitionIntoBasicBlocks(List<InstructionIr> instructions) {
-        List<List<InstructionIr>> finishedBlocks = new ArrayList<>();
-        List<InstructionIr> currentBlock = new ArrayList<>();
-        for (InstructionIr instr : instructions) {
+    private static <T extends AbstractInstruction> List<List<T>> partitionIntoBasicBlocks(List<T> instructions) {
+        List<List<T>> finishedBlocks = new ArrayList<>();
+        List<T> currentBlock = new ArrayList<>();
+        for (T instr : instructions) {
             if (instr instanceof LabelIr) {
                 if (!currentBlock.isEmpty()) {
                     finishedBlocks.add(currentBlock);
