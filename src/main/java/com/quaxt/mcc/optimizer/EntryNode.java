@@ -1,15 +1,13 @@
 package com.quaxt.mcc.optimizer;
 
-import com.quaxt.mcc.tacky.InstructionIr;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 
-public record EntryNode(ArrayList<Node> successors) implements Node {
+public record EntryNode(ArrayList<CfgNode> successors) implements CfgNode {
     @Override
-    public List<Node> predecessors() {
+    public List<CfgNode> predecessors() {
         return Collections.emptyList();
     }
 

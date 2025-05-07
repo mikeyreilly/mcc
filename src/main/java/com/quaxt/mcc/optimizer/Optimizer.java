@@ -3,7 +3,6 @@ package com.quaxt.mcc.optimizer;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
-import com.quaxt.mcc.semantic.Pointer;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
@@ -12,7 +11,6 @@ import java.util.function.Predicate;
 import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.Optimization.*;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
-import static com.quaxt.mcc.semantic.Primitive.ULONG;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
 public class Optimizer {
@@ -39,7 +37,7 @@ public class Optimizer {
             if (optimizations.contains(FOLD_CONSTANTS)) {
                 updated = foldConstants(instructions);
             }
-            List<Node> cfg = makeCFG(instructions);
+            List<CfgNode> cfg = makeCFG(instructions);
             if (optimizations.contains(PROPAGATE_COPIES)) {
                 updated |= PropagateCopies.propagateCopies(cfg, aliasedVars);
             }
@@ -164,7 +162,7 @@ public class Optimizer {
         return aliasedVars;
     }
 
-    private static boolean eliminateDeadStores(List<Node> cfg, Set<VarIr> aliasedVars) {
+    private static boolean eliminateDeadStores(List<CfgNode> cfg, Set<VarIr> aliasedVars) {
         throw new Todo();
     }
 
@@ -182,11 +180,11 @@ public class Optimizer {
         return removeIf(a, c -> !b.contains(c));
     }
 
-    private static <T extends AbstractInstruction> List<T> cfgToInstructions(List<Node> cfg) {
+    private static <T extends AbstractInstruction> List<T> cfgToInstructions(List<CfgNode> cfg) {
         ArrayList<T> instructions = new ArrayList<>();
-        for (Node n : cfg) {
+        for (CfgNode n : cfg) {
             if (n instanceof BasicBlock(int _, List ins,
-                                        ArrayList<Node> _, ArrayList<Node> _)) {
+                                        ArrayList<CfgNode> _, ArrayList<CfgNode> _)) {
                 for (var i : ins) {
                     if (!(i instanceof Ignore)) {
                         instructions.add((T) i);
@@ -197,14 +195,14 @@ public class Optimizer {
         return instructions;
     }
 
-    private static boolean eliminateUnreachableCode(List<Node> cfg) {
+    private static boolean eliminateUnreachableCode(List<CfgNode> cfg) {
         boolean updated = eliminateUnreachableBlocks(cfg);
         updated |= removeUselessJumps(cfg);
         updated |= removeUselessLabels(cfg);
         return updated;
     }
 
-    private static <T extends AbstractInstruction> boolean removeUselessLabels(List<Node> nodes) {
+    private static <T extends AbstractInstruction> boolean removeUselessLabels(List<CfgNode> nodes) {
         // iterate through all BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 1; i++) {
@@ -215,7 +213,7 @@ public class Optimizer {
             if (instr instanceof LabelIr) {
                 boolean keepLabel = false;
                 var defaultPredecessor = nodes.get(i - 1).nodeId();
-                for (Node pred : b.predecessors()) {
+                for (CfgNode pred : b.predecessors()) {
                     if (pred.nodeId() != defaultPredecessor) {
                         keepLabel = true;
                         break;
@@ -231,7 +229,7 @@ public class Optimizer {
         return updated;
     }
 
-    private static <T extends AbstractInstruction> boolean removeUselessJumps(List<Node> nodes) {
+    private static <T extends AbstractInstruction> boolean removeUselessJumps(List<CfgNode> nodes) {
         // iterate through all but the last BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 2; i++) {
@@ -258,14 +256,14 @@ public class Optimizer {
         return updated;
     }
 
-    private static boolean eliminateUnreachableBlocks(List<Node> nodes) {
+    private static boolean eliminateUnreachableBlocks(List<CfgNode> nodes) {
         Set<Integer> nodesToKeep = new HashSet<>();
         nodesToKeep.add(nodes.getLast().nodeId());// always keep the exit node, even if there's an infinite loop
         nodesToKeep(nodesToKeep, nodes, nodes.getFirst());
         return nodes.removeIf(n -> !nodesToKeep.contains(n.nodeId()));
     }
 
-    private static void nodesToKeep(Set<Integer> nodesToKeep, List<Node> nodes, Node node) {
+    private static void nodesToKeep(Set<Integer> nodesToKeep, List<CfgNode> nodes, CfgNode node) {
         nodesToKeep.add(node.nodeId());
         for (var n : node.successors()) {
             if (!nodesToKeep.contains(n.nodeId()))
@@ -273,14 +271,14 @@ public class Optimizer {
         }
     }
 
-    private static <T extends AbstractInstruction> List<Node> makeCFG(List<T> instructions) {
+    public static <T extends AbstractInstruction> List<CfgNode> makeCFG(List<T> instructions) {
         List<List<T>> blocks = partitionIntoBasicBlocks(instructions);
         EntryNode entryNode = new EntryNode(new ArrayList<>());
-        List<Node> nodes = new ArrayList<>();
+        List<CfgNode> nodes = new ArrayList<>();
         ExitNode exitNode = new ExitNode(new ArrayList<>());
         nodes.add(entryNode);
         int max = blocks.size() - 1;
-        Map<String, Node> labelToNodeId = new HashMap<>();
+        Map<String, CfgNode> labelToNodeId = new HashMap<>();
         for (int i = 0; i <= max; i++) {
             var block = blocks.get(i);
             int blockId = i + 1;
@@ -293,8 +291,8 @@ public class Optimizer {
         nodes.add(exitNode);
         addEdge(nodes, entryNode, nodes.get(1));
         for (int i = 0; i <= max; i++) {
-            Node nodeId = nodes.get(i + 1);
-            Node nextId;
+            CfgNode nodeId = nodes.get(i + 1);
+            CfgNode nextId;
             if (i == max) {
                 nextId = exitNode;
             } else {
@@ -320,7 +318,7 @@ public class Optimizer {
         return nodes;
     }
 
-    private static void addEdge(List<Node> nodes, Node from, Node to) {
+    private static void addEdge(List<CfgNode> nodes, CfgNode from, CfgNode to) {
         from.successors().add(to);
         to.predecessors().add(from);
     }

@@ -1,18 +1,14 @@
 package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
 
-import static com.quaxt.mcc.Mcc.valToType;
-import static com.quaxt.mcc.optimizer.Optimizer.removeIf;
-
 public class EliminateDeadStores {
 
     /* the iterative algorithm described on p. 607*/
-    private static void iterativeAlgorithm(List<Node> cfg, HashMap<Integer, HashSet<VarIr>[]> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<VarIr>> blockAnnotations, Set<VarIr> aliasedVars) {
+    private static void iterativeAlgorithm(List<CfgNode> cfg, HashMap<Integer, HashSet<VarIr>[]> INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<VarIr>> blockAnnotations, Set<VarIr> aliasedVars) {
         var staticVars = new HashSet<VarIr>();
         for (var v : aliasedVars) {
             if (v.isStatic()) {
@@ -22,7 +18,7 @@ public class EliminateDeadStores {
         HashSet<VarIr> liveVars = new HashSet<>();
         ArrayDeque<BasicBlock> workList = new ArrayDeque<>();
         // MR-TODO initialize the worklist in reverse post order
-        for (Node n : cfg) {
+        for (CfgNode n : cfg) {
             if (n instanceof BasicBlock node) {
                 workList.add(node);
                 annotateBlock(node.nodeId(), liveVars, blockAnnotations);
@@ -239,7 +235,7 @@ public class EliminateDeadStores {
     /**
      * based on rewriteInstructions p. 598
      */
-    public static boolean eliminateDeadStores(List<Node> cfg, Set<VarIr> aliasedVars) {
+    public static boolean eliminateDeadStores(List<CfgNode> cfg, Set<VarIr> aliasedVars) {
         if (DEBUG)
             System.out.println("===========eliminateDeadStores============== " + Optimizer.CURRENT_FUNCTION_NAME);
         HashMap<Integer, HashSet<VarIr>[]> INSTRUCTION_ANNOTATIONS = new HashMap<>();
@@ -251,9 +247,9 @@ public class EliminateDeadStores {
 
         boolean updated = false;
         for (int i = 0; i < cfg.size(); i++) {
-            Node n = cfg.get(i);
+            CfgNode n = cfg.get(i);
             if (n instanceof BasicBlock(int _, List ins,
-                                        ArrayList<Node> _, ArrayList<Node> _)) {
+                                        ArrayList<CfgNode> _, ArrayList<CfgNode> _)) {
 
                 HashSet<VarIr>[] annotations = INSTRUCTION_ANNOTATIONS.get(n.nodeId());
                 if (annotations == null)

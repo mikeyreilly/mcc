@@ -4,10 +4,12 @@ import com.quaxt.mcc.ArithmeticOperator;
 import com.quaxt.mcc.CmpOperator;
 import com.quaxt.mcc.UnaryOperator;
 import com.quaxt.mcc.asm.*;
+import com.quaxt.mcc.optimizer.CfgNode;
 import com.quaxt.mcc.tacky.Jump;
 import com.quaxt.mcc.tacky.LabelIr;
 
 import static com.quaxt.mcc.asm.Reg.*;
+import static com.quaxt.mcc.optimizer.Optimizer.makeCFG;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +26,7 @@ public class RegisterAllocator {
     private static List<Node> buildGraph(List<Instruction> instructions) {
         var interferenceGraph = baseGraph();
         addPseudoRegisters(interferenceGraph, instructions);
+        List<CfgNode> cfg = makeCFG(instructions);
         return interferenceGraph;
     }
 
