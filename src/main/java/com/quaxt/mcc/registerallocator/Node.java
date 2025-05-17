@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class Node {
-    public Node(){}
+    public Node() {}
+
     Operand operand;
     List<Node> neighbours;
     double spillCost;
@@ -15,8 +16,7 @@ public class Node {
 
     @Override
     public String toString() {
-        return "Node{" + "operand=" + operand + ", neighbours="
-                + neighbours.stream().map(n -> String.valueOf(n.operand)).collect(Collectors.joining(", "))
-                + ", spillCost=" + spillCost + ", color=" + color + ", pruned=" + pruned + '}';
+        return "Node{" + "color=" + color + ",operand=" + operand + ", " +
+                "neighbours=" + neighbours.stream().map(n -> String.valueOf(n.operand)).collect(Collectors.joining(", ")) + ", spillCost=" + spillCost + ", pruned=" + pruned + '}';
     }
 }

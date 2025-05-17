@@ -325,7 +325,7 @@ See p. 606 */
         annotateBlock(block.nodeId(), currentLiveRegisters, blockAnnotations);
     }
 
-
+    /* p. 634 */
     public static Pair<Set<? extends Operand>, Set<? extends Operand>> findUsedAndUpdated(
             Instruction instr) {
         switch (instr) {
@@ -337,7 +337,7 @@ See p. 606 */
                 return new Pair<>(Set.of(src), Set.of(dst));
             }
             case Call(String name) -> {
-                var pc = Codegen.PARAMETER_CLASSIFICATION_MAP.get(name);
+                ParameterClassification pc = Codegen.PARAMETER_CLASSIFICATION_MAP.get(name);
                 int len = pc.integerArguments().size();
                 Set<Reg> used = new HashSet<>();
                 for (int i = 0; i < len; i++) {

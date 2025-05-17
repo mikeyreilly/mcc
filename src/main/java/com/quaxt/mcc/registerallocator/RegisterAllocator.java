@@ -240,7 +240,7 @@ public class RegisterAllocator {
                 }
                 case Reg _ -> {
                     Node n = findExisting(op, interferenceGraph);
-                    n.spillCost = Double.POSITIVE_INFINITY;
+                    if (n != null) n.spillCost = Double.POSITIVE_INFINITY;
                 }
                 default -> {
                 }
@@ -277,7 +277,7 @@ public class RegisterAllocator {
                             instructionAnnotations.get(i)[j];
                     for (Operand l : liveRegisters) {
                         if (instr instanceof Mov(TypeAsm _, Operand src,
-                                                 Operand _) && l == src) {
+                                                 Operand _) && l.equals(src)) {
                             continue;
                         }
                         for (Operand u : updated) {
@@ -314,8 +314,7 @@ public class RegisterAllocator {
     private static Node findNodeForOperand(List<Node> interferenceGraph,
                                            Operand u) {
         for (Node n : interferenceGraph) {
-            if (n.operand.equals(u))
-            {
+            if (n.operand.equals(u)) {
                 return n;
             }
         }
@@ -407,7 +406,8 @@ public class RegisterAllocator {
         }
     }
 
-    private static void maybeAddPseudo(Operand op, List<Node> interferenceGraph) {
+    private static void maybeAddPseudo(Operand op,
+                                       List<Node> interferenceGraph) {
         boolean shouldAdd = switch (op) {
             case Pseudo p -> !isStatic(p);
             default -> false;

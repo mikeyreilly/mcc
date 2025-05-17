@@ -33,9 +33,10 @@ public class Codegen {
 
     private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L << 63);
 
-    private final static HardReg[] INTEGER_RETURN_REGISTERS = new HardReg[]{AX, DX};
-    public final static HardReg[] INTEGER_REGISTERS = new HardReg[]{DI, SI, DX, CX,
-            R8, R9};
+    private final static HardReg[] INTEGER_RETURN_REGISTERS =
+            new HardReg[]{AX, DX};
+    public final static HardReg[] INTEGER_REGISTERS = new HardReg[]{DI, SI,
+            DX, CX, R8, R9};
     private final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
             XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
 
@@ -223,7 +224,7 @@ public class Codegen {
             Instruction oldInst = instructions.get(i);
             switch (oldInst) {
                 case RET -> {
-                    if(calleeSavedCount>0) {
+                    if (calleeSavedCount > 0) {
                         for (int j = calleeSavedCount - 1; j >= 0; j--) {
                             HardReg r = calleeSavedRegs[j];
                             instructions.add(i, new Pop(r));
@@ -543,8 +544,6 @@ public class Codegen {
                     varOffset -= (alignment + remainder);
                 }
                 varTable.put(identifier, varOffset);
-                //System.out.println(identifier+"\t"+size+"\t"+varOffset+"\t
-                // "+remainder);
                 offsetA.set(varOffset);
             }
             return new Memory(BP, varOffset + offsetFromStartOfArray);
@@ -641,9 +640,8 @@ public class Codegen {
                 operands.add(new TypedOperand(typeAsm, operand));
             }
             ParameterClassification classifiedArgs =
-                    PARAMETER_CLASSIFICATION_MAP.computeIfAbsent(name,
-                            (k) -> classifyParameters(operands,
-                                    returnInMemory));
+                    classifyParameters(operands, returnInMemory);
+            PARAMETER_CLASSIFICATION_MAP.put(name, classifiedArgs);
             ArrayList<TypedOperand> integerArguments =
                     classifiedArgs.integerArguments();
             ArrayList<Operand> doubleArguments =
@@ -772,8 +770,8 @@ public class Codegen {
             regIndex = 1;
         }
 
-        ParameterClassification classifiedParameters =
-                PARAMETER_CLASSIFICATION_MAP.computeIfAbsent(functionIr.name(), (k) -> classifyParameters(operands, returnInMemory));
+        ParameterClassification classifiedParameters =classifyParameters(operands, returnInMemory);
+        PARAMETER_CLASSIFICATION_MAP.put(functionIr.name(), classifiedParameters);
 
         ArrayList<TypedOperand> integerArguments =
                 classifiedParameters.integerArguments();

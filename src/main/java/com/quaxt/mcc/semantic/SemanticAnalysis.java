@@ -381,11 +381,6 @@ public class SemanticAnalysis {
         return (long) d;
     }
 
-    public static void main(String[] args) {
-        var v = convertConst(new UCharInit((byte) -1), INT);
-        System.out.println(v);
-    }
-
     public static StaticInit convertConst(StaticInit init, Type type) {
         if (init instanceof DoubleInit(double d)) {
             return switch (type) {
