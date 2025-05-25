@@ -19,12 +19,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         return switch (o) {
             case Imm(long i) -> "$" + i;
             case Pseudo p -> p.identifier;
-            case HardReg reg -> "%" + switch (s) {
+            case IntegerReg reg -> "%" + switch (s) {
                 case Push _, Pop _ -> reg.q;
                 case SetCC _ -> reg.b;
                 default -> reg.d;
             };
-            case Memory(HardReg reg, long offset) -> offset + "(%" + reg.q + ")";
+            case Memory(IntegerReg reg, long offset) -> offset + "(%" + reg.q + ")";
             case Data(String identifier, long offset) -> {
                 boolean isConstant = BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
                 StringBuilder sb = new StringBuilder();
@@ -38,7 +38,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield sb.toString();
             }
             case DoubleReg reg -> reg.toString();
-            case Indexed(HardReg base, HardReg index, int scale) ->
+            case Indexed(IntegerReg base, IntegerReg index, int scale) ->
                     "(%" + base.q + ",%" + index.q + "," + scale + ")";
             default ->
                     throw new IllegalStateException("Unexpected value: " + o);
@@ -48,7 +48,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
 
 
     private static String formatOperand(TypeAsm t, Instruction s, Operand o) {
-        if (o instanceof HardReg reg) {
+        if (o instanceof IntegerReg reg) {
             return "%" + switch (t) {
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
@@ -234,7 +234,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
             }
             case Comment(String comment) -> "# "+comment;
-            case Pop(HardReg arg) -> "popq\t" + formatOperand(instruction, arg);
+            case Pop(IntegerReg arg) -> "popq\t" + formatOperand(instruction, arg);
         };
         if (instruction instanceof LabelIr) {
             out.println(s);

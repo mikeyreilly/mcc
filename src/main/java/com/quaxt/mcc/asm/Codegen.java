@@ -20,7 +20,7 @@ import static com.quaxt.mcc.UnaryOperator.SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
-import static com.quaxt.mcc.asm.HardReg.*;
+import static com.quaxt.mcc.asm.IntegerReg.*;
 import static com.quaxt.mcc.semantic.Primitive.UCHAR;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
@@ -34,9 +34,9 @@ public class Codegen {
 
     private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L << 63);
 
-    public final static HardReg[] INTEGER_RETURN_REGISTERS = new HardReg[]{AX
+    public final static IntegerReg[] INTEGER_RETURN_REGISTERS = new IntegerReg[]{AX
             , DX};
-    public final static HardReg[] INTEGER_REGISTERS = new HardReg[]{DI, SI,
+    public final static IntegerReg[] INTEGER_REGISTERS = new IntegerReg[]{DI, SI,
             DX, CX, R8, R9};
     public final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
             XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
@@ -211,10 +211,10 @@ public class Codegen {
         if (remainder != 0) {
             stackSize += (16 - remainder);
         }
-        HardReg[] calleeSavedRegs = function.calleeSavedRegs;
+        IntegerReg[] calleeSavedRegs = function.calleeSavedRegs;
         int calleeSavedCount = calleeSavedRegs.length;
         // push in reverse direction so we can pop in forward direction
-        for (HardReg r : calleeSavedRegs) {
+        for (IntegerReg r : calleeSavedRegs) {
             instructions.addFirst(new Push(r));
         }
         instructions.addFirst(new Binary(SUB, QUADWORD,
@@ -227,7 +227,7 @@ public class Codegen {
                 case RET -> {
                     if (calleeSavedCount > 0) {
                         for (int j = calleeSavedCount - 1; j >= 0; j--) {
-                            HardReg r = calleeSavedRegs[j];
+                            IntegerReg r = calleeSavedRegs[j];
                             instructions.add(i, new Pop(r));
                         }
                     }
@@ -237,7 +237,7 @@ public class Codegen {
                     // if srcType is not byte we rewrite as Mov
                     if (srcType == BYTE) {
                         //   boolean mustFixSrc = src instanceof Imm;
-                        boolean mustFixDst = !(dst instanceof HardReg);
+                        boolean mustFixDst = !(dst instanceof IntegerReg);
 
                         if (src instanceof Imm(long i1)) {
                             src = new Imm(i1 & 0xff);
@@ -268,7 +268,7 @@ public class Codegen {
                             if (srcType == LONGWORD) src = new Imm((int) i1);
                         }
 
-                        if (dst instanceof HardReg) {
+                        if (dst instanceof IntegerReg) {
                             instructions.set(i, new Mov(srcType, src, dst));
                         } else {
                             instructions.set(i, new Mov(srcType, src,
@@ -308,7 +308,7 @@ public class Codegen {
                     }
                 }
                 case Lea(Operand src, Operand dst) -> {
-                    if (!(dst instanceof HardReg)) {
+                    if (!(dst instanceof IntegerReg)) {
                         instructions.set(i, new Lea(src, dstReg(QUADWORD)));
                         instructions.add(i + 1, new Mov(QUADWORD,
                                 dstReg(QUADWORD), dst));
@@ -523,7 +523,7 @@ public class Codegen {
         long offsetFromStartOfArray;
         String identifier;
         switch (in) {
-            case Imm _, HardReg _, Memory _, DoubleReg _, Data _, Indexed _:
+            case Imm _, IntegerReg _, Memory _, DoubleReg _, Data _, Indexed _:
                 return in;
             case Pseudo p:
                 identifier = p.identifier;
@@ -667,7 +667,7 @@ public class Codegen {
             for (TypedOperand integerArg : integerArguments) {
                 var assemblyType = integerArg.type();
 
-                HardReg r = INTEGER_REGISTERS[regIndex];
+                IntegerReg r = INTEGER_REGISTERS[regIndex];
                 if (assemblyType instanceof ByteArray(long size,
                                                       long alignment)) {
                     copyBytesToReg(instructionAsms, integerArg.operand(), r,
@@ -693,7 +693,7 @@ public class Codegen {
                             SP));
                     copyBytes(instructionAsms, operand, new Memory(SP, 0),
                             size);
-                } else if (operand instanceof Imm || operand instanceof HardReg || assemblyType == QUADWORD || assemblyType == DOUBLE) {
+                } else if (operand instanceof Imm || operand instanceof IntegerReg || assemblyType == QUADWORD || assemblyType == DOUBLE) {
                     instructionAsms.add(new Push(operand));
                 } else {
                     instructionAsms.add(new Mov(assemblyType, operand, AX));
@@ -716,7 +716,7 @@ public class Codegen {
                 for (var intDest : intDests) {
                     TypeAsm t = intDest.type();
                     var op = intDest.operand();
-                    HardReg r = INTEGER_RETURN_REGISTERS[regIndex];
+                    IntegerReg r = INTEGER_RETURN_REGISTERS[regIndex];
                     if (t instanceof ByteArray(long size, long alignment)) {
                         copyBytesFromReg(instructionAsms, r, op, size);
                     } else {
@@ -734,7 +734,7 @@ public class Codegen {
         }
     }
 
-    private static void copyBytesFromReg(List<Instruction> ins, HardReg srcReg,
+    private static void copyBytesFromReg(List<Instruction> ins, IntegerReg srcReg,
                                          Operand dstOp, long byteCount) {
         long offset = 0;
         while (offset < byteCount) {
@@ -748,7 +748,7 @@ public class Codegen {
     }
 
     private static void copyBytesToReg(List<Instruction> ins, Operand srcOp,
-                                       HardReg dstReg, long byteCount) {
+                                       IntegerReg dstReg, long byteCount) {
         long offset = byteCount - 1;
         while (offset >= 0) {
             Operand srcByte = srcOp.plus(offset);

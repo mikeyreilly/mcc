@@ -10,7 +10,7 @@ public final class FunctionAsm implements AsmNode, TopLevelAsm {
     public final boolean global;
     public final boolean returnInMemory;
     public final List<Instruction> instructions;
-    public HardReg[] calleeSavedRegs = new HardReg[0];
+    public IntegerReg[] calleeSavedRegs = new IntegerReg[0];
     public Pair<Integer, Integer> returnRegisters;
     public FunctionAsm(String name, boolean global, boolean returnInMemory,
                        List<Instruction> instructions, Pair<Integer, Integer> returnRegisters) {

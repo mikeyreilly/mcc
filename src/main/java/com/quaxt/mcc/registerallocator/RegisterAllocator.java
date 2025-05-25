@@ -8,7 +8,7 @@ import com.quaxt.mcc.optimizer.LivenessAnalyzer;
 import com.quaxt.mcc.tacky.*;
 
 import static com.quaxt.mcc.asm.DoubleReg.*;
-import static com.quaxt.mcc.asm.HardReg.*;
+import static com.quaxt.mcc.asm.IntegerReg.*;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.DOUBLE;
 import static com.quaxt.mcc.optimizer.LivenessAnalyzer.findUsedAndUpdated;
 import static com.quaxt.mcc.optimizer.Optimizer.makeCFG;
@@ -24,9 +24,24 @@ public class RegisterAllocator {
      */
     public static void allocateRegisters(FunctionAsm functionAsm) {
         List<Instruction> instructions = functionAsm.instructions;
-        var graphs = buildGraph(functionAsm);
-        var interferenceGraphGpr = graphs.key();
-        var interferenceGraphMmx = graphs.value();
+        List<Node> interferenceGraphGpr;
+        List<Node> interferenceGraphMmx;
+//        var graphs = buildGraph(functionAsm);
+//        interferenceGraphGpr = graphs.key();
+//        interferenceGraphMmx = graphs.value();
+
+
+        while (true) {
+            var graphs = buildGraph(functionAsm);
+            interferenceGraphGpr = graphs.key();
+            interferenceGraphMmx = graphs.value();
+            //MR-TODO same for MMX
+            Map<Operand, Operand> coalescedRegs = initDisjointSets();
+            coalesce(interferenceGraphGpr, instructions, 12, coalescedRegs);
+            coalesce(interferenceGraphMmx, instructions, 14, coalescedRegs);
+            if (nothingWasCoalesced(coalescedRegs)) break;
+            rewriteCoalesced(instructions, coalescedRegs);
+        }
         addSpillCosts(interferenceGraphGpr, interferenceGraphMmx, instructions);
         // k is 12 for general purpose registers, 14 for MMX
         colorGraph(interferenceGraphGpr, 12);
@@ -35,6 +50,235 @@ public class RegisterAllocator {
                 interferenceGraphMmx, functionAsm);
         replacePseudoRegs(instructions, registerMaps.key());
         replacePseudoRegs(instructions, registerMaps.value());
+    }
+
+    private static void debugInstructions(List<Instruction> instructions) {
+        for (var in : instructions) {
+            System.out.print(ProgramAsm.formatInstruction(in));
+        }
+    }
+
+    private static void rewriteCoalesced(List<Instruction> instructions,
+                                         Map<Operand, Operand> coalescedRegs) {
+        int copyTo = 0;
+        for (var oldInst : instructions) {
+            switch (oldInst) {
+                case Mov(TypeAsm type, Operand src, Operand dst) -> {
+                    src = find(src, coalescedRegs);
+                    dst = find(dst, coalescedRegs);
+                    if (!src.equals(dst)) {
+                        instructions.set(copyTo++, new Mov(type, src, dst));
+                    }
+                }
+                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _, Call _,
+                     Comment _ -> instructions.set(copyTo++, oldInst);
+                case Unary(UnaryOperator op, TypeAsm typeAsm,
+                           Operand operand) ->
+                        instructions.set(copyTo++, new Unary(op, typeAsm,
+                                find(operand, coalescedRegs)));
+                case Binary(ArithmeticOperator op, TypeAsm typeAsm, Operand src,
+                            Operand dst) ->
+                        instructions.set(copyTo++, new Binary(op, typeAsm,
+                                find(src, coalescedRegs), find(dst,
+                                coalescedRegs)));
+
+                case Cmp(TypeAsm typeAsm, Operand subtrahend,
+                         Operand minuend) ->
+                        instructions.set(copyTo++, new Cmp(typeAsm,
+                                find(subtrahend, coalescedRegs), find(minuend
+                                , coalescedRegs)));
+                case SetCC(CmpOperator cmpOperator, boolean signed,
+                           Operand operand) ->
+                        instructions.set(copyTo++, new SetCC(cmpOperator,
+                                signed, find(operand, coalescedRegs)));
+                case Pop(IntegerReg operand) ->
+                        instructions.set(copyTo++,
+                                new Pop((IntegerReg) find(operand,
+                                        coalescedRegs)));
+                case Push(Operand operand) ->
+                        instructions.set(copyTo++, new Push(find(operand,
+                                coalescedRegs)));
+                case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
+                           Operand dst) ->
+                        instructions.set(copyTo++, new Movsx(srcType, dstType
+                                , find(src, coalescedRegs), find(dst,
+                                coalescedRegs)));
+                case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
+                                   Operand src, Operand dst) ->
+                        instructions.set(copyTo++, new MovZeroExtend(srcType,
+                                dstType, find(src, coalescedRegs), find(dst,
+                                coalescedRegs)));
+                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) ->
+                        instructions.set(copyTo++, new Cvttsd2si(dstType,
+                                find(src, coalescedRegs), find(dst,
+                                coalescedRegs)));
+                case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) ->
+                        instructions.set(copyTo++, new Cvtsi2sd(dstType,
+                                find(src, coalescedRegs), find(dst,
+                                coalescedRegs)));
+                case Lea(Operand src, Operand dst) ->
+                        instructions.set(copyTo++, new Lea(find(src,
+                                coalescedRegs), find(dst, coalescedRegs)));
+
+
+            }
+        }
+        int oldSize = instructions.size();
+        if (copyTo != oldSize) {
+            instructions.subList(copyTo, oldSize).clear();
+        }
+    }
+
+    private static boolean nothingWasCoalesced(
+            Map<Operand, Operand> coalescedRegs) {
+        return coalescedRegs.isEmpty();
+    }
+
+    /* p. 665 */
+    private static Map<Operand, Operand> coalesce(List<Node> graph,
+                                                  List<Instruction> instructions,
+                                                  int k,
+                                                  Map<Operand, Operand> coalescedRegs) {
+        for (var instr : instructions) {
+            switch (instr) {
+                case Mov(TypeAsm type, Operand src, Operand dst) -> {
+                    src = find(src, coalescedRegs);
+                    dst = find(dst, coalescedRegs);
+
+                    if (graphContains(graph, src) && graphContains(graph,
+                            dst) && !src.equals(dst)) {
+                        var sourceNode = findNodeForOperand(graph, src);
+                        if ((sourceNode == null || !graphContains(sourceNode.neighbours, dst)) && conservativeCoalesceable(graph, src, dst, k)) {
+                            Operand toKeep;
+                            Operand toMerge;
+
+                            if (src instanceof HardReg) {
+                                toKeep = src;
+                                toMerge = dst;
+                            } else {
+                                toKeep = dst;
+                                toMerge = src;
+                            }
+                            union(toMerge, toKeep, coalescedRegs);
+                            updateGraph(graph, toMerge, toKeep);
+
+                        }
+                    }
+
+                }
+                default -> {
+                    continue;
+                }
+            }
+        }
+        return coalescedRegs;
+    }
+
+    private static void updateGraph(List<Node> graph, Operand x, Operand y) {
+        var nodeToRemove = findNodeForOperand(graph, x);
+        for (var neighbour : new ArrayList<>(nodeToRemove.neighbours)) {
+            addEdge(graph, neighbour, y);
+            removeEdge(graph, neighbour, x);
+        }
+        graph.remove(nodeToRemove);
+    }
+
+
+    private static Operand find(Operand r, Map<Operand, Operand> regMap) {
+        var result = regMap.get(r);
+        if (result == null) return r;
+        return find(result, regMap);
+    }
+
+    private static void union(Operand x, Operand y,
+                              Map<Operand, Operand> regMap) {
+        regMap.put(x, y);
+    }
+
+    private static boolean conservativeCoalesceable(List<Node> graph,
+                                                    Operand src, Operand dst,
+                                                    int k) {
+        if (briggsTest(graph, src, dst, k)) return true;
+        if (src instanceof HardReg h) return georgeTest(graph, h, dst, k);
+        if (dst instanceof HardReg h) return georgeTest(graph, h, src, k);
+        return false;
+    }
+
+    /**
+     * Return true if merged node will have fewer than k neighbours of
+     * significant degree. p. 666
+     */
+    private static boolean briggsTest(List<Node> graph, Operand x, Operand y,
+                                      int k) {
+        int significantNeighbours = 0;
+        var xNode = findNodeForOperand(graph, x);
+        var yNode = findNodeForOperand(graph, y);
+        Set<Node> combinedNeighbours = new HashSet<>(xNode.neighbours);
+        combinedNeighbours.addAll(yNode.neighbours);
+
+        for (var neighbourNode : combinedNeighbours) {
+            int degree = neighbourNode.neighbours.size();
+            if (neighbourNode.neighbours.contains(xNode) && neighbourNode.neighbours.contains(yNode)) {
+                degree--;
+            }
+            if (degree >= k) {
+                significantNeighbours++;
+                if (significantNeighbours >= k) return false;
+            }
+        }
+
+        return true;
+    }
+
+    /* The George test says that you can coalesce a pseudoregister p into a
+    hard register h if each of p's neighbours meets either of two conditions:
+       1. It has fewer than k neighbours
+       2. It already interferes with h
+       p. 667 */
+    private static boolean georgeTest(List<Node> graph, HardReg hardReg,
+                                      Operand pseudoReg, int k) {
+        var pseudoNode = findNodeForOperand(graph, pseudoReg);
+        for (Node n : pseudoNode.neighbours) {
+            if (!graphContains(n.neighbours, hardReg) && n.neighbours.size() >= k) {
+                return false;
+            }
+        }
+        return true;
+
+
+    }
+
+    private static void debugGraph(List<Node> graph, Operand hardReg,
+                                   Operand pseudoReg, boolean b) {
+        System.out.println("----------------------------------------");
+        for (var n : graph) {
+
+            boolean highlight =
+                    n.operand.equals(hardReg) || n.operand.equals(pseudoReg);
+            System.out.println((b ? String.valueOf(n.color) + "\t" : "") + (highlight ? "[" + summary(n) + "]" : summary(n)));
+        }
+    }
+
+    private static String summary(Node n) {
+        Operand op = n.operand;
+        return summaryOp(op) + "->" + n.neighbours.stream().map(node -> summaryOp(node.operand)).collect(Collectors.joining(", "));
+    }
+
+    private static String summaryOp(Operand op) {
+        return switch (op) {
+            case Pseudo pseudo -> pseudo.identifier;
+            default -> String.valueOf(op);
+        };
+    }
+
+
+    private static boolean graphContains(List<Node> graph, Operand operand) {
+        return findNodeForOperand(graph, operand) != null;
+    }
+
+
+    private static Map<Operand, Operand> initDisjointSets() {
+        return new HashMap<>();
     }
 
 
@@ -109,10 +353,10 @@ public class RegisterAllocator {
     private static Pair<Map<Pseudo, Reg>, Map<Pseudo, Reg>> createRegisterMap(
             List<Node> coloredGraph, List<Node> coloredGraphMmx,
             FunctionAsm function) {
-        Map<Integer, HardReg> colorMap = new HashMap<>();
+        Map<Integer, IntegerReg> colorMap = new HashMap<>();
         Map<Integer, DoubleReg> colorMapMmx = new HashMap<>();
         for (Node node : coloredGraph) {
-            if (node.operand instanceof HardReg reg) {
+            if (node.operand instanceof IntegerReg reg) {
                 colorMap.put(node.color, reg);
             }
         }
@@ -123,7 +367,7 @@ public class RegisterAllocator {
         }
         Map<Pseudo, Reg> registerMap = new HashMap<>();
         Map<Pseudo, Reg> registerMapMmx = new HashMap<>();
-        Set<HardReg> calleeSavedRegs = EnumSet.noneOf(HardReg.class);
+        Set<IntegerReg> calleeSavedRegs = EnumSet.noneOf(IntegerReg.class);
         for (Node node : coloredGraph) {
             switch (node.operand) {
                 case Pseudo p -> {
@@ -151,7 +395,7 @@ public class RegisterAllocator {
                 default -> {}
             }
         }
-        function.calleeSavedRegs = calleeSavedRegs.toArray(new HardReg[0]);
+        function.calleeSavedRegs = calleeSavedRegs.toArray(new IntegerReg[0]);
         return new Pair<>(registerMap, registerMapMmx);
     }
 
@@ -195,7 +439,7 @@ public class RegisterAllocator {
         if (lowestAvailableColor != -1) {
             //MR-TODO same for MMX reg
             boolean chooseHighestAvailableColor =
-                    chosenNode.operand instanceof HardReg r && r.isCalleeSaved;
+                    chosenNode.operand instanceof IntegerReg r && r.isCalleeSaved;
             chosenNode.color = chooseHighestAvailableColor ? b.length() - 1 :
                     lowestAvailableColor;
             chosenNode.pruned = false;
@@ -262,19 +506,12 @@ public class RegisterAllocator {
                 case Unary(UnaryOperator op, TypeAsm type, Operand operand) -> {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, operand);
-
-
                 }
-
-                case Comment comment -> {}
-                case JmpCC jmpCC -> {}
-                case Nullary nullary -> {}
                 case Push(Operand operand) -> {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, operand);
                 }
-                case Jump jump -> {}
-                case LabelIr labelIr -> {}
+                case Comment _, JmpCC _, Nullary _, Jump _, LabelIr _ -> {}
             }
         }
 
@@ -287,16 +524,16 @@ public class RegisterAllocator {
             switch (op) {
                 case Pseudo p -> {
                     if (p.isStatic || p.isAliased) continue;
-                    Node n = findExisting(op, p.type == DOUBLE ?
-                            interferenceGraphMmx : interferenceGraph);
+                    Node n = findNodeForOperand(p.type == DOUBLE ?
+                            interferenceGraphMmx : interferenceGraph, op);
                     n.spillCost += 1;
                 }
                 case DoubleReg _ -> {
-                    Node n = findExisting(op, interferenceGraphMmx);
+                    Node n = findNodeForOperand(interferenceGraphMmx, op);
                     if (n != null) n.spillCost = Double.POSITIVE_INFINITY;
                 }
-                case HardReg _ -> {
-                    Node n = findExisting(op, interferenceGraph);
+                case IntegerReg _ -> {
+                    Node n = findNodeForOperand(interferenceGraph, op);
                     if (n != null) n.spillCost = Double.POSITIVE_INFINITY;
                 }
                 default -> {
@@ -321,7 +558,6 @@ public class RegisterAllocator {
         List<CfgNode> cfg = makeCFG(instructions);
         HashMap<Integer, Set<Operand>[]> instructionAnnotations =
                 livenessAnalysis(cfg, returnRegisters);
-        //debugAnnotations(functionAsm, cfg, instructionAnnotations);
         addEdges(cfg, interferenceGraphGpr, interferenceGraphMmx,
                 instructionAnnotations);
         // MR-TODO handling other types while constructing the graph p. 637
@@ -372,10 +608,10 @@ public class RegisterAllocator {
                         }
                         for (Operand u : updated) {
                             var interferenceGraph =
-                                    u instanceof DoubleReg || u instanceof Pseudo p && p.type == DOUBLE ? interferenceGraphMmx : interferenceGraphGpr;
+                                    u instanceof DoubleReg || (u instanceof Pseudo p && p.type == DOUBLE) ? interferenceGraphMmx : interferenceGraphGpr;
                             Node nodeForU =
                                     findNodeForOperand(interferenceGraph, u);
-                            if (nodeForU != null && findNodeForOperand(interferenceGraph, l) != null && !Objects.equals(l, u)) {
+                            if (nodeForU != null && graphContains(interferenceGraph, l) && !Objects.equals(l, u)) {
                                 addEdge(interferenceGraph, nodeForU, l);
                             }
                         }
@@ -400,7 +636,12 @@ public class RegisterAllocator {
             aNode.neighbours.add(bNode);
             bNode.neighbours.add(aNode);
         }
+    }
 
+    private static void removeEdge(List<Node> graph, Node aNode, Operand bOp) {
+        Node bNode = findNodeForOperand(graph, bOp);
+        aNode.neighbours.remove(bNode);
+        bNode.neighbours.remove(aNode);
     }
 
     private static Node findNodeForOperand(List<Node> interferenceGraph,
@@ -513,7 +754,7 @@ public class RegisterAllocator {
     }
 
     private static Node add(Operand op, List<Node> interferenceGraph) {
-        var existing = findExisting(op, interferenceGraph);
+        var existing = findNodeForOperand(interferenceGraph, op);
         if (existing == null) {
             existing = newNode(op);
             interferenceGraph.add(existing);
@@ -529,12 +770,6 @@ public class RegisterAllocator {
         return n;
     }
 
-    private static Node findExisting(Operand op, List<Node> interferenceGraph) {
-        for (var n : interferenceGraph) {
-            if (n.operand.equals(op)) return n;
-        }
-        return null;
-    }
 
     private static final Reg[] BASE_GRAPH_GPRS = new Reg[]{AX, BX, CX, DX, DI
             , SI, R8, R9, R12, R13, R14, R15,};

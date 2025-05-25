@@ -9,7 +9,7 @@ import java.util.*;
 public class EliminateDeadStores {
 
 
-    static boolean DEBUG = false;
+    static boolean DEBUG = true;
 
     /**
      * based on rewriteInstructions p. 598
@@ -19,12 +19,18 @@ public class EliminateDeadStores {
         if (DEBUG)
             System.out.println("===========eliminateDeadStores============== "
                     + Optimizer.CURRENT_FUNCTION_NAME);
-        HashMap<Integer, Set<VarIr>[]> instructionAnnotations =
-                new HashMap<>();
+        HashMap<Integer, Set<VarIr>[]> instructionAnnotations = new HashMap<>();
         HashMap<Integer, Set<VarIr>> blockAnnotations = new HashMap<>();
 
+        var staticVars = new HashSet<VarIr>();
+
+        for (var v : aliasedVars) {
+            if (v instanceof VarIr varIr && varIr.isStatic()) {
+                staticVars.add(varIr);
+            }
+        }
         LivenessAnalyzer.analyzeLiveness(cfg, instructionAnnotations,
-                blockAnnotations, aliasedVars,
+                blockAnnotations, new Pair<>(aliasedVars,staticVars),
                 LivenessAnalyzer::livenessIrMeetFunction,
                 LivenessAnalyzer::livenessIrTransferFunction);
 
@@ -35,8 +41,7 @@ public class EliminateDeadStores {
             if (n instanceof BasicBlock(int _, List ins, ArrayList<CfgNode> _,
                                         ArrayList<CfgNode> _)) {
 
-                var annotations =
-                        instructionAnnotations.get(n.nodeId());
+                var annotations = instructionAnnotations.get(n.nodeId());
                 if (annotations == null)
                     continue; // because we initialize the worklist by doing
                 // a traversal of cfg, we don't annotate orphan nodes
