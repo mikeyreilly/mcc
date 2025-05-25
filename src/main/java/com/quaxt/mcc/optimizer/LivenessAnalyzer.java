@@ -9,7 +9,7 @@ import java.util.*;
 import static com.quaxt.mcc.asm.Codegen.DOUBLE_REGISTERS;
 import static com.quaxt.mcc.asm.Codegen.INTEGER_RETURN_REGISTERS;
 import static com.quaxt.mcc.asm.DoubleReg.*;
-import static com.quaxt.mcc.asm.HardReg.*;
+import static com.quaxt.mcc.asm.IntegerReg.*;
 
 public class LivenessAnalyzer {
 
@@ -19,16 +19,7 @@ public class LivenessAnalyzer {
             HashMap<Integer, Set<V>[]> instructionAnnotations,
             HashMap<Integer, Set<V>> blockAnnotations, Object otherArgs,
             MeetFunction<V> meet, TransferFunction<V> transfer) {
-        var staticVars = new HashSet<V>();
-        if (otherArgs instanceof Set aliasedVars) {
-            for (var v : aliasedVars) {
-                if (v instanceof VarIr varIr && varIr.isStatic()) {
-                    staticVars.add((V) varIr);
-                }
-            }
-            // MR-TODO do this on the caller side
-            otherArgs = staticVars;
-        }
+
         Set<V> liveVars = new HashSet<>();
         ArrayDeque<BasicBlock<I>> workList = new ArrayDeque<>();
         // MR-TODO initialize the worklist in reverse post order
@@ -70,7 +61,8 @@ public class LivenessAnalyzer {
                                                     HashMap<Integer,
                                                             Set<VarIr>> blockAnnotations,
                                                     Object otherArg) {
-        Set<VarIr> staticVars = (Set<VarIr>) otherArg;
+        Pair<Set<VarIr>,Set<VarIr>> pair= (Pair<Set<VarIr>, Set<VarIr>>) otherArg;
+        Set<VarIr> staticVars = (Set<VarIr>) pair.value();
         Set<VarIr> liveVars = new HashSet<>();
         for (var succ : block.successors()) {
             switch (succ) {
@@ -97,7 +89,9 @@ See p. 606 */
             BasicBlock<InstructionIr> block, Set<VarIr> endLiveVars,
             HashMap<Integer, Set<VarIr>[]> instructionAnnotations,
             HashMap<Integer, Set<VarIr>> blockAnnotations, Object otherArg) {
-        Set<VarIr> aliasedVars = (Set<VarIr>) otherArg;
+        Pair<Set<VarIr>,Set<VarIr>> pair= (Pair<Set<VarIr>, Set<VarIr>>) otherArg;
+
+        Set<VarIr> aliasedVars = pair.key();
         HashSet<VarIr> currentLiveVars = new HashSet<>(endLiveVars);
         List<InstructionIr> instructions = block.instructions();
         instructionAnnotations.put(block.nodeId(),
@@ -155,9 +149,6 @@ See p. 606 */
                 }
                 case GetAddress(ValIr src, ValIr dst) -> {
                     currentLiveVars.remove(dst);
-                    if (src instanceof VarIr v) {
-                        currentLiveVars.add(v);
-                    }
                 }
                 case SignExtendIr(ValIr src, ValIr dst) -> {
                     currentLiveVars.remove(dst);
@@ -355,6 +346,7 @@ See p. 606 */
                 }
                 Set<Operand> used = new HashSet<>();
                 used.add(src);
+                used.add(dst);
                 addMemoryAndIndexedRegsToUsed(src, used);
                 addMemoryAndIndexedRegsToUsed(dst, used);
                 return new Pair<>(used, Set.of(dst));
@@ -473,10 +465,10 @@ See p. 606 */
     }
 
     private static void addMemoryAndIndexedRegsToUsed(Operand src, Set<Operand> used) {
-        if (src instanceof Memory(HardReg reg, long _)) {
+        if (src instanceof Memory(IntegerReg reg, long _)) {
             used.add(reg);
         }
-        if (src instanceof Indexed(HardReg base, HardReg index,
+        if (src instanceof Indexed(IntegerReg base, IntegerReg index,
                                    int _)) {
             used.add(base);
             used.add(index);
