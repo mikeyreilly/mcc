@@ -1,10 +1,10 @@
 package com.quaxt.mcc;
 
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
-import static com.quaxt.mcc.ArithmeticOperator.SHR_TWO_OP;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CmpOperator.GREATER_THAN;
 import static com.quaxt.mcc.semantic.Primitive.UINT;
@@ -58,11 +58,12 @@ public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
             case IMUL, DOUBLE_MUL -> c = a * b;
             case DIVIDE, DOUBLE_DIVIDE -> c = b == 0 ? 0 :Integer.divideUnsigned(a, b); //div by 0 is UB
             case REMAINDER -> c = b == 0 ? 0 : Integer.remainderUnsigned(a, b); //div by 0 is UB
-            case AND -> c = a & b;
-            case OR -> c = a | b;
+            case AND, BITWISE_AND -> c = a & b;
+            case OR, BITWISE_OR -> c = a | b;
             case BITWISE_XOR -> c = a ^ b;
-            case SHL -> c = a >> b;
-            case SHR_TWO_OP -> c = a << b;
+            case SAR -> c = a >> b;
+            case UNSIGNED_RIGHT_SHIFT -> c = a >>> b;
+            case SHL -> c = a << b;
             default -> {
                 return null;
             }
@@ -78,12 +79,20 @@ public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
             case BITWISE_NOT -> c = ~a;
             case UNARY_MINUS -> c = -a;
             case NOT -> c = a == 0 ? 1 : 0;
-            case SHR -> c = a >> 1;
+            case UNARY_SHR -> c = a >> 1;
             default -> {
                 return null;
             }
         }
         return new UIntInit(c);
+    }
+
+    @Override
+    public Constant<?> apply1(BinaryOperator op, Constant c2) {
+        if (c2 instanceof UIntInit l) {
+            return this.apply(op, l);
+        }
+        return this.apply(op, new UIntInit((int) c2.toLong()));
     }
 }
 

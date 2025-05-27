@@ -1,5 +1,6 @@
 package com.quaxt.mcc;
 
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 
@@ -66,8 +67,9 @@ public record UCharInit(byte i) implements StaticInit, Constant<UCharInit> {
             case AND -> c = a & b;
             case OR -> c = a | b;
             case BITWISE_XOR -> c = a ^ b;
-            case SHL -> c = a >> b;
-            case SHR_TWO_OP -> c = a << b;
+            case SAR -> c = a >> b;
+            case SHL -> c = a << b;
+            case UNSIGNED_RIGHT_SHIFT -> c = a >>> b;
             default -> {
                 return null;
             }
@@ -83,11 +85,19 @@ public record UCharInit(byte i) implements StaticInit, Constant<UCharInit> {
             case BITWISE_NOT -> c = (byte) ~i;
             case UNARY_MINUS -> c = (byte) -a;
             case NOT -> c = (byte) (a == 0 ? 1 : 0);
-            case SHR -> c = (byte) (a >> 1);
+            case UNARY_SHR -> c = (byte) (a >> 1);
             default -> {
                 return null;
             }
         }
         return new UCharInit(c);
+    }
+
+    @Override
+    public Constant<?> apply1(BinaryOperator op, Constant c2) {
+        if (c2 instanceof UCharInit l) {
+            return this.apply(op, l);
+        }
+        return this.apply(op, new UCharInit((byte)c2.toLong()));
     }
 }

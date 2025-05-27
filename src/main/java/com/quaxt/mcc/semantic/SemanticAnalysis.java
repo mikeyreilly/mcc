@@ -1,6 +1,7 @@
 package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.CharInit;
 import com.quaxt.mcc.tacky.PointerInit;
@@ -955,10 +956,20 @@ public class SemanticAnalysis {
                 if (op == AND || op == OR) {
                     yield new BinaryOp(op, typedE1, typedE2, INT);
                 }
-                if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE)) || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
-                    fail("invalid operands to binary % (have ‘" + t1 + "’ " +
-                            "and" + " ‘" + t2 + "’");
-
+                if (op == SAR || op==SHL || op == UNSIGNED_RIGHT_SHIFT){
+                    if (t1 == DOUBLE ||t2 == DOUBLE) {
+                        fail("invalid operands to binary " + op + " (have ‘" + t1 + "’ " +
+                                "and" + " ‘" + t2 + "’");
+                    }
+                    typedE1=promoteIfNecessary(typedE1);
+                    yield new BinaryOp(op, typedE1, promoteIfNecessary(typedE2), typedE1.type());
+                }
+                if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE))
+                        || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
+                    fail("invalid operands to binary " + op + " (have ‘" + t1 + "’ " + "and" + " ‘" + t2 + "’");
+                if ((op == BITWISE_AND || op == BITWISE_XOR || op == BITWISE_OR) && (t1 == DOUBLE || t2 == DOUBLE || t1 instanceof Pointer || t2 instanceof Pointer)) {
+                    fail("invalid operands to binary " + op + " (have ‘" + t1 + "’ " + "and" + " ‘" + t2 + "’");
+                }
                 if ((t1 instanceof Pointer || t2 instanceof Pointer) && switch (op) {
                     case LESS_THAN_OR_EQUAL, GREATER_THAN_OR_EQUAL, LESS_THAN,
                          GREATER_THAN -> true;
@@ -975,8 +986,11 @@ public class SemanticAnalysis {
 
 
                 yield new BinaryOp(op, convertedE1, convertedE2, switch (op) {
-                    case SUB, ADD, IMUL, DIVIDE, REMAINDER -> commonType;
-                    default -> INT;
+                    case SUB, ADD, IMUL, DIVIDE, REMAINDER,BITWISE_AND, BITWISE_OR, BITWISE_XOR, SHL, SAR -> commonType;
+                    case  EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL, GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN -> INT;
+                    default -> {
+                        throw new Todo();
+                    }
                 });
 
             }
@@ -1150,6 +1164,12 @@ public class SemanticAnalysis {
                 throw new Err("Tried to get member of non-structure");
             }
         };
+    }
+/**
+ * When a character value is used in some operators, it needs to be promoted to int
+ * */
+    private static Exp promoteIfNecessary(Exp e) {
+        return e.type().isCharacter() ? convertTo(e, INT) : e;
     }
 
 

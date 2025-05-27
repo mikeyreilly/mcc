@@ -395,8 +395,12 @@ public class Optimizer {
                         new Copy((ValIr) convertConst(c1, DOUBLE), dst);
                 case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
                               VarIr dstName) when v1 instanceof Constant c1 && v2 instanceof Constant c2 -> {
-                    Constant<?> co = c1.apply(op, c2);
-                    if (co == null) yield null;
+                    Constant<?> co = c1.apply1(op, c2);
+                    if (co == null) {
+                        c1.apply1(op, c2);
+                        throw new Todo();
+                        //yield null;
+                    }
                     yield new Copy((ValIr) convertConst((StaticInit) co, valToType(dstName)), dstName);
                 }
                 case JumpIfZero(ValIr v,

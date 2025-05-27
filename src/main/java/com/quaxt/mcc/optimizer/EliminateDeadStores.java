@@ -9,7 +9,7 @@ import java.util.*;
 public class EliminateDeadStores {
 
 
-    static boolean DEBUG = true;
+    static boolean DEBUG = false;
 
     /**
      * based on rewriteInstructions p. 598

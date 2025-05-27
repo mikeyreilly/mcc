@@ -19,7 +19,8 @@ public class Parser {
     public static Token expect(Token expected, List<Token> tokens) {
         Token token = tokens.removeFirst();
         if (expected != token.type()) {
-            throw new IllegalArgumentException("Expected " + expected + ", got " + token);
+            throw new IllegalArgumentException("Expected " + expected + ", " +
+                    "got " + token);
         }
         return token;
     }
@@ -83,7 +84,8 @@ public class Parser {
         return new DoWhile(body, condition, null);
     }
 
-    sealed interface Declarator permits ArrayDeclarator, FunDeclarator, Ident, PointerDeclarator {}
+    sealed interface Declarator permits ArrayDeclarator, FunDeclarator, Ident
+            , PointerDeclarator {}
 
     record Ident(String identifier) implements Declarator {}
 
@@ -101,7 +103,8 @@ public class Parser {
     record NameDeclTypeParams(String name, Type type,
                               ArrayList<String> paramNames) {}
 
-    sealed interface AbstractDeclarator permits AbstractArrayDeclarator, AbstractBase, AbstractPointer, DirectAbstractDeclarator {}
+    sealed interface AbstractDeclarator permits AbstractArrayDeclarator,
+            AbstractBase, AbstractPointer, DirectAbstractDeclarator {}
 
     record AbstractBase() implements AbstractDeclarator {}
 
@@ -111,7 +114,8 @@ public class Parser {
     record AbstractPointer(
             AbstractDeclarator declarator) implements AbstractDeclarator {}
 
-    private static AbstractDeclarator parseAbstractDeclarator(List<Token> tokens) {
+    private static AbstractDeclarator parseAbstractDeclarator(
+            List<Token> tokens) {
         // <abstract-declarator> ::= "*" [ <abstract-declarator> ]
         //                         | <direct-abstract-declarator>
         if (tokens.getFirst() == OPEN_PAREN || tokens.getFirst() == OPEN_BRACKET)
@@ -123,8 +127,10 @@ public class Parser {
         return new AbstractBase();
     }
 
-    private static AbstractDeclarator parseDirectAbstractDeclarator(List<Token> tokens) {
-        // <direct-abstract-declarator> ::= "(" <abstract-declarator> ")" { "[" <const> "]" }
+    private static AbstractDeclarator parseDirectAbstractDeclarator(
+            List<Token> tokens) {
+        // <direct-abstract-declarator> ::= "(" <abstract-declarator> ")" {
+        // "[" <const> "]" }
         //                                | { "[" <const> "]" }+
         AbstractDeclarator d = null;
         if (tokens.getFirst() == OPEN_PAREN) {
@@ -166,7 +172,8 @@ public class Parser {
                                 String name) when type == IDENTIFIER ->
                     new Ident(name);
             default ->
-                    throw new Err("while parsing declarator found unexpected token :" + t);
+                    throw new Err("while parsing declarator found unexpected " +
+                            "token :" + t);
         };
         if (tokens.getFirst() == OPEN_PAREN) {
             tokens.removeFirst();
@@ -180,17 +187,22 @@ public class Parser {
                 params = new ArrayList<>();
 
                 while (true) {
-                    TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, true);
+                    TypeAndStorageClass typeAndStorageClass =
+                            parseTypeAndStorageClass(tokens, true);
                     if (typeAndStorageClass.storageClass() != null)
                         fail("error: storage class specified for parameter");
                     Declarator paramDeclarator = parseDeclarator(tokens);
-                    NameDeclTypeParams nameDeclTypeParams = processDeclarator(paramDeclarator, typeAndStorageClass.type());
-                    params.add(new ParamInfo(nameDeclTypeParams.type(), paramDeclarator));
+                    NameDeclTypeParams nameDeclTypeParams =
+                            processDeclarator(paramDeclarator,
+                                    typeAndStorageClass.type());
+                    params.add(new ParamInfo(nameDeclTypeParams.type(),
+                            paramDeclarator));
 
                     Token token = tokens.removeFirst();
                     if (token == CLOSE_PAREN) break;
                     else if (token != COMMA)
-                        throw new IllegalArgumentException("Expected COMMA, got " + token);
+                        throw new IllegalArgumentException("Expected COMMA, " +
+                                "got " + token);
                 }
 
             }
@@ -209,7 +221,8 @@ public class Parser {
         return d;
     }
 
-    private static NameDeclTypeParams processDeclarator(Declarator declarator, Type baseType) {
+    private static NameDeclTypeParams processDeclarator(Declarator declarator,
+                                                        Type baseType) {
         return switch (declarator) {
             case Ident(String name) ->
                     new NameDeclTypeParams(name, baseType, new ArrayList<>());
@@ -221,7 +234,8 @@ public class Parser {
                 List<Type> paramTypes = new ArrayList<>();
 
                 for (ParamInfo pi : params) {
-                    NameDeclTypeParams decl = processDeclarator(pi.declarator(), pi.type());
+                    NameDeclTypeParams decl =
+                            processDeclarator(pi.declarator(), pi.type());
                     String name = decl.name();
                     Type type = pi.type();
                     if (type instanceof FunType)
@@ -233,7 +247,8 @@ public class Parser {
                 yield new NameDeclTypeParams(switch (d) {
                     case Ident(String name) -> name;
                     default ->
-                            throw new Err("Can't apply additional derivations to a function type");
+                            throw new Err("Can't apply additional derivations" +
+                                    " to a function type");
                 }, derivedType, paramNames);
             }
             case ArrayDeclarator(Declarator inner, Constant size) -> {
@@ -243,9 +258,11 @@ public class Parser {
         };
     }
 
-    private static Declaration parseDeclaration(ArrayList<Token> tokens, boolean throwExceptionIfNoType) {
+    private static Declaration parseDeclaration(ArrayList<Token> tokens,
+                                                boolean throwExceptionIfNoType) {
         // parse int i; or int i=5; or int foo(void) or struct...;
-        TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
+        TypeAndStorageClass typeAndStorageClass =
+                parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
         if (typeAndStorageClass == null) return null;
         if (typeAndStorageClass.type() instanceof Structure(String tag)) {
             var t = tokens.getFirst();
@@ -263,7 +280,8 @@ public class Parser {
                     tokens.removeFirst(); // closing brace
                     expect(SEMICOLON, tokens);
                     if (members.isEmpty()) {
-                        throw new Err("A struct must have one or more member declarators");
+                        throw new Err("A struct must have one or more member " +
+                                "declarators");
                     }
                     return new StructDecl(tag, members);
                 }
@@ -273,12 +291,14 @@ public class Parser {
             }
         }
         Declarator declarator = parseDeclarator(tokens);
-        NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator, typeAndStorageClass.type());
+        NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator,
+                typeAndStorageClass.type());
         String name = nameDeclTypeParams.name();
         Type type = nameDeclTypeParams.type();
         ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
         if (type instanceof FunType(List<Type> paramTypes1, Type ret)) {
-            return parseRestOfFunction(paramNames, paramTypes1, tokens, name, ret, typeAndStorageClass.storageClass());
+            return parseRestOfFunction(paramNames, paramTypes1, tokens, name,
+                    ret, typeAndStorageClass.storageClass());
         }
         Token token = tokens.removeFirst();
         Initializer init;
@@ -294,15 +314,19 @@ public class Parser {
                 throw new IllegalArgumentException("Expected ; or =, got " + token);
         }
 
-        return new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass());
+        return new VarDecl(new Var(name, type), init, type,
+                typeAndStorageClass.storageClass());
     }
 
-    private static MemberDeclaration parseMemberDeclaration(ArrayList<Token> tokens) {
-        TypeAndStorageClass typeAndStorageClass = parseTypeAndStorageClass(tokens, true);
+    private static MemberDeclaration parseMemberDeclaration(
+            ArrayList<Token> tokens) {
+        TypeAndStorageClass typeAndStorageClass =
+                parseTypeAndStorageClass(tokens, true);
         if (typeAndStorageClass.storageClass() != null)
             fail("error: storage class specified for struct member");
         Declarator paramDeclarator = parseDeclarator(tokens);
-        NameDeclTypeParams nameDeclTypeParams = processDeclarator(paramDeclarator, typeAndStorageClass.type());
+        NameDeclTypeParams nameDeclTypeParams =
+                processDeclarator(paramDeclarator, typeAndStorageClass.type());
         var t = nameDeclTypeParams.type();
         if (t instanceof FunType)
             fail("error: member declaration can't be function");
@@ -323,7 +347,8 @@ public class Parser {
                 Token t = tokens.removeFirst();
                 done = switch (t) {
                     case COMMA -> {
-                        boolean trailingComma = !tokens.isEmpty() && tokens.getFirst() == CLOSE_BRACE;
+                        boolean trailingComma =
+                                !tokens.isEmpty() && tokens.getFirst() == CLOSE_BRACE;
                         if (trailingComma) {
                             tokens.removeFirst();//remove close brace
                         }
@@ -331,7 +356,8 @@ public class Parser {
                     }
                     case CLOSE_BRACE -> true;
                     default ->
-                            throw new IllegalStateException("Unexpected value: " + tokens.removeFirst());
+                            throw new IllegalStateException("Unexpected " +
+                                    "value: " + tokens.removeFirst());
                 };
             }
             return new CompoundInit(inits, null);
@@ -342,7 +368,8 @@ public class Parser {
     }
 
 
-    public static TypeAndStorageClass parseTypeAndStorageClass(List<Token> tokens, boolean throwExceptionIfNoType) {
+    public static TypeAndStorageClass parseTypeAndStorageClass(
+            List<Token> tokens, boolean throwExceptionIfNoType) {
         if (tokens.isEmpty()) return null;
         List<Token> types = new ArrayList<>();
         List<StorageClass> storageClasses = new ArrayList<>();
@@ -374,13 +401,16 @@ public class Parser {
         if (storageClasses.size() > 1) {
             fail("invalid storage class");
         }
-        StorageClass storageClass = storageClasses.isEmpty() ? null : storageClasses.getFirst();
-        return type == null ? null : new TypeAndStorageClass(type, storageClass);
+        StorageClass storageClass = storageClasses.isEmpty() ? null :
+                storageClasses.getFirst();
+        return type == null ? null : new TypeAndStorageClass(type,
+                storageClass);
     }
 
     static int parseTypeCount = 0;
 
-    private static Type parseType(List<Token> types, boolean throwExceptionIfNoType) {
+    private static Type parseType(List<Token> types,
+                                  boolean throwExceptionIfNoType) {
         parseTypeCount++;
         boolean foundInt = false;
         boolean foundLong = false;
@@ -436,7 +466,8 @@ public class Parser {
         }
 
         if (foundChar)
-            return foundSigned ? Primitive.SCHAR : foundUnsigned ? Primitive.UCHAR : Primitive.CHAR;
+            return foundSigned ? Primitive.SCHAR : foundUnsigned ?
+                    Primitive.UCHAR : Primitive.CHAR;
         else if (foundLong)
             return foundUnsigned ? Primitive.ULONG : Primitive.LONG;
         else if (foundInt)
@@ -463,7 +494,12 @@ public class Parser {
         return CHAR == first || INT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first;
     }
 
-    private static Function parseRestOfFunction(ArrayList<String> paramNames, List<Type> paramTypes, ArrayList<Token> tokens, String functionName, Type returnType, StorageClass storageClass) {
+    private static Function parseRestOfFunction(ArrayList<String> paramNames,
+                                                List<Type> paramTypes,
+                                                ArrayList<Token> tokens,
+                                                String functionName,
+                                                Type returnType,
+                                                StorageClass storageClass) {
 
         List<Var> params = new ArrayList<>();
         for (int i = 0; i < paramNames.size(); i++) {
@@ -477,7 +513,8 @@ public class Parser {
             expect(SEMICOLON, tokens);
             block = null;
         }
-        return new Function(functionName, params, block, new FunType(paramTypes, returnType), storageClass);
+        return new Function(functionName, params, block,
+                new FunType(paramTypes, returnType), storageClass);
     }
 
     private static String expectIdentifier(List<Token> tokens) {
@@ -513,7 +550,8 @@ public class Parser {
 
     private static BlockItem parseBlockItem(ArrayList<Token> tokens) {
         Token t = tokens.getFirst();
-        return t == EXTERN || t == STATIC || isTypeSpecifier(tokens, 0) ? parseDeclaration(tokens, false) : parseStatement(tokens);
+        return t == EXTERN || t == STATIC || isTypeSpecifier(tokens, 0) ?
+                parseDeclaration(tokens, false) : parseStatement(tokens);
     }
 
     public static Constant parseConst(String value, Type type) {
@@ -531,7 +569,8 @@ public class Parser {
         else return new ULongInit(v);
     }
 
-    private static Type processAbstractDeclarator(AbstractDeclarator abstractDeclarator, Type type) {
+    private static Type processAbstractDeclarator(
+            AbstractDeclarator abstractDeclarator, Type type) {
         return switch (abstractDeclarator) {
             case AbstractBase _ -> type;
             case AbstractPointer(AbstractDeclarator declarator) ->
@@ -540,7 +579,8 @@ public class Parser {
                     processAbstractDeclarator(declarator, type);
             case AbstractArrayDeclarator(AbstractDeclarator declarator,
                                          Constant arraySize) ->
-                    processAbstractDeclarator(declarator, new Array(type, arraySize));
+                    processAbstractDeclarator(declarator, new Array(type,
+                            arraySize));
         };
     }
 
@@ -554,13 +594,15 @@ public class Parser {
         return switch (tokens.getFirst()) {
             case SUB -> {
                 tokens.removeFirst();
-                yield new UnaryOp(UnaryOperator.UNARY_MINUS, parseCastExp(tokens), null);
+                yield new UnaryOp(UnaryOperator.UNARY_MINUS,
+                        parseCastExp(tokens), null);
             }
             case BITWISE_NOT -> {
                 tokens.removeFirst();
-                yield new UnaryOp(UnaryOperator.BITWISE_NOT, parseCastExp(tokens), null);
+                yield new UnaryOp(UnaryOperator.BITWISE_NOT,
+                        parseCastExp(tokens), null);
             }
-            case AMPERSAND -> {
+            case BITWISE_AND -> {
                 tokens.removeFirst();
                 yield new AddrOf(parseCastExp(tokens), null);
             }
@@ -570,11 +612,13 @@ public class Parser {
             }
             case NOT -> {
                 tokens.removeFirst();
-                yield new UnaryOp(UnaryOperator.NOT, parseCastExp(tokens), null);
+                yield new UnaryOp(UnaryOperator.NOT, parseCastExp(tokens),
+                        null);
             }
             case SIZEOF -> {
                 tokens.removeFirst();
-                if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens, 1)) {
+                if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens
+                        , 1)) {
                     tokens.removeFirst();
                     TypeName typeName = parseTypeName(tokens);
                     expect(CLOSE_PAREN, tokens);
@@ -616,7 +660,8 @@ public class Parser {
         return exp;
     }
 
-    private static Constant parseConst(List<Token> tokens, boolean throwIfNotFound) {
+    private static Constant parseConst(List<Token> tokens,
+                                       boolean throwIfNotFound) {
         Token token = tokens.getFirst();
         if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
@@ -643,7 +688,8 @@ public class Parser {
                     break;
             }
         }
-        if (throwIfNotFound) throw new IllegalStateException("expected const, found: " + token);
+        if (throwIfNotFound)
+            throw new IllegalStateException("expected const, found: " + token);
         return null;
     }
 
@@ -698,7 +744,8 @@ public class Parser {
                             Token current = tokens.getFirst();
                             if (current == CLOSE_PAREN) {
                                 tokens.removeFirst();
-                                yield new FunctionCall(id, Collections.emptyList(), null);
+                                yield new FunctionCall(id,
+                                        Collections.emptyList(), null);
                             }
                             List<Exp> args = new ArrayList<>();
 
@@ -712,7 +759,9 @@ public class Parser {
                                 if (current == CLOSE_PAREN) {
                                     break;
                                 } else
-                                    throw new IllegalArgumentException("unexpected token while parsing function call: " + current);
+                                    throw new IllegalArgumentException(
+                                            "unexpected token while parsing " +
+                                                    "function call: " + current);
 
                             }
                             yield new FunctionCall(id, args, null);
@@ -818,7 +867,8 @@ public class Parser {
     private static Exp parseExp(ArrayList<Token> tokens, int minPrecedence) {
 
         //to this
-        // <exp> ::= <cast-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":" <exp>
+        // <exp> ::= <cast-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":"
+        // <exp>
 
         Exp left = parseCastExp(tokens);
         // now peek to see if there is "binop <exp>" or "? <exp> : <exp>
@@ -850,12 +900,17 @@ public class Parser {
 
     private static int getPrecedence(Token t) {
         return switch (t) {
-            // case CAST -> 60; just reminding myself it's higher than these others
+            // case CAST -> 60; just reminding myself it's higher than these
+            // others
             case IMUL, DIVIDE, REMAINDER -> 50;
             case SUB, ADD -> 45;
+            case SHL, SAR, UNSIGNED_RIGHT_SHIFT -> 40;
             case LESS_THAN, LESS_THAN_OR_EQUAL, GREATER_THAN,
                  GREATER_THAN_OR_EQUAL -> 35;
             case EQUALS, NOT_EQUALS -> 30;
+            case BITWISE_AND -> 18;
+            case BITWISE_XOR -> 17;
+            case BITWISE_OR -> 16;
             case AND -> 10;
             case OR -> 5;
             case QUESTION_MARK -> 3;

@@ -4,7 +4,6 @@ import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
-import static com.quaxt.mcc.ArithmeticOperator.SHR_TWO_OP;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CmpOperator.GREATER_THAN;
 import static com.quaxt.mcc.semantic.Primitive.LONG;
@@ -33,7 +32,7 @@ public record LongInit(long l) implements StaticInit, Constant<LongInit> {
                 return a != b ? IntInit.ONE : IntInit.ZERO;
             }
             case LESS_THAN_OR_EQUAL -> {
-                return  a <= b ? IntInit.ONE : IntInit.ZERO;
+                return a <= b ? IntInit.ONE : IntInit.ZERO;
             }
             case GREATER_THAN_OR_EQUAL -> {
                 return a >= b ? IntInit.ONE : IntInit.ZERO;
@@ -49,11 +48,11 @@ public record LongInit(long l) implements StaticInit, Constant<LongInit> {
             case IMUL, DOUBLE_MUL -> c = a * b;
             case DIVIDE, DOUBLE_DIVIDE -> c = a / b;
             case REMAINDER -> c = a % b;
-            case AND -> c = a & b;
-            case OR -> c = a | b;
+            case AND, BITWISE_AND -> c = a & b;
+            case OR, BITWISE_OR -> c = a | b;
             case BITWISE_XOR -> c = a ^ b;
-            case SHL -> c = a >> b;
-            case SHR_TWO_OP -> c = a << b;
+            case SAR -> c = a >> b;
+            case SHL -> c = a << b;
             default -> {
                 return null;
             }
@@ -74,12 +73,20 @@ public record LongInit(long l) implements StaticInit, Constant<LongInit> {
             case BITWISE_NOT -> c = ~l;
             case UNARY_MINUS -> c = -a;
             case NOT -> c = a == 0 ? 1 : 0;
-            case SHR -> c = a >> 1;
+            case UNARY_SHR -> c = a >> 1;
             default -> {
                 return null;
             }
         }
         return new LongInit(c);
+    }
+
+    @Override
+    public Constant<?> apply1(BinaryOperator op, Constant c2) {
+        if (c2 instanceof LongInit l) {
+            return this.apply(op, l);
+        }
+        return this.apply(op, new LongInit(c2.toLong()));
     }
 
 
