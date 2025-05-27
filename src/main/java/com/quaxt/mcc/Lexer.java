@@ -1,7 +1,6 @@
 package com.quaxt.mcc;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -18,9 +17,9 @@ public class Lexer {
                     CLOSE_BRACE, LONG_LITERAL, INT_LITERAL, SEMICOLON,
                     SINGLE_LINE_COMMENT, MULTILINE_COMMENT, DECREMENT,
                     INCREMENT, BITWISE_NOT, ARROW, SUB, ADD, IMUL, DIVIDE, BITWISE_XOR, REMAINDER,
-                    AND, OR, EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
-                    GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
-                    BECOMES, QUESTION_MARK, COLON, COMMA, AMPERSAND, OPEN_BRACKET,
+                    AND, OR, EQUALS, NOT_EQUALS, SHL, LESS_THAN_OR_EQUAL,
+                    SAR, GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
+                    BECOMES, QUESTION_MARK, COLON, COMMA, BITWISE_AND, BITWISE_OR, OPEN_BRACKET,
                     CLOSE_BRACKET, DOT};
 
     public static ArrayList<Token> lex(String src) {

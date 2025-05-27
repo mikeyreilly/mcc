@@ -1,11 +1,11 @@
 package com.quaxt.mcc;
 
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.ValIr;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
-import static com.quaxt.mcc.ArithmeticOperator.SHR_TWO_OP;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CmpOperator.GREATER_THAN;
 import static com.quaxt.mcc.semantic.Primitive.CHAR;
@@ -70,8 +70,8 @@ public record CharInit(byte i) implements StaticInit, Constant<CharInit> {
             case AND -> c = (byte) (a & b);
             case OR -> c = (byte) (a | b);
             case BITWISE_XOR -> c = (byte) (a ^ b);
-            case SHL -> c = (byte) (a >> b);
-            case SHR_TWO_OP -> c = (byte) (a << b);
+            case SAR -> c = (byte) (a >> b);
+            case SHL -> c = (byte) (a << b);
             default -> {
                 return null;
             }
@@ -87,11 +87,19 @@ public record CharInit(byte i) implements StaticInit, Constant<CharInit> {
             case BITWISE_NOT -> c = (byte) ~i;
             case UNARY_MINUS -> c = (byte) -a;
             case NOT -> c = (byte) (a == 0 ? 1 : 0);
-            case SHR -> c = (byte) (a >> 1);
+            case UNARY_SHR -> c = (byte) (a >> 1);
             default -> {
                 return null;
             }
         }
         return new CharInit(c);
+    }
+
+    @Override
+    public Constant<?> apply1(BinaryOperator op, Constant c2) {
+        if (c2 instanceof CharInit l) {
+            return this.apply(op, l);
+        }
+        return this.apply(op, new CharInit((byte)c2.toLong()));
     }
 }

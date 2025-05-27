@@ -1,5 +1,6 @@
 package com.quaxt.mcc;
 
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 
@@ -55,11 +56,11 @@ public record IntInit(int i) implements StaticInit, Constant<IntInit> {
             case DIVIDE, DOUBLE_DIVIDE ->
                     c = b == 0 ? 0 : a / b; // division by zero is UB
             case REMAINDER -> c = b == 0 ? 0 : a % b; // division by zero is UB
-            case AND -> c = a & b;
-            case OR -> c = a | b;
+            case AND, BITWISE_AND -> c = a & b;
+            case OR, BITWISE_OR -> c = a | b;
             case BITWISE_XOR -> c = a ^ b;
-            case SHL -> c = a >> b;
-            case SHR_TWO_OP -> c = a << b;
+            case SAR -> c = a >> b;
+            case SHL -> c = a << b;
             default -> {
                 return null;
             }
@@ -75,11 +76,19 @@ public record IntInit(int i) implements StaticInit, Constant<IntInit> {
             case BITWISE_NOT -> c = ~a;
             case UNARY_MINUS -> c = -a;
             case NOT -> c = a == 0 ? 1 : 0;
-            case SHR -> c = a >> 1;
+            case UNARY_SHR -> c = a >> 1;
             default -> {
                 return null;
             }
         }
         return new IntInit(c);
+    }
+
+    @Override
+    public Constant<?> apply1(BinaryOperator op, Constant c2) {
+        if (c2 instanceof IntInit l) {
+            return this.apply(op, l);
+        }
+        return this.apply(op, new IntInit((int) c2.toLong()));
     }
 }

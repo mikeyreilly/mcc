@@ -20,7 +20,7 @@ public enum TokenType implements Token {
     STRUCT(),
     DECREMENT("--"), INCREMENT("\\+\\+"), BITWISE_NOT("~"),
     NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
-    COMMA(","), AMPERSAND("&"),OPEN_BRACKET("\\["),CLOSE_BRACKET("\\]"),
+    COMMA(","),OPEN_BRACKET("\\["),CLOSE_BRACKET("\\]"),
     ARROW("->"), DOT("([.])[^0-9]",1);
     final Pattern regex;
     private final int group;
@@ -95,7 +95,6 @@ public enum TokenType implements Token {
         case QUESTION_MARK -> "?";
         case COLON -> ":";
         case COMMA -> ",";
-        case AMPERSAND -> "&";
         case OPEN_BRACKET -> "[";
         case CLOSE_BRACKET -> "]";
         };

@@ -409,7 +409,7 @@ public class IrGen {
                                         throw new IllegalStateException("Unexpected value: " + op);
                             }
                         } else
-                            instructions.add(new BinaryIr(op, v1, v2, dstName));
+                            instructions.add(new BinaryIr(op == SAR && !left.type().isSigned() ? UNSIGNED_RIGHT_SHIFT :op, v1, v2, dstName));
                         return new PlainOperand(dstName);
                     }
                 }

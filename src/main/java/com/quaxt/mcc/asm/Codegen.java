@@ -16,7 +16,7 @@ import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.Mcc.valToType;
-import static com.quaxt.mcc.UnaryOperator.SHR;
+import static com.quaxt.mcc.UnaryOperator.UNARY_SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
@@ -34,10 +34,10 @@ public class Codegen {
 
     private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L << 63);
 
-    public final static IntegerReg[] INTEGER_RETURN_REGISTERS = new IntegerReg[]{AX
-            , DX};
-    public final static IntegerReg[] INTEGER_REGISTERS = new IntegerReg[]{DI, SI,
-            DX, CX, R8, R9};
+    public final static IntegerReg[] INTEGER_RETURN_REGISTERS =
+            new IntegerReg[]{AX, DX};
+    public final static IntegerReg[] INTEGER_REGISTERS = new IntegerReg[]{DI,
+            SI, DX, CX, R8, R9};
     public final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
             XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
 
@@ -337,7 +337,7 @@ public class Codegen {
                         // -> want to catch conditions below
                     } else {
                         switch (op) {
-                            case ADD, SUB -> {
+                            case ADD, SUB, BITWISE_OR, BITWISE_AND -> {
                                 if (isRam(src) && isRam(dst)) {
                                     instructions.set(i, new Mov(typeAsm, src,
                                             srcReg(typeAsm)));
@@ -734,14 +734,15 @@ public class Codegen {
         }
     }
 
-    private static void copyBytesFromReg(List<Instruction> ins, IntegerReg srcReg,
-                                         Operand dstOp, long byteCount) {
+    private static void copyBytesFromReg(List<Instruction> ins,
+                                         IntegerReg srcReg, Operand dstOp,
+                                         long byteCount) {
         long offset = 0;
         while (offset < byteCount) {
             Operand dstByte = dstOp.plus(offset);
             ins.add(new Mov(BYTE, srcReg, dstByte));
             if (offset < byteCount - 1)
-                ins.add(new Binary(SHR_TWO_OP, QUADWORD, new Imm(8), srcReg));
+                ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, QUADWORD, new Imm(8), srcReg));
             offset++;
         }
 
@@ -861,7 +862,17 @@ public class Codegen {
                                 toOperand(v2), toOperand(dstName)));
                     } else {
                         switch (op1) {
-                            case ADD, SUB, IMUL -> {
+                            case SHL, SAR, UNSIGNED_RIGHT_SHIFT -> {
+                                ins.add(new Mov(typeAsm, toOperand(v1),
+                                        toOperand(dstName)));
+                                // v1 is what we're shifting, v2 is how much
+                                // to shift
+                                ins.add(new Mov(BYTE, toOperand(v2), CX));
+                                ins.add(new Binary(op1, typeAsm, CX,
+                                        toOperand(dstName)));
+                            }
+                            case ADD, SUB, IMUL, BITWISE_AND, BITWISE_XOR,
+                                 BITWISE_OR -> {
                                 ins.add(new Mov(typeAsm, toOperand(v1),
                                         toOperand(dstName)));
                                 ins.add(new Binary(op1, typeAsm,
@@ -1078,7 +1089,7 @@ public class Codegen {
                         ins.add(label1);
                         ins.add(new Mov(asmSrcType, src, AX));
                         ins.add(new Mov(QUADWORD, AX, DX));
-                        ins.add(new Unary(SHR, QUADWORD, DX));
+                        ins.add(new Unary(UNARY_SHR, QUADWORD, DX));
                         ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));
                         ins.add(new Binary(OR, QUADWORD, AX, DX));
                         ins.add(new Cvtsi2sd(QUADWORD, DX, dst));

@@ -448,7 +448,7 @@ See p. 606 */
                         return new Pair<>(used, Set.of(AX,
                                 DX));
                     }
-                    case BITWISE_NOT, NOT, SHR, UNARY_MINUS -> {
+                    case BITWISE_NOT, NOT, UNARY_SHR, UNARY_MINUS -> {
                         return new Pair<>(used, Set.of(operand));
                     }
                 }

@@ -1,10 +1,10 @@
 package com.quaxt.mcc;
 
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
-import static com.quaxt.mcc.ArithmeticOperator.SHR_TWO_OP;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CmpOperator.GREATER_THAN;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
@@ -72,5 +72,13 @@ public record DoubleInit(double d) implements StaticInit, Constant<DoubleInit> {
             }
         }
         return new DoubleInit(c);
+    }
+
+    @Override
+    public Constant<?> apply1(BinaryOperator op, Constant c2) {
+        if (c2 instanceof DoubleInit l) {
+            return this.apply(op, l);
+        }
+        return this.apply(op, new DoubleInit((double)c2.toLong()));
     }
 }
