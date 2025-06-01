@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.*;
 
@@ -324,13 +325,80 @@ public class IrGen {
                 }
             }
             case UnaryOp(UnaryOperator op, Exp exp, Type type): {
+                if (op == UnaryOperator.POST_INCREMENT || op == UnaryOperator.POST_DECREMENT) {
+                    boolean post=switch(op){
+                        case POST_INCREMENT, POST_DECREMENT -> true;
+                        default->false;
+                    };
+                    if (!post) throw new Todo();
+                    ExpResult lval = emitTacky(exp, instructions);
+                    var newOp = switch(op){
+                        case POST_INCREMENT -> ADD;
+                        case POST_DECREMENT -> SUB;
+                        default -> throw new Todo();
+                    };
+                    ValIr right = type==DOUBLE ? DoubleInit.ONE : IntInit.ONE;
+                    return applyOperatorAndAssign(instructions, exp, lval, right, newOp, post, exp.type(), exp.type());
+                }
                 ValIr src = emitTackyAndConvert(exp, instructions);
                 VarIr dst = makeTemporary("tmp.", type);
                 instructions.add(new UnaryIr(op, src, dst));
                 return new PlainOperand(dst);
             }
-            case BinaryOp(BinaryOperator op, Exp left, Exp right, Type _):
+            case CompoundAssignment(CompoundAssignmentOperator op, Exp left, Exp right, Type tempType, Type lvalueType):
+                 {
+
+
+                        boolean post = false;
+
+                        ExpResult lval = emitTacky(left, instructions);
+                        ArithmeticOperator newOp = switch (op) {
+                            case SUB_EQ -> SUB;
+                            case ADD_EQ -> ADD;
+                            case IMUL_EQ -> IMUL;
+                            case DIVIDE_EQ -> DIVIDE;
+                            case REMAINDER_EQ -> REMAINDER;
+                            case AND_EQ -> AND;
+                            case BITWISE_AND_EQ -> BITWISE_AND;
+                            case OR_EQ -> OR;
+                            case BITWISE_OR_EQ -> BITWISE_OR;
+                            case BITWISE_XOR_EQ -> BITWISE_XOR;
+                            case SHL_EQ -> SHL;
+                            case SAR_EQ -> SAR;
+                        };
+                     ValIr rightVal = emitTackyAndConvert(right, instructions);
+                     return   applyOperatorAndAssign(instructions, left, lval, rightVal, newOp, post, tempType, lvalueType);
+
+
+                    }
+
+            case BinaryOp(BinaryOperator op, Exp left, Exp right,  Type lvalueType):
                 switch (op) {
+                    case CompoundAssignmentOperator compoundOp -> {
+                        ValIr v2 = emitTackyAndConvert(right, instructions);
+
+                        boolean post=false;
+
+                        ExpResult lval = emitTacky(left, instructions);
+                        ArithmeticOperator newOp = switch(compoundOp){
+                            case SUB_EQ -> SUB;
+                            case ADD_EQ -> ADD;
+                            case IMUL_EQ -> IMUL;
+                            case DIVIDE_EQ -> DIVIDE;
+                            case REMAINDER_EQ -> REMAINDER;
+                            case AND_EQ -> AND;
+                            case BITWISE_AND_EQ -> BITWISE_AND;
+                            case OR_EQ -> OR;
+                            case BITWISE_OR_EQ -> BITWISE_OR;
+                            case BITWISE_XOR_EQ -> BITWISE_XOR;
+                            case SHL_EQ -> SHL;
+                            case SAR_EQ -> SAR;
+                        };
+                        //MR-TODO we need something new: BinaryOp is no good because we're missing common type
+                        // we need this because
+                        throw new Todo();
+                       
+                    }
                     case AND -> {
                         VarIr result = makeTemporary("tmp.", INT);
 
@@ -386,7 +454,7 @@ public class IrGen {
                             other = v1;
                             ptrRefType = referenced;
                         }
-                        if (ptr != null) {
+                        if (ptr != null && op != COMMA) {
                             switch (op) {
                                 case SUB -> {
                                     if (right.type() instanceof Pointer) {
@@ -436,21 +504,7 @@ public class IrGen {
                     return new PlainOperand(result);
                 }
                 VarIr dst = makeTemporary("dst.", t);
-                if (t == DOUBLE) {
-                    instructions.add(innerType.isSigned() ? new IntToDouble(result, dst) : new UIntToDouble(result, dst));
-                } else if (innerType == DOUBLE) {
-                    instructions.add(t.isSigned() ? new DoubleToInt(result, dst) : new DoubleToUInt(result, dst));
-                } else if ((long) Mcc.size(t) == (long) Mcc.size(innerType)) {
-                    instructions.add(new Copy(result, dst));
-                } else {
-                    if ((long) Mcc.size(t) < (long) Mcc.size(innerType)) {
-                        instructions.add(new TruncateIr(result, dst));
-                    } else if (innerType.isSigned()) {
-                        instructions.add(new SignExtendIr(result, dst));
-                    } else {
-                        instructions.add(new ZeroExtendIr(result, dst));
-                    }
-                }
+                emitCast(instructions, t, innerType, result, dst);
                 return new PlainOperand(dst);
             }
             case Dereference(Exp exp, Type _): {
@@ -549,6 +603,25 @@ public class IrGen {
         }
     }
 
+    private static void emitCast(List<InstructionIr> instructions, Type to,
+                                  Type innerType, ValIr src, VarIr dst) {
+        if (to == DOUBLE) {
+            instructions.add(innerType.isSigned() ? new IntToDouble(src, dst) : new UIntToDouble(src, dst));
+        } else if (innerType == DOUBLE) {
+            instructions.add(to.isSigned() ? new DoubleToInt(src, dst) : new DoubleToUInt(src, dst));
+        } else if (Mcc.size(to) == Mcc.size(innerType)) {
+            instructions.add(new Copy(src, dst));
+        } else {
+            if (Mcc.size(to) < Mcc.size(innerType)) {
+                instructions.add(new TruncateIr(src, dst));
+            } else if (innerType.isSigned()) {
+                instructions.add(new SignExtendIr(src, dst));
+            } else {
+                instructions.add(new ZeroExtendIr(src, dst));
+            }
+        }
+    }
+
     private static String tag(Exp structure) {
         if (structure.type() instanceof Structure(String tag)) return tag;
         throw new AssertionError();
@@ -583,6 +656,65 @@ public class IrGen {
         instructions.add(new Copy(rval, dst));
     }
 
+    private static ExpResult applyOperatorAndAssign(List<InstructionIr> instructions,
+                                                    Exp exp, ExpResult lval, ValIr right,
+                                                    ArithmeticOperator newOp,
+                                                    boolean post,
+                                                    Type commonType,
+                                                    Type lvalueType) {
+        return switch (lval) {
+            case PlainOperand(VarIr obj) -> {
+                VarIr old = makeTemporary("old.", exp.type());
+                instructions.add(new Copy(obj, old));
+                handleCompoundOperatorHelper(newOp, instructions, obj, right, commonType, lvalueType);
+                yield post ? new PlainOperand(old) : lval;
+            }
+            case DereferencedPointer(VarIr ptr) -> {
+                VarIr newVal = makeTemporary("newVal.", exp.type());
+                VarIr old = makeTemporary("old.", exp.type());
+                instructions.add(new Load(ptr, newVal));
+                instructions.add(new Copy(newVal, old));
+                handleCompoundOperatorHelper(newOp, instructions, newVal, right, commonType, lvalueType);
+
+                instructions.add(new Store(newVal, ptr));
+                yield post ? new PlainOperand(old) : lval;
+            }
+            case SubObject(VarIr base, int offset) -> {
+                VarIr newVal = makeTemporary("newVal.", exp.type());
+                VarIr old = makeTemporary("old.", exp.type());
+
+                instructions.add(new CopyFromOffset(base, offset, newVal));
+                instructions.add(new Copy(newVal, old));
+                handleCompoundOperatorHelper(newOp, instructions, newVal, right, commonType, lvalueType);
+
+                instructions.add(new CopyToOffset(newVal, base, offset));
+                yield post ? new PlainOperand(old) : lval;
+            }
+            default -> throw new Todo();
+        };
+    }
+
+    private static void handleCompoundOperatorHelper(ArithmeticOperator newOp, List<InstructionIr> instructions, VarIr left, ValIr right,
+                                                     Type commonType, Type lvalueType) {
+
+        if (lvalueType instanceof Pointer(Type ptrRefType)){
+            if (newOp==SUB){
+                var minusRight = makeTemporary("neg.", LONG);
+                instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS,right,minusRight));
+                right = minusRight;
+            }
+            instructions.add(new AddPtr(left, right, (int)  Mcc.size(ptrRefType), left));
+        } else {
+           // var leftType=Mcc.valToType(left);
+            if (!commonType.equals(lvalueType)){
+                VarIr tmp = makeTemporary("tmp.", commonType);
+                VarIr newLeft = makeTemporary("left.", commonType);
+                emitCast(instructions, commonType, lvalueType, left, newLeft);
+                instructions.add(new BinaryIr(newOp, newLeft, right, tmp));
+                emitCast(instructions, lvalueType, commonType, tmp, left);
+            } else instructions.add(new BinaryIr(newOp, left, right, left));
+        }
+    }
 
     private static ExpResult assign(Exp left, Exp right, List<InstructionIr> instructions) {
         ExpResult lval = emitTacky(left, instructions);

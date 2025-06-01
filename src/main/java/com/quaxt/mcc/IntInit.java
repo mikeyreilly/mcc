@@ -11,6 +11,7 @@ import static com.quaxt.mcc.semantic.Primitive.INT;
 public record IntInit(int i) implements StaticInit, Constant<IntInit> {
     public static final IntInit ONE = new IntInit(1);
     public static final IntInit ZERO = new IntInit(0);
+    public static final IntInit MINUS_ONE = new IntInit(-1);
 
     @Override
     public Type type() {
@@ -61,6 +62,7 @@ public record IntInit(int i) implements StaticInit, Constant<IntInit> {
             case BITWISE_XOR -> c = a ^ b;
             case SAR -> c = a >> b;
             case SHL -> c = a << b;
+            case COMMA -> c = b;
             default -> {
                 return null;
             }

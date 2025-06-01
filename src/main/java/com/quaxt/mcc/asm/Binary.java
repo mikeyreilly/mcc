@@ -57,7 +57,17 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
         } : switch (op) {
+            case SUB -> "subb	";
+            case ADD -> "addb	";
+            case IMUL -> "imulb	";
+            case DIVIDE -> "divideb	";
+            case REMAINDER -> "remainderb	";
+            case AND, BITWISE_AND -> "andb	";
+            case OR, BITWISE_OR -> "orb	";
+            case BITWISE_XOR -> "xorb   ";
             case SHL -> "shlb	";
+            case SAR -> "sarb	";
+            case UNSIGNED_RIGHT_SHIFT -> "shrb  ";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
         };

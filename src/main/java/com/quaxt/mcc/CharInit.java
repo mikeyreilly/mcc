@@ -72,6 +72,7 @@ public record CharInit(byte i) implements StaticInit, Constant<CharInit> {
             case BITWISE_XOR -> c = (byte) (a ^ b);
             case SAR -> c = (byte) (a >> b);
             case SHL -> c = (byte) (a << b);
+            case COMMA -> c = b;
             default -> {
                 return null;
             }

@@ -886,6 +886,46 @@ public class SemanticAnalysis {
                 }
                 yield new Assignment(typedLeft, convertedRight, leftType);
             }
+            case CompoundAssignment(CompoundAssignmentOperator compoundOp,
+                                    Exp left, Exp right, Type tempType, Type t) -> {
+                ArithmeticOperator newOp = switch (compoundOp) {
+                    case SUB_EQ -> SUB;
+                    case ADD_EQ -> ADD;
+                    case IMUL_EQ -> IMUL;
+                    case DIVIDE_EQ -> DIVIDE;
+                    case REMAINDER_EQ -> REMAINDER;
+                    case AND_EQ -> AND;
+                    case BITWISE_AND_EQ -> BITWISE_AND;
+                    case OR_EQ -> OR;
+                    case BITWISE_OR_EQ -> BITWISE_OR;
+                    case BITWISE_XOR_EQ -> BITWISE_XOR;
+                    case SHL_EQ -> SHL;
+                    case SAR_EQ -> SAR;
+                };
+
+//                Exp typedLeft = typeCheckAndConvert(left);
+//                t = typedLeft.type();
+//                SYMBOL_TABLE.put(temp.name(),
+//                        new SymbolTableEntry(t, LOCAL_ATTR));
+//
+//                //ugh I thought I could use a temp var to get around evaluating left twice, but it's not that easy
+//                // need a way to separate the assignment part from the evaluate part
+//                yield typeCheckExpression(new Assignment(new Var(temp.name(),t),
+//                        new BinaryOp(newOp, left, right, t), t));
+                BinaryOp foo= (BinaryOp) typeCheckExpression(new BinaryOp(newOp, left, right, t));
+
+                Exp typedLeft = typeCheckAndConvert(left);
+                if (!isLvalue(typedLeft))
+                    throw new Err("cannot assign to non-lvalue");
+                Exp typedRight = typeCheckAndConvert(right);
+                Type leftType = typedLeft.type();
+                if (typedRight.type() == VOID) {
+                    fail("can't assign void");
+                }
+
+
+                yield new CompoundAssignment(compoundOp, typedLeft, foo.right(), foo.type(), leftType);
+            }
             case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
                           Type _) when op == EQUALS || op == NOT_EQUALS -> {
                 Exp typedE1 = typeCheckAndConvert(e1);
@@ -956,13 +996,13 @@ public class SemanticAnalysis {
                 if (op == AND || op == OR) {
                     yield new BinaryOp(op, typedE1, typedE2, INT);
                 }
-                if (op == SAR || op==SHL || op == UNSIGNED_RIGHT_SHIFT){
-                    if (t1 == DOUBLE ||t2 == DOUBLE) {
-                        fail("invalid operands to binary " + op + " (have ‘" + t1 + "’ " +
-                                "and" + " ‘" + t2 + "’");
+                if (op == SAR || op == SHL || op == UNSIGNED_RIGHT_SHIFT) {
+                    if (t1 == DOUBLE || t2 == DOUBLE) {
+                        fail("invalid operands to binary " + op + " (have ‘" + t1 + "’ " + "and" + " ‘" + t2 + "’");
                     }
-                    typedE1=promoteIfNecessary(typedE1);
-                    yield new BinaryOp(op, typedE1, promoteIfNecessary(typedE2), typedE1.type());
+                    typedE1 = promoteIfNecessary(typedE1);
+                    yield new BinaryOp(op, typedE1,
+                            promoteIfNecessary(typedE2), typedE1.type());
                 }
                 if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE))
                         || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
@@ -986,8 +1026,11 @@ public class SemanticAnalysis {
 
 
                 yield new BinaryOp(op, convertedE1, convertedE2, switch (op) {
-                    case SUB, ADD, IMUL, DIVIDE, REMAINDER,BITWISE_AND, BITWISE_OR, BITWISE_XOR, SHL, SAR -> commonType;
-                    case  EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL, GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN -> INT;
+                    case CompoundAssignmentOperator _ -> t1;
+                    case SUB, ADD, IMUL, DIVIDE, REMAINDER, BITWISE_AND,
+                         BITWISE_OR, BITWISE_XOR, SHL, SAR, COMMA -> commonType;
+                    case EQUALS, NOT_EQUALS, LESS_THAN_OR_EQUAL,
+                         GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN -> INT;
                     default -> {
                         throw new Todo();
                     }
@@ -1030,8 +1073,7 @@ public class SemanticAnalysis {
                         String tag2) && tag1.equals(tag2)) {
                     commonType = t1;
                 } else
-                    throw new Err("Can't convert branches of conditional to " +
-                            "a" + " common type");
+                    throw new Err("Can't convert branches of conditional to " + "a" + " common type");
                 yield new Conditional(typedCondition, convertTo(typedIfTrue,
                         commonType), convertTo(typedIfFalse, commonType),
                         commonType);
@@ -1067,6 +1109,14 @@ public class SemanticAnalysis {
                     fail("Function " + name + " used as a variable");
                 yield new Var(name, t);
             }
+            case UnaryOp(UnaryOperator op, Exp e1,
+                         Type _) when op == POST_INCREMENT || op == POST_DECREMENT -> {
+                Exp typedE1 = typeCheckAndConvert(e1);
+                Type t1 = typedE1.type();
+                if (isLvalue(typedE1) && (isArithmeticType(t1) || isPointerToComplete(t1))) {
+                    yield new UnaryOp(op, typedE1, t1);
+                } else throw new Err("Invalid operand for " + op);
+            }
             case UnaryOp(UnaryOperator op, Exp inner, Type _) -> {
                 Exp typedInner = typeCheckAndConvert(inner);
                 if (!typedInner.type().isScalar())
@@ -1074,7 +1124,7 @@ public class SemanticAnalysis {
                 if (op == BITWISE_NOT && typedInner.type() == DOUBLE) {
                     fail("can't apply ~ to double");
                 }
-                if (typedInner.type() instanceof Pointer && op != NOT) {
+                if (typedInner.type() instanceof Pointer && op != NOT && op != POST_INCREMENT && op != POST_DECREMENT) {
                     fail("Can't apply " + op + " to pointer");
                 }
                 if ((op == UNARY_MINUS || op == BITWISE_NOT) && typedInner.type().isCharacter()) {
@@ -1165,9 +1215,11 @@ public class SemanticAnalysis {
             }
         };
     }
-/**
- * When a character value is used in some operators, it needs to be promoted to int
- * */
+
+    /**
+     * When a character value is used in some operators, it needs to be
+     * promoted to int
+     */
     private static Exp promoteIfNecessary(Exp e) {
         return e.type().isCharacter() ? convertTo(e, INT) : e;
     }
@@ -1209,6 +1261,8 @@ public class SemanticAnalysis {
     }
 
     private static boolean isLvalue(Exp exp) {
+        if (exp instanceof BinaryOp binop && binop.op() instanceof CompoundAssignmentOperator)
+            return true;
         if (exp instanceof Dot(Exp structure, String member, Type type))
             return isLvalue(structure);
         return exp instanceof Dereference || exp instanceof Var || exp instanceof Subscript || exp instanceof Str || exp instanceof Arrow;
@@ -1521,15 +1575,17 @@ public class SemanticAnalysis {
                             identifierMap, structureMap), resolveExp(right,
                             identifierMap, structureMap), type) : fail(
                                     "Invalid lvalue");
+            case CompoundAssignment(CompoundAssignmentOperator op, Exp left,
+                                    Exp right, Type tempType, Type type) ->
+                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") :
+                            new CompoundAssignment(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap),
+                                    tempType, type);
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
-                    new BinaryOp(op, resolveExp(left, identifierMap,
-                            structureMap), resolveExp(right, identifierMap,
-                            structureMap), type);
+                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new BinaryOp(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), type);
             case Constant constant -> constant;
             case Str str -> str;
             case UnaryOp(UnaryOperator op, Exp arg, Type type) ->
-                    new UnaryOp(op, resolveExp(arg, identifierMap,
-                            structureMap), type);
+                    (op == POST_INCREMENT || op == POST_DECREMENT) && !isLvalue(arg) ? fail("Invalid lvalue") : new UnaryOp(op, resolveExp(arg, identifierMap, structureMap), type);
             case AddrOf(Exp arg, Type type) ->
                     new AddrOf(resolveExp(arg, identifierMap, structureMap),
                             type);

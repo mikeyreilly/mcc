@@ -12,7 +12,11 @@ import java.util.stream.Collectors;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
+import static com.quaxt.mcc.CompoundAssignmentOperator.*;
+import static com.quaxt.mcc.CompoundAssignmentOperator.SAR_EQ;
 import static com.quaxt.mcc.TokenType.*;
+import static com.quaxt.mcc.UnaryOperator.POST_DECREMENT;
+import static com.quaxt.mcc.UnaryOperator.POST_INCREMENT;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
 
 public class Parser {
@@ -30,7 +34,7 @@ public class Parser {
         if (RETURN == token.type()) {
             tokens.removeFirst();
             if (tokens.getFirst() == SEMICOLON) return new Return(null);
-            Exp exp = parseExp(tokens, 0);
+            Exp exp = parseExp(tokens, 0, true);
             expect(SEMICOLON, tokens);
             return new Return(exp);
         } else if (token == SEMICOLON) {
@@ -39,7 +43,7 @@ public class Parser {
         } else if (token == IF) {
             tokens.removeFirst();
             expect(OPEN_PAREN, tokens);
-            Exp condition = parseExp(tokens, 0);
+            Exp condition = parseExp(tokens, 0, true);
             expect(CLOSE_PAREN, tokens);
             Statement ifTrue = parseStatement(tokens);
             Statement ifFalse = switch (tokens.getFirst()) {
@@ -68,7 +72,7 @@ public class Parser {
             expect(SEMICOLON, tokens);
             return new Continue();
         }
-        Exp exp = parseExp(tokens, 0);
+        Exp exp = parseExp(tokens, 0, true);
         expect(SEMICOLON, tokens);
         return exp;
     }
@@ -78,7 +82,7 @@ public class Parser {
         Statement body = parseStatement(tokens);
         expect(WHILE, tokens);
         expect(OPEN_PAREN, tokens);
-        Exp condition = parseExp(tokens, 0);
+        Exp condition = parseExp(tokens, 0, true);
         expect(CLOSE_PAREN, tokens);
         expect(SEMICOLON, tokens);
         return new DoWhile(body, condition, null);
@@ -363,7 +367,7 @@ public class Parser {
             return new CompoundInit(inits, null);
 
         }
-        return new SingleInit(parseExp(tokens, 0), null);
+        return new SingleInit(parseExp(tokens, 0, false), null);
 
     }
 
@@ -541,7 +545,7 @@ public class Parser {
     private static While parseWhile(ArrayList<Token> tokens) {
         expect(WHILE, tokens);
         expect(OPEN_PAREN, tokens);
-        Exp condition = parseExp(tokens, 0);
+        Exp condition = parseExp(tokens, 0, true);
         expect(CLOSE_PAREN, tokens);
         Statement body = parseStatement(tokens);
         return new While(condition, body, null);
@@ -592,6 +596,16 @@ public class Parser {
         //               | <postfix-exp>
 
         return switch (tokens.getFirst()) {
+            case INCREMENT -> {
+                tokens.removeFirst();
+                var exp = parseCastExp(tokens);
+                yield new CompoundAssignment(ADD_EQ, exp, IntInit.ONE, null, null);
+            }
+            case DECREMENT -> {
+                tokens.removeFirst();
+                var exp = parseCastExp(tokens);
+                yield new CompoundAssignment(SUB_EQ, exp, IntInit.ONE,null, null);
+            }
             case SUB -> {
                 tokens.removeFirst();
                 yield new UnaryOp(UnaryOperator.UNARY_MINUS,
@@ -641,7 +655,7 @@ public class Parser {
             switch (tokens.getFirst()) {
                 case OPEN_BRACKET:
                     tokens.removeFirst();
-                    Exp subscript = parseExp(tokens, 0);
+                    Exp subscript = parseExp(tokens, 0, true);
                     expect(CLOSE_BRACKET, tokens);
                     exp = new Subscript(exp, subscript, null);
                     break;
@@ -652,6 +666,16 @@ public class Parser {
                 case ARROW:
                     tokens.removeFirst();
                     exp = new Arrow(exp, expectIdentifier(tokens), null);
+                    break;
+                case INCREMENT:
+                    // for post increment, we rewrite with exp++ as exp = exp+1, exp-1
+                    tokens.removeFirst();
+                    exp = new UnaryOp(POST_INCREMENT, exp, null);
+                    break;
+                case DECREMENT:
+                    // for post increment, we rewrite with exp-- as exp = exp-1, exp+1
+                    tokens.removeFirst();
+                    exp = new UnaryOp(POST_DECREMENT, exp, null);
                     break;
                 default:
                     break outer;
@@ -750,7 +774,8 @@ public class Parser {
                             List<Exp> args = new ArrayList<>();
 
                             while (true) {
-                                Exp e = parseExp(tokens, 0);
+                                Exp e = parseExp(tokens, 0,
+                                        false); // false because we want comma as argument separator, not operator
                                 args.add(e);
                                 current = tokens.removeFirst();
                                 if (current == COMMA) {
@@ -775,7 +800,7 @@ public class Parser {
             }
             case OPEN_PAREN -> {
                 tokens.removeFirst();
-                Exp exp = parseExp(tokens, 0);
+                Exp exp = parseExp(tokens, 0,true);
                 expect(CLOSE_PAREN, tokens);
                 yield exp;
             }
@@ -864,7 +889,7 @@ public class Parser {
         return new TypeName(typeSpecifiers, abstractDeclarator);
     }
 
-    private static Exp parseExp(ArrayList<Token> tokens, int minPrecedence) {
+    private static Exp parseExp(ArrayList<Token> tokens, int minPrecedence, boolean allowComma) {
 
         //to this
         // <exp> ::= <cast-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":"
@@ -875,20 +900,23 @@ public class Parser {
 
         while (!tokens.isEmpty()) {
             Token token = tokens.getFirst();
-            if (tokens.getFirst() instanceof BinaryOperator || token == QUESTION_MARK) {
+            if (token instanceof  BinaryOperator binop && (allowComma || binop != COMMA) || token == QUESTION_MARK) {
                 int precedence = getPrecedence(token);
                 if (precedence < minPrecedence) break;
                 tokens.removeFirst();
-                if (token == BECOMES) {
-                    Exp right = parseExp(tokens, precedence);
+                if (token == BECOMES ) { // right associative
+                    Exp right = parseExp(tokens, precedence, true);
                     left = new Assignment(left, right, null);
+                } else   if (token instanceof CompoundAssignmentOperator compOp) { // right associative
+                    Exp right = parseExp(tokens, precedence, true);
+                    left = new CompoundAssignment(compOp, left, right, null, null);
                 } else if (token instanceof BinaryOperator binop) {
-                    Exp right = parseExp(tokens, precedence + 1);
+                    Exp right = parseExp(tokens, precedence + 1, true);
                     left = new BinaryOp(binop, left, right, null);
                 } else { // QUESTION_MARK
-                    Exp middle = parseExp(tokens, 0);
+                    Exp middle = parseExp(tokens, 0, true);
                     expect(COLON, tokens);
-                    Exp right = parseExp(tokens, precedence);
+                    Exp right = parseExp(tokens, precedence, true);
                     left = new Conditional(left, middle, right, null);
                 }
             } else {
@@ -914,7 +942,8 @@ public class Parser {
             case AND -> 10;
             case OR -> 5;
             case QUESTION_MARK -> 3;
-            case BECOMES -> 1;
+            case BECOMES, SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ, BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ, SAR_EQ -> 1;
+            case COMMA -> 0;
             default ->
                     throw new IllegalStateException("No precedence for: " + t);
         };
@@ -924,7 +953,7 @@ public class Parser {
 
         if (isTypeSpecifier(tokens, 0))
             return (ForInit) parseDeclaration(tokens, true);
-        Exp r = tokens.getFirst() == SEMICOLON ? null : parseExp(tokens, 0);
+        Exp r = tokens.getFirst() == SEMICOLON ? null : parseExp(tokens, 0, true);
         expect(SEMICOLON, tokens);
         return r;
     }
@@ -934,10 +963,10 @@ public class Parser {
         expect(OPEN_PAREN, tokens);
         ForInit init = parseForInit(tokens);
         Token t = tokens.getFirst();
-        Exp condition = t == SEMICOLON ? null : parseExp(tokens, 0);
+        Exp condition = t == SEMICOLON ? null : parseExp(tokens, 0, true);
         expect(SEMICOLON, tokens);
         t = tokens.getFirst();
-        Exp post = t == CLOSE_PAREN ? null : parseExp(tokens, 0);
+        Exp post = t == CLOSE_PAREN ? null : parseExp(tokens, 0, true);
         expect(CLOSE_PAREN, tokens);
         Statement body = parseStatement(tokens);
         return new For(init, condition, post, body, null);

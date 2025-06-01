@@ -3,6 +3,7 @@ package com.quaxt.mcc;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
+import com.quaxt.mcc.tacky.ValIr;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
@@ -10,6 +11,8 @@ import static com.quaxt.mcc.CmpOperator.GREATER_THAN;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
 
 public record DoubleInit(double d) implements StaticInit, Constant<DoubleInit> {
+    public static final ValIr ONE = new DoubleInit(1d);
+
     @Override
     public Type type() {
         return DOUBLE;
@@ -53,6 +56,7 @@ public record DoubleInit(double d) implements StaticInit, Constant<DoubleInit> {
             case IMUL, DOUBLE_MUL -> c = a * b;
             case DIVIDE, DOUBLE_DIVIDE -> c = a / b;
             case REMAINDER -> c = a % b;
+            case COMMA -> c = b;
             default -> {
                 return null;
             }
