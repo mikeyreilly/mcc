@@ -70,6 +70,7 @@ public record UCharInit(byte i) implements StaticInit, Constant<UCharInit> {
             case SAR -> c = a >> b;
             case SHL -> c = a << b;
             case UNSIGNED_RIGHT_SHIFT -> c = a >>> b;
+            case COMMA -> c = b;
             default -> {
                 return null;
             }

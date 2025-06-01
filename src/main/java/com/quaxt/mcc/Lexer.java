@@ -6,12 +6,13 @@ import java.util.regex.Pattern;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
+import static com.quaxt.mcc.CompoundAssignmentOperator.*;
 import static com.quaxt.mcc.TokenType.*;
 
 public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
     static final Token[] TOKEN_TYPES_TO_MATCH =
-            new Token[]{IDENTIFIER, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
+            new Token[]{IDENTIFIER, SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ, BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ, SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
                     CHAR_LITERAL, STRING_LITERAL, DOUBLE_LITERAL,
                     UNSIGNED_LONG_LITERAL, UNSIGNED_INT_LITERAL,
                     CLOSE_BRACE, LONG_LITERAL, INT_LITERAL, SEMICOLON,

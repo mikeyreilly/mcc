@@ -856,10 +856,13 @@ public class Codegen {
                     TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
                     if (typeAsm == DOUBLE) {
-                        ins.add(new Mov(typeAsm, toOperand(v1),
-                                toOperand(dstName)));
-                        ins.add(new Binary(convertOp(op1, typeAsm), typeAsm,
-                                toOperand(v2), toOperand(dstName)));
+                        if (op1==COMMA){
+                            ins.add(new Mov(typeAsm, toOperand(v2),
+                                    toOperand(dstName)));
+                        }else {
+                            ins.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
+                            ins.add(new Binary(convertOp(op1, typeAsm), typeAsm, toOperand(v2), toOperand(dstName)));
+                        }
                     } else {
                         switch (op1) {
                             case SHL, SAR, UNSIGNED_RIGHT_SHIFT -> {
@@ -877,6 +880,10 @@ public class Codegen {
                                         toOperand(dstName)));
                                 ins.add(new Binary(op1, typeAsm,
                                         toOperand(v2), toOperand(dstName)));
+                            }
+                            case COMMA -> {
+                                ins.add(new Mov(typeAsm, toOperand(v2),
+                                        toOperand(dstName)));
                             }
                             case DIVIDE, REMAINDER -> {
                                 if (type.isSigned()) {

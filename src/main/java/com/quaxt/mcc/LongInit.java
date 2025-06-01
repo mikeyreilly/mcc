@@ -53,6 +53,7 @@ public record LongInit(long l) implements StaticInit, Constant<LongInit> {
             case BITWISE_XOR -> c = a ^ b;
             case SAR -> c = a >> b;
             case SHL -> c = a << b;
+            case COMMA -> c = b;
             default -> {
                 return null;
             }

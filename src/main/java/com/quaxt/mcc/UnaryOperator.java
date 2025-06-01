@@ -5,5 +5,7 @@ public enum UnaryOperator {
     BITWISE_NOT, // ~
     UNARY_MINUS, // the book calls this negation
     NOT, // logical not !
-    UNARY_SHR
+    UNARY_SHR,
+    POST_INCREMENT,
+    POST_DECREMENT
 }
