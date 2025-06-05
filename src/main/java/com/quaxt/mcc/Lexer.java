@@ -12,7 +12,7 @@ import static com.quaxt.mcc.TokenType.*;
 public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
     static final Token[] TOKEN_TYPES_TO_MATCH =
-            new Token[]{IDENTIFIER, SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ, BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ, SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
+            new Token[]{LABEL,IDENTIFIER, SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ, BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ, SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
                     CHAR_LITERAL, STRING_LITERAL, DOUBLE_LITERAL,
                     UNSIGNED_LONG_LITERAL, UNSIGNED_INT_LITERAL,
                     CLOSE_BRACE, LONG_LITERAL, INT_LITERAL, SEMICOLON,
@@ -45,13 +45,14 @@ public class Lexer {
                     if (tokenType != SINGLE_LINE_COMMENT && tokenType != MULTILINE_COMMENT) {
 
                         if (tokenType == CHAR_LITERAL    || tokenType == STRING_LITERAL
-                               ){
+                                ){
                             int start = matcher.start()+1;
                             String value = src.substring(start, end-1);
                             Token token = new TokenWithValue(tokenType, value);
                             tokens.add(token);
                         }
-                        else if (tokenType == IDENTIFIER
+                        else if (tokenType == LABEL
+                                || tokenType == IDENTIFIER
                                 || tokenType == DOUBLE_LITERAL
                                 || tokenType == INT_LITERAL
                                 || tokenType == LONG_LITERAL
@@ -69,6 +70,7 @@ public class Lexer {
                                 case "else" -> ELSE;
                                 case "extern" -> EXTERN;
                                 case "for" -> FOR;
+                                case "goto" -> GOTO;
                                 case "if" -> IF;
                                 case "int" -> INT;
                                 case "long" -> LONG;

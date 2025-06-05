@@ -218,6 +218,8 @@ public class IrGen {
 
             case Break aBreak ->
                     instructions.add(new Jump(breakLabel(aBreak.label)));
+            case Goto aGoto ->
+                    instructions.add(new Jump(".L" + aGoto.label));
             case Continue aContinue ->
                     instructions.add(new Jump(continueLabel(aContinue.label)));
             case DoWhile(Statement body, Exp condition, String label) -> {
@@ -264,6 +266,10 @@ public class IrGen {
                 compileStatement(body, instructions);
                 instructions.add(new Jump(continueLabel.label()));
                 instructions.add(breakLabel);
+            }
+            case LabelledStatement(String label, Statement statement)  -> {
+                instructions.add(newLabel(".L" + label));
+                compileStatement(statement, instructions);
             }
         }
     }
@@ -374,31 +380,6 @@ public class IrGen {
 
             case BinaryOp(BinaryOperator op, Exp left, Exp right,  Type lvalueType):
                 switch (op) {
-                    case CompoundAssignmentOperator compoundOp -> {
-                        ValIr v2 = emitTackyAndConvert(right, instructions);
-
-                        boolean post=false;
-
-                        ExpResult lval = emitTacky(left, instructions);
-                        ArithmeticOperator newOp = switch(compoundOp){
-                            case SUB_EQ -> SUB;
-                            case ADD_EQ -> ADD;
-                            case IMUL_EQ -> IMUL;
-                            case DIVIDE_EQ -> DIVIDE;
-                            case REMAINDER_EQ -> REMAINDER;
-                            case AND_EQ -> AND;
-                            case BITWISE_AND_EQ -> BITWISE_AND;
-                            case OR_EQ -> OR;
-                            case BITWISE_OR_EQ -> BITWISE_OR;
-                            case BITWISE_XOR_EQ -> BITWISE_XOR;
-                            case SHL_EQ -> SHL;
-                            case SAR_EQ -> SAR;
-                        };
-                        //MR-TODO we need something new: BinaryOp is no good because we're missing common type
-                        // we need this because
-                        throw new Todo();
-                       
-                    }
                     case AND -> {
                         VarIr result = makeTemporary("tmp.", INT);
 
