@@ -84,7 +84,9 @@ public class SemanticAnalysis {
                         condition, newLabel);
 
             }
-            case Exp _ -> statement;
+            case LabelledStatement(String label, Statement stmt) ->
+                    (T) new LabelledStatement( label,  loopLabelStatement(stmt, currentLabel));
+            case Exp _, Goto _ -> statement;
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String _) -> {
                 String newLabel = makeTemporary(".Lfor.");
@@ -313,7 +315,7 @@ public class SemanticAnalysis {
         if (k != null) {
             return k;
         }
-        String stringId = Mcc.makeTemporary("string.");
+        String stringId = makeTemporary("string.");
         STRING_TABLE.put(s, stringId);
         StringInit stringInit = new StringInit(s, true);
         StaticAttributes attrs =
@@ -554,6 +556,8 @@ public class SemanticAnalysis {
     private static BlockItem typeCheckBlockItem(BlockItem blockItem,
                                                 Function enclosingFunction) {
         return switch (blockItem) {
+            case LabelledStatement(String label, Statement statement) -> new LabelledStatement(label,
+                    (Statement) typeCheckBlockItem(statement, enclosingFunction));
             case VarDecl declaration ->
                     typeCheckLocalVariableDeclaration(declaration);
             case Exp exp -> typeCheckAndConvert(exp);
@@ -609,7 +613,7 @@ public class SemanticAnalysis {
                 typeCheckStructureDeclaration(structDecl);
                 yield structDecl;
             }
-            case NullStatement _, Continue _, Break _ -> blockItem;
+            case NullStatement _, Continue _, Break _ , Goto  _-> blockItem;
             case null -> null;
         };
     }
@@ -1447,6 +1451,7 @@ public class SemanticAnalysis {
         return switch (blockItem) {
             case null -> null;
             case Exp exp -> resolveExp(exp, identifierMap, structureMap);
+            case LabelledStatement(String label, Statement statement) -> new LabelledStatement(label, resolveStatement(statement, identifierMap, structureMap));
             case Return(Exp exp) ->
                     new Return(resolveExp(exp, identifierMap, structureMap));
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
@@ -1458,7 +1463,7 @@ public class SemanticAnalysis {
                     resolveBlock(block, copyIdentifierMap(identifierMap),
                             copyStructureMap(structureMap));
             case NullStatement nullStatement -> nullStatement;
-            case Break _, Continue _ -> blockItem;
+            case Break _, Continue _, Goto _-> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
                     new DoWhile(resolveStatement(body, identifierMap,
                             structureMap), resolveExp(condition,
