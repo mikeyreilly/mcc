@@ -922,6 +922,10 @@ public class Codegen {
                     ins.add(new SetCC(op1, type.unsignedOrDoubleOrPointer(),
                             toOperand(dstName)));
                 }
+                case Compare(Type type, ValIr v1, ValIr v2) -> {
+                    TypeAsm typeAsm = toTypeAsm(type);
+                    ins.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
+                }
                 case Copy(ValIr srcV, VarIr dstV) -> {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV);
@@ -1011,16 +1015,20 @@ public class Codegen {
                             type.unsignedOrDoubleOrPointer(), label));
                 }
                 case JumpIfZero(ValIr v, String label) -> {
-                    Type type = valToType(v);
-                    TypeAsm typeAsm = toTypeAsm(type);
-                    if (typeAsm == DOUBLE) {
-                        ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
-                        ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
+                    if (v!=null) {
+                        Type type = valToType(v);
+                        TypeAsm typeAsm = toTypeAsm(type);
+                        if (typeAsm == DOUBLE) {
+                            ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
+                            ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
+                        } else {
+                            ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
+                        }
+                        ins.add(new JmpCC(EQUALS, type.unsignedOrDoubleOrPointer(), label));
                     } else {
-                        ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
+                        ins.add(new JmpCC(EQUALS, false, label));
                     }
-                    ins.add(new JmpCC(EQUALS,
-                            type.unsignedOrDoubleOrPointer(), label));
+
                 }
                 case LabelIr labelIr -> ins.add(labelIr);
                 case Load(ValIr ptrV, VarIr dstV) -> {

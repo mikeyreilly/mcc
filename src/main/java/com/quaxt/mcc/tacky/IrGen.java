@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Cmp;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.*;
@@ -17,6 +18,7 @@ import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
+import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
 public class IrGen {
 
@@ -42,10 +44,13 @@ public class IrGen {
                 case IdentifierAttributes.LocalAttr localAttr -> {}
                 case StaticAttributes(InitialValue init, boolean global) -> {
                     if (init instanceof InitialValue.Tentative) {
-                        tackyDefs.add(new StaticVariable(name, global, value.type(), Collections.singletonList(new ZeroInit(Mcc.size(value.type())))));
+                        tackyDefs.add(new StaticVariable(name, global,
+                                value.type(),
+                                Collections.singletonList(new ZeroInit(Mcc.size(value.type())))));
                     } else if (init instanceof Initial(
                             List<StaticInit> initList)) {
-                        tackyDefs.add(new StaticVariable(name, global, value.type(), initList));
+                        tackyDefs.add(new StaticVariable(name, global,
+                                value.type(), initList));
                     }
                 }
             }
@@ -56,17 +61,21 @@ public class IrGen {
     private static FunctionIr compileFunction(Function function) {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body(), instructions);
-        FunctionIr f = new FunctionIr(function.name(), SYMBOL_TABLE.get(function.name()).attrs().global(), function.parameters(), instructions, function.funType().ret());
+        FunctionIr f = new FunctionIr(function.name(),
+                SYMBOL_TABLE.get(function.name()).attrs().global(),
+                function.parameters(), instructions, function.funType().ret());
         ReturnIr ret = new ReturnIr(new IntInit(0));
         instructions.add(ret);
         return f;
     }
 
-    private static void compileBlock(Block block, List<InstructionIr> instructions) {
+    private static void compileBlock(Block block,
+                                     List<InstructionIr> instructions) {
         compileBlockItems(block.blockItems(), instructions);
     }
 
-    private static void compileDeclaration(Declaration d, List<InstructionIr> instructions) {
+    private static void compileDeclaration(Declaration d,
+                                           List<InstructionIr> instructions) {
         switch (d) {
             case Function function -> {
                 if (function.body() != null) compileFunction(function);
@@ -84,26 +93,33 @@ public class IrGen {
         }
     }
 
-    private static long assign(VarIr name, Initializer init, List<InstructionIr> instructions, long offset) {
+    private static long assign(VarIr name, Initializer init,
+                               List<InstructionIr> instructions, long offset) {
         switch (init) {
             case CompoundInit(ArrayList<Initializer> inits,
                               Type compoundInitType) when compoundInitType instanceof Structure(
                     String tag) -> {
-                ArrayList<MemberEntry> members = Mcc.TYPE_TABLE.get(tag).members();
+                ArrayList<MemberEntry> members =
+                        Mcc.TYPE_TABLE.get(tag).members();
                 for (int i = 0; i < inits.size(); i++) {
                     Initializer memInit = inits.get(i);
                     MemberEntry member = members.get(i);
                     switch (memInit) {
                         case CompoundInit _ ->
-                                assign(name, memInit, instructions, offset + member.offset());
+                                assign(name, memInit, instructions,
+                                        offset + member.offset());
                         case SingleInit(Exp exp, Type targetType) -> {
                             if (exp instanceof Str(String s,
                                                    Type type) && type instanceof Array(
                                     Type _, Constant arraySize)) {
-                                initializeArrayWithStringLiteral(name, instructions, offset + member.offset(), s, arraySize);
+                                initializeArrayWithStringLiteral(name,
+                                        instructions,
+                                        offset + member.offset(), s, arraySize);
                             } else {
-                                var val = emitTackyAndConvert(exp, instructions);
-                                instructions.add(new CopyToOffset(val, name, offset + member.offset()));
+                                var val = emitTackyAndConvert(exp,
+                                        instructions);
+                                instructions.add(new CopyToOffset(val, name,
+                                        offset + member.offset()));
                             }
 
                         }
@@ -116,15 +132,19 @@ public class IrGen {
                 for (Initializer innerInit : inits) {
                     switch (innerInit) {
                         case CompoundInit _ ->
-                                offset = assign(name, innerInit, instructions, offset);
+                                offset = assign(name, innerInit, instructions
+                                        , offset);
                         case SingleInit(Exp exp, Type targetType) -> {
                             if (exp instanceof Str(String s,
                                                    Type type) && type instanceof Array(
                                     Type _, Constant arraySize)) {
-                                initializeArrayWithStringLiteral(name, instructions, offset, s, arraySize);
+                                initializeArrayWithStringLiteral(name,
+                                        instructions, offset, s, arraySize);
                             } else {
-                                var val = emitTackyAndConvert(exp, instructions);
-                                instructions.add(new CopyToOffset(val, name, offset));
+                                var val = emitTackyAndConvert(exp,
+                                        instructions);
+                                instructions.add(new CopyToOffset(val, name,
+                                        offset));
                             }
                             offset += Mcc.size(exp.type());
                         }
@@ -138,7 +158,8 @@ public class IrGen {
                 if (exp instanceof Str(String s,
                                        Type type) && type instanceof Array(
                         Type _, Constant arraySize)) {
-                    initializeArrayWithStringLiteral(name, instructions, offset, s, arraySize);
+                    initializeArrayWithStringLiteral(name, instructions,
+                            offset, s, arraySize);
                 } else {
                     assign(name, exp, instructions);
                 }
@@ -150,19 +171,24 @@ public class IrGen {
     }
 
 
-    private static void initializeArrayWithStringLiteral(VarIr dst, List<InstructionIr> instructions, long offset, String s, Constant arraySize) {
+    private static void initializeArrayWithStringLiteral(VarIr dst,
+                                                         List<InstructionIr> instructions,
+                                                         long offset, String s,
+                                                         Constant arraySize) {
         long arrayLen = arraySize.toLong();
         long howManyCharsToCopy = Math.min(s.length(), arrayLen);
         for (int i = 0; i < howManyCharsToCopy; i++) {
             instructions.add(new CopyToOffset(new CharInit((byte) (s.charAt(i) & 0xff)), dst, offset + i));
         }
         for (long i = howManyCharsToCopy; i < arrayLen; i++) {
-            instructions.add(new CopyToOffset(CharInit.zero(), dst, offset + i));
+            instructions.add(new CopyToOffset(CharInit.zero(), dst,
+                    offset + i));
         }
     }
 
 
-    private static void compileBlockItems(List<BlockItem> blockItems, List<InstructionIr> instructions) {
+    private static void compileBlockItems(List<BlockItem> blockItems,
+                                          List<InstructionIr> instructions) {
         for (BlockItem i : blockItems) {
             switch (i) {
 
@@ -173,7 +199,9 @@ public class IrGen {
         }
     }
 
-    private static void compileIfElse(Exp condition, Statement ifTrue, Statement ifFalse, List<InstructionIr> instructions) {
+    private static void compileIfElse(Exp condition, Statement ifTrue,
+                                      Statement ifFalse,
+                                      List<InstructionIr> instructions) {
         ValIr c = emitTackyAndConvert(condition, instructions);
         LabelIr e2Label = newLabel(Mcc.makeTemporary(".Le2."));
         instructions.add(new JumpIfZero(c, e2Label.label()));
@@ -185,7 +213,8 @@ public class IrGen {
         instructions.add(endLabel);
     }
 
-    private static void compileIf(Exp condition, Statement ifTrue, List<InstructionIr> instructions) {
+    private static void compileIf(Exp condition, Statement ifTrue,
+                                  List<InstructionIr> instructions) {
         ValIr c = emitTackyAndConvert(condition, instructions);
         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
         instructions.add(new JumpIfZero(c, endLabel.label()));
@@ -194,10 +223,15 @@ public class IrGen {
     }
 
 
-    private static void compileStatement(Statement i, List<InstructionIr> instructions) {
+    private static void compileStatement(Statement i,
+                                         List<InstructionIr> instructions) {
         switch (i) {
+            case Switch switchStatement -> {
+                compileSwitch(switchStatement, instructions);
+            }
             case Return(Exp exp) -> {
-                ValIr retVal = exp == null ? null : emitTackyAndConvert(exp, instructions);
+                ValIr retVal = exp == null ? null : emitTackyAndConvert(exp,
+                        instructions);
                 ReturnIr ret = new ReturnIr(retVal);
                 instructions.add(ret);
             }
@@ -218,8 +252,7 @@ public class IrGen {
 
             case Break aBreak ->
                     instructions.add(new Jump(breakLabel(aBreak.label)));
-            case Goto aGoto ->
-                    instructions.add(new Jump(".L" + aGoto.label));
+            case Goto aGoto -> instructions.add(new Jump(".L" + aGoto.label));
             case Continue aContinue ->
                     instructions.add(new Jump(continueLabel(aContinue.label)));
             case DoWhile(Statement body, Exp condition, String label) -> {
@@ -267,11 +300,36 @@ public class IrGen {
                 instructions.add(new Jump(continueLabel.label()));
                 instructions.add(breakLabel);
             }
-            case LabelledStatement(String label, Statement statement)  -> {
-                instructions.add(newLabel(".L" + label));
+            case LabelledStatement(String label, Statement statement) -> {
+                instructions.add(newLabel(label));
+                compileStatement(statement, instructions);
+            }
+            case CaseStatement(Switch enclosingSwitch, Constant<?> label, Statement statement) -> {
+                String s = enclosingSwitch.labelFor(label);
+                instructions.add(newLabel(s));
                 compileStatement(statement, instructions);
             }
         }
+    }
+
+    private static void compileSwitch(Switch switchStatement,
+                                      List<InstructionIr> instructions) {
+        ValIr switchVal = emitTackyAndConvert(switchStatement.exp,
+                instructions);
+        Type type = switchStatement.exp.type();
+        for (Constant c : switchStatement.entries) {
+            if (c != null) {
+                Constant<?> converted =
+                        (Constant<?>) convertConst((StaticInit) c, type);
+                instructions.add(new Compare(type, converted, switchVal));
+                instructions.add(new JumpIfZero(null,
+                        switchStatement.labelFor(c)));
+            } else instructions.add(new Jump(switchStatement.labelFor(null)));
+        }
+        String end = breakLabel(switchStatement.label);
+        instructions.add(new Jump(end));
+        compileStatement(switchStatement.body, instructions);
+        instructions.add(newLabel(end));
     }
 
     private static String startLabel(String label) {
@@ -286,7 +344,8 @@ public class IrGen {
         return label + ".break";
     }
 
-    private static ExpResult emitTacky(Exp expr, List<InstructionIr> instructions) {
+    private static ExpResult emitTacky(Exp expr,
+                                       List<InstructionIr> instructions) {
         switch (expr) {
             case null:
                 return null;
@@ -332,64 +391,72 @@ public class IrGen {
             }
             case UnaryOp(UnaryOperator op, Exp exp, Type type): {
                 if (op == UnaryOperator.POST_INCREMENT || op == UnaryOperator.POST_DECREMENT) {
-                    boolean post=switch(op){
+                    boolean post = switch (op) {
                         case POST_INCREMENT, POST_DECREMENT -> true;
-                        default->false;
+                        default -> false;
                     };
                     if (!post) throw new Todo();
                     ExpResult lval = emitTacky(exp, instructions);
-                    var newOp = switch(op){
+                    var newOp = switch (op) {
                         case POST_INCREMENT -> ADD;
                         case POST_DECREMENT -> SUB;
                         default -> throw new Todo();
                     };
-                    ValIr right = type==DOUBLE ? DoubleInit.ONE : IntInit.ONE;
-                    return applyOperatorAndAssign(instructions, exp, lval, right, newOp, post, exp.type(), exp.type());
+                    ValIr right = type == DOUBLE ? DoubleInit.ONE : IntInit.ONE;
+                    return applyOperatorAndAssign(instructions, exp, lval,
+                            right, newOp, post, exp.type(), exp.type());
                 }
                 ValIr src = emitTackyAndConvert(exp, instructions);
                 VarIr dst = makeTemporary("tmp.", type);
                 instructions.add(new UnaryIr(op, src, dst));
                 return new PlainOperand(dst);
             }
-            case CompoundAssignment(CompoundAssignmentOperator op, Exp left, Exp right, Type tempType, Type lvalueType):
-                 {
+            case CompoundAssignment(CompoundAssignmentOperator op, Exp left,
+                                    Exp right, Type tempType,
+                                    Type lvalueType): {
 
 
-                        boolean post = false;
+                boolean post = false;
 
-                        ExpResult lval = emitTacky(left, instructions);
-                        ArithmeticOperator newOp = switch (op) {
-                            case SUB_EQ -> SUB;
-                            case ADD_EQ -> ADD;
-                            case IMUL_EQ -> IMUL;
-                            case DIVIDE_EQ -> DIVIDE;
-                            case REMAINDER_EQ -> REMAINDER;
-                            case AND_EQ -> AND;
-                            case BITWISE_AND_EQ -> BITWISE_AND;
-                            case OR_EQ -> OR;
-                            case BITWISE_OR_EQ -> BITWISE_OR;
-                            case BITWISE_XOR_EQ -> BITWISE_XOR;
-                            case SHL_EQ -> SHL;
-                            case SAR_EQ -> SAR;
-                        };
-                     ValIr rightVal = emitTackyAndConvert(right, instructions);
-                     return   applyOperatorAndAssign(instructions, left, lval, rightVal, newOp, post, tempType, lvalueType);
+                ExpResult lval = emitTacky(left, instructions);
+                ArithmeticOperator newOp = switch (op) {
+                    case SUB_EQ -> SUB;
+                    case ADD_EQ -> ADD;
+                    case IMUL_EQ -> IMUL;
+                    case DIVIDE_EQ -> DIVIDE;
+                    case REMAINDER_EQ -> REMAINDER;
+                    case AND_EQ -> AND;
+                    case BITWISE_AND_EQ -> BITWISE_AND;
+                    case OR_EQ -> OR;
+                    case BITWISE_OR_EQ -> BITWISE_OR;
+                    case BITWISE_XOR_EQ -> BITWISE_XOR;
+                    case SHL_EQ -> SHL;
+                    case SAR_EQ -> SAR;
+                };
+                ValIr rightVal = emitTackyAndConvert(right, instructions);
+                return applyOperatorAndAssign(instructions, left, lval,
+                        rightVal, newOp, post, tempType, lvalueType);
 
 
-                    }
+            }
 
-            case BinaryOp(BinaryOperator op, Exp left, Exp right,  Type lvalueType):
+            case BinaryOp(BinaryOperator op, Exp left, Exp right,
+                          Type lvalueType):
                 switch (op) {
                     case AND -> {
                         VarIr result = makeTemporary("tmp.", INT);
 
-                        LabelIr falseLabel = newLabel(Mcc.makeTemporary(".LandFalse."));
-                        LabelIr endLabel = newLabel(Mcc.makeTemporary(".LandEnd."));
+                        LabelIr falseLabel = newLabel(Mcc.makeTemporary(
+                                ".LandFalse."));
+                        LabelIr endLabel = newLabel(Mcc.makeTemporary(
+                                ".LandEnd."));
                         ValIr v1 = emitTackyAndConvert(left, instructions);
-                        instructions.add(new JumpIfZero(v1, falseLabel.label()));
+                        instructions.add(new JumpIfZero(v1,
+                                falseLabel.label()));
 
                         ValIr v2 = emitTackyAndConvert(right, instructions);
-                        instructions.add(new JumpIfZero(v2, falseLabel.label()));
+                        instructions.add(new JumpIfZero(v2,
+                                falseLabel.label()));
                         instructions.add(new Copy(new IntInit(1), result));
                         instructions.add(new Jump(endLabel.label()));
 
@@ -402,13 +469,17 @@ public class IrGen {
                     case OR -> {
                         VarIr result = makeTemporary("tmp.", INT);
 
-                        LabelIr trueLabel = newLabel(Mcc.makeTemporary(".Ltrue."));
-                        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
+                        LabelIr trueLabel = newLabel(Mcc.makeTemporary(
+                                ".Ltrue."));
+                        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend" +
+                                "."));
                         ValIr v1 = emitTackyAndConvert(left, instructions);
-                        instructions.add(new JumpIfNotZero(v1, trueLabel.label()));
+                        instructions.add(new JumpIfNotZero(v1,
+                                trueLabel.label()));
 
                         ValIr v2 = emitTackyAndConvert(right, instructions);
-                        instructions.add(new JumpIfNotZero(v2, trueLabel.label()));
+                        instructions.add(new JumpIfNotZero(v2,
+                                trueLabel.label()));
                         instructions.add(new Copy(new IntInit(0), result));
                         instructions.add(new Jump(endLabel.label()));
 
@@ -439,26 +510,36 @@ public class IrGen {
                             switch (op) {
                                 case SUB -> {
                                     if (right.type() instanceof Pointer) {
-                                        // ptr - ptr (left has to be pointer because type checker doesn't allow non-ptr - ptr)
+                                        // ptr - ptr (left has to be pointer
+                                        // because type checker doesn't allow
+                                        // non-ptr - ptr)
                                         var diff = makeTemporary("tmp.", LONG);
-                                        instructions.add(new BinaryIr(SUB, ptr, other, diff));
-                                        instructions.add(new BinaryIr(DIVIDE, diff, new IntInit((int) (long) Mcc.size(ptrRefType)), dstName));
+                                        instructions.add(new BinaryIr(SUB,
+                                                ptr, other, diff));
+                                        instructions.add(new BinaryIr(DIVIDE,
+                                                diff,
+                                                new IntInit((int) (long) Mcc.size(ptrRefType)), dstName));
                                     } else { // ptr - int
                                         var j = makeTemporary("tmp.", LONG);
                                         instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, other, j));
-                                        instructions.add(new AddPtr(ptr, j, (int) (long) Mcc.size(ptrRefType), dstName));
+                                        instructions.add(new AddPtr(ptr, j,
+                                                (int) (long) Mcc.size(ptrRefType), dstName));
                                     }
                                 }
                                 case ADD ->
-                                        instructions.add(new AddPtr(ptr, other, (int) (long) Mcc.size(ptrRefType), dstName));
+                                        instructions.add(new AddPtr(ptr,
+                                                other,
+                                                (int) (long) Mcc.size(ptrRefType), dstName));
 
                                 case CmpOperator _ ->
-                                        instructions.add(new BinaryIr(op, v1, v2, dstName));
+                                        instructions.add(new BinaryIr(op, v1,
+                                                v2, dstName));
                                 default ->
-                                        throw new IllegalStateException("Unexpected value: " + op);
+                                        throw new IllegalStateException(
+                                                "Unexpected value: " + op);
                             }
                         } else
-                            instructions.add(new BinaryIr(op == SAR && !left.type().isSigned() ? UNSIGNED_RIGHT_SHIFT :op, v1, v2, dstName));
+                            instructions.add(new BinaryIr(op == SAR && !left.type().isSigned() ? UNSIGNED_RIGHT_SHIFT : op, v1, v2, dstName));
                         return new PlainOperand(dstName);
                     }
                 }
@@ -467,7 +548,8 @@ public class IrGen {
             case Var(String name, Type _):
                 return new PlainOperand(new VarIr(name));
             case FunctionCall(Var name, List<Exp> args, Type type): {
-                VarIr result = type == VOID ? null : makeTemporary("tmp.", type);
+                VarIr result = type == VOID ? null : makeTemporary("tmp.",
+                        type);
                 ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {
                     argVals.add(emitTackyAndConvert(e, instructions));
@@ -478,7 +560,8 @@ public class IrGen {
             case Cast(Type t, Exp inner): {
                 ValIr result = emitTackyAndConvert(inner, instructions);
                 Type innerType = inner.type();
-                // for the purposes of casting we treat pointers exactly like unsigned long (p. 375)
+                // for the purposes of casting we treat pointers exactly like
+                // unsigned long (p. 375)
                 if (t instanceof Pointer) t = ULONG;
                 if (innerType instanceof Pointer) innerType = ULONG;
                 if (t == innerType || t == VOID) {
@@ -507,7 +590,8 @@ public class IrGen {
                         var dst = makeTemporary("dst.", expr.type());
                         instructions.add(new GetAddress(base, dst));
                         if (offset != 0)
-                            instructions.add(new AddPtr(dst, new LongInit(offset), 1, dst));
+                            instructions.add(new AddPtr(dst,
+                                    new LongInit(offset), 1, dst));
                         yield new PlainOperand(dst);
                     }
                 };
@@ -521,16 +605,20 @@ public class IrGen {
                 ValIr other;
                 long scale;
                 // type checker ensures either left or right will be pointer
-                // but it could also swap the left and right when they are in the
-                // "wrong" (index-first) order and it would make this code simpler.
-                // On the other hand,  it's not all that complicated and it is nice
+                // but it could also swap the left and right when they are in
+                // the
+                // "wrong" (index-first) order and it would make this code
+                // simpler.
+                // On the other hand,  it's not all that complicated and it
+                // is nice
                 // having the AST closely resemble the corresponding code
                 if (left.type() instanceof Pointer(Type referenced)) {
                     ptr = (VarIr) v1;
                     other = v2;
                     scale = Mcc.size(referenced);
                 } else if (right.type() instanceof Pointer(
-                        Type referenced)) { // else condition just for pattern match
+                        Type referenced)) { // else condition just for
+                    // pattern match
                     ptr = (VarIr) v2;
                     other = v1;
                     scale = Mcc.size(referenced);
@@ -542,7 +630,8 @@ public class IrGen {
             case Str(String s, Type type): {
                 //string literals in expressions p. 441
                 String uniqueName = Mcc.makeTemporary("string.");
-                SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(type, new ConstantAttr(new StringInit(s, true))));
+                SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(type,
+                        new ConstantAttr(new StringInit(s, true))));
                 return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions);
             }
             case SizeOf(Exp exp): {
@@ -558,8 +647,10 @@ public class IrGen {
                 return switch (innerObject) {
                     case DereferencedPointer(ValIr ptr) -> {
                         if (memberOffset == 0) yield innerObject;
-                        VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
-                        instructions.add(new AddPtr((VarIr) ptr, new LongInit(memberOffset), 1, dstPtr));
+                        VarIr dstPtr = makeTemporary("ptr",
+                                new Pointer(expr.type()));
+                        instructions.add(new AddPtr((VarIr) ptr,
+                                new LongInit(memberOffset), 1, dstPtr));
                         yield new DereferencedPointer(dstPtr);
                     }
                     case PlainOperand(VarIr v) ->
@@ -567,7 +658,8 @@ public class IrGen {
                     case SubObject(VarIr base, int offset) ->
                             new SubObject(base, memberOffset + offset);
                     default ->
-                            throw new IllegalStateException("Unexpected value: " + innerObject);
+                            throw new IllegalStateException("Unexpected " +
+                                    "value: " + innerObject);
                 };
 
             }
@@ -578,18 +670,21 @@ public class IrGen {
                 if (memberOffset == 0)
                     return new DereferencedPointer((VarIr) innerObject);
                 VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
-                instructions.add(new AddPtr((VarIr) innerObject, new LongInit(memberOffset), 1, dstPtr));
+                instructions.add(new AddPtr((VarIr) innerObject,
+                        new LongInit(memberOffset), 1, dstPtr));
                 return new DereferencedPointer(dstPtr);
             }
         }
     }
 
     private static void emitCast(List<InstructionIr> instructions, Type to,
-                                  Type innerType, ValIr src, VarIr dst) {
+                                 Type innerType, ValIr src, VarIr dst) {
         if (to == DOUBLE) {
-            instructions.add(innerType.isSigned() ? new IntToDouble(src, dst) : new UIntToDouble(src, dst));
+            instructions.add(innerType.isSigned() ?
+                    new IntToDouble(src, dst) : new UIntToDouble(src, dst));
         } else if (innerType == DOUBLE) {
-            instructions.add(to.isSigned() ? new DoubleToInt(src, dst) : new DoubleToUInt(src, dst));
+            instructions.add(to.isSigned() ? new DoubleToInt(src, dst) :
+                    new DoubleToUInt(src, dst));
         } else if (Mcc.size(to) == Mcc.size(innerType)) {
             instructions.add(new Copy(src, dst));
         } else {
@@ -614,7 +709,8 @@ public class IrGen {
         throw new AssertionError();
     }
 
-    private static ValIr emitTackyAndConvert(Exp e, List<InstructionIr> instructions) {
+    private static ValIr emitTackyAndConvert(Exp e,
+                                             List<InstructionIr> instructions) {
         ExpResult result = emitTacky(e, instructions);
         return switch (result) {
             case null -> null;
@@ -632,22 +728,22 @@ public class IrGen {
         };
     }
 
-    private static void assign(VarIr dst, Exp right, List<InstructionIr> instructions) {
+    private static void assign(VarIr dst, Exp right,
+                               List<InstructionIr> instructions) {
         ValIr rval = emitTackyAndConvert(right, instructions);
         instructions.add(new Copy(rval, dst));
     }
 
-    private static ExpResult applyOperatorAndAssign(List<InstructionIr> instructions,
-                                                    Exp exp, ExpResult lval, ValIr right,
-                                                    ArithmeticOperator newOp,
-                                                    boolean post,
-                                                    Type commonType,
-                                                    Type lvalueType) {
+    private static ExpResult applyOperatorAndAssign(
+            List<InstructionIr> instructions, Exp exp, ExpResult lval,
+            ValIr right, ArithmeticOperator newOp, boolean post,
+            Type commonType, Type lvalueType) {
         return switch (lval) {
             case PlainOperand(VarIr obj) -> {
                 VarIr old = makeTemporary("old.", exp.type());
                 instructions.add(new Copy(obj, old));
-                handleCompoundOperatorHelper(newOp, instructions, obj, right, commonType, lvalueType);
+                handleCompoundOperatorHelper(newOp, instructions, obj, right,
+                        commonType, lvalueType);
                 yield post ? new PlainOperand(old) : lval;
             }
             case DereferencedPointer(VarIr ptr) -> {
@@ -655,7 +751,8 @@ public class IrGen {
                 VarIr old = makeTemporary("old.", exp.type());
                 instructions.add(new Load(ptr, newVal));
                 instructions.add(new Copy(newVal, old));
-                handleCompoundOperatorHelper(newOp, instructions, newVal, right, commonType, lvalueType);
+                handleCompoundOperatorHelper(newOp, instructions, newVal,
+                        right, commonType, lvalueType);
 
                 instructions.add(new Store(newVal, ptr));
                 yield post ? new PlainOperand(old) : lval;
@@ -666,7 +763,8 @@ public class IrGen {
 
                 instructions.add(new CopyFromOffset(base, offset, newVal));
                 instructions.add(new Copy(newVal, old));
-                handleCompoundOperatorHelper(newOp, instructions, newVal, right, commonType, lvalueType);
+                handleCompoundOperatorHelper(newOp, instructions, newVal,
+                        right, commonType, lvalueType);
 
                 instructions.add(new CopyToOffset(newVal, base, offset));
                 yield post ? new PlainOperand(old) : lval;
@@ -675,19 +773,24 @@ public class IrGen {
         };
     }
 
-    private static void handleCompoundOperatorHelper(ArithmeticOperator newOp, List<InstructionIr> instructions, VarIr left, ValIr right,
-                                                     Type commonType, Type lvalueType) {
+    private static void handleCompoundOperatorHelper(ArithmeticOperator newOp,
+                                                     List<InstructionIr> instructions,
+                                                     VarIr left, ValIr right,
+                                                     Type commonType,
+                                                     Type lvalueType) {
 
-        if (lvalueType instanceof Pointer(Type ptrRefType)){
-            if (newOp==SUB){
+        if (lvalueType instanceof Pointer(Type ptrRefType)) {
+            if (newOp == SUB) {
                 var minusRight = makeTemporary("neg.", LONG);
-                instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS,right,minusRight));
+                instructions.add(new UnaryIr(UnaryOperator.UNARY_MINUS, right
+                        , minusRight));
                 right = minusRight;
             }
-            instructions.add(new AddPtr(left, right, (int)  Mcc.size(ptrRefType), left));
+            instructions.add(new AddPtr(left, right,
+                    (int) Mcc.size(ptrRefType), left));
         } else {
-           // var leftType=Mcc.valToType(left);
-            if (!commonType.equals(lvalueType)){
+            // var leftType=Mcc.valToType(left);
+            if (!commonType.equals(lvalueType)) {
                 VarIr tmp = makeTemporary("tmp.", commonType);
                 VarIr newLeft = makeTemporary("left.", commonType);
                 emitCast(instructions, commonType, lvalueType, left, newLeft);
@@ -697,7 +800,8 @@ public class IrGen {
         }
     }
 
-    private static ExpResult assign(Exp left, Exp right, List<InstructionIr> instructions) {
+    private static ExpResult assign(Exp left, Exp right,
+                                    List<InstructionIr> instructions) {
         ExpResult lval = emitTacky(left, instructions);
         ValIr rval = emitTackyAndConvert(right, instructions);
         return switch (lval) {

@@ -46,6 +46,8 @@ public class PropagateCopies {
                         case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
                                       VarIr dst) ->
                                 new BinaryIr(op, replaceOperand(v1, reachingCopies), replaceOperand(v2, reachingCopies), dst);
+                        case Compare(Type t, ValIr v1, ValIr v2) ->
+                                new Compare(t, replaceOperand(v1, reachingCopies), replaceOperand(v2, reachingCopies));
                         case ReturnIr(ValIr v) ->
                                 new ReturnIr(replaceOperand(v, reachingCopies));
                         case UnaryIr(UnaryOperator op, ValIr v1, VarIr dst) ->
@@ -168,7 +170,7 @@ public class PropagateCopies {
                 case AddPtr(VarIr _, ValIr _, int _, VarIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
-                     ReturnIr _, Ignore _ -> {}
+                     ReturnIr _, Ignore _, Compare _ -> {}
 
             }
 

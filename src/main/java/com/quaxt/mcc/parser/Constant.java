@@ -17,6 +17,7 @@ sealed public interface Constant<C extends Constant<C>> extends Exp, ValIr permi
    }
 
     Constant<?> apply1(BinaryOperator op, Constant c2);
+
 }
 
 

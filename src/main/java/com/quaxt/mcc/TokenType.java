@@ -14,7 +14,7 @@ public enum TokenType implements Token {
     LONG_LITERAL("([0-9]+[lL])[^\\w.]", 1), INT_LITERAL("([0-9]+)[^\\w.]", 1)
     , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*"),
     MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0),
-    UNSIGNED(), SIGNED(), GOTO(), CHAR(), DOUBLE(), LONG(), INT(), RETURN(),
+    UNSIGNED(), SIGNED(), GOTO(), CHAR(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),CASE(),DEFAULT(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
     , SIZEOF(), STATIC(), STRUCT(), DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
@@ -71,6 +71,9 @@ public enum TokenType implements Token {
             case UNSIGNED -> "unsigned";
             case SIGNED -> "signed";
             case SIZEOF -> "sizeof";
+            case SWITCH -> "switch";
+            case CASE -> "case";
+            case DEFAULT -> "default";
             case CHAR -> "char";
             case GOTO -> "goto";
             case DOUBLE -> "double";

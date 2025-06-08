@@ -163,7 +163,7 @@ public class Mcc {
     }
 
     public static void main(String[] args0) throws Exception {
-        //LOGGER.info("started with args " + String.join(" ", args0));
+        LOGGER.info("started with args " + String.join(" ", args0));
         ArrayList<String> args =
                 Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;

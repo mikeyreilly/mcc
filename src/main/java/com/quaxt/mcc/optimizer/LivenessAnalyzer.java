@@ -2,6 +2,7 @@ package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.*;
+import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
@@ -104,6 +105,14 @@ See p. 606 */
                 case BinaryIr(BinaryOperator _, ValIr src1, ValIr src2,
                               VarIr dst) -> {
                     currentLiveVars.remove(dst);
+                    if (src1 instanceof VarIr v1) {
+                        currentLiveVars.add(v1);
+                    }
+                    if (src2 instanceof VarIr v2) {
+                        currentLiveVars.add(v2);
+                    }
+                }
+                case Compare(Type _, ValIr src1, ValIr src2) -> {
                     if (src1 instanceof VarIr v1) {
                         currentLiveVars.add(v1);
                     }

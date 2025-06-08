@@ -42,23 +42,26 @@ public class SemanticAnalysis {
 
     private static Function loopLabelFunction(Function function) {
         return new Function(function.name(), function.parameters(),
-                loopLabelStatement(function.body(), null), function.funType()
-                , function.storageClass());
+                loopLabelStatement(function.body(), null, null),
+                function.funType(), function.storageClass());
 
     }
 
     @SuppressWarnings("unchecked")
     private static <T extends Statement> T loopLabelStatement(T statement,
-                                                              String currentLabel) {
+                                                              String currentLabel,
+                                                              String currentNonSwitchLabel) {
         return switch (statement) {
             case null -> null;
             case Block block -> {//update the blockItems in-place
                 ArrayList<BlockItem> blockItems = block.blockItems();
                 blockItems.replaceAll(blockItem -> switch (blockItem) {
                     case VarDecl declaration ->
-                            loopLabelVarDecl(declaration, currentLabel);
+                            loopLabelVarDecl(declaration, currentLabel,
+                                    currentNonSwitchLabel);
                     case Statement innerStatement ->
-                            loopLabelStatement(innerStatement, currentLabel);
+                            loopLabelStatement(innerStatement, currentLabel,
+                                    currentNonSwitchLabel);
                     case Function function -> loopLabelFunction(function);
                     case StructDecl structDecl -> structDecl;
                 });
@@ -75,17 +78,23 @@ public class SemanticAnalysis {
                 if (currentLabel == null) {
                     fail("continue statement outside of loop");
                 }
-                aContinue.label = currentLabel;
+                aContinue.label = currentNonSwitchLabel;
                 yield statement;
             }
             case DoWhile(Statement body, Exp condition, String _) -> {
                 String newLabel = makeTemporary(".Ldo.");
-                yield (T) new DoWhile(loopLabelStatement(body, newLabel),
-                        condition, newLabel);
+                yield (T) new DoWhile(loopLabelStatement(body, newLabel,
+                        newLabel), condition, newLabel);
 
             }
             case LabelledStatement(String label, Statement stmt) ->
-                    (T) new LabelledStatement( label,  loopLabelStatement(stmt, currentLabel));
+                    (T) new LabelledStatement(label, loopLabelStatement(stmt,
+                            currentLabel, currentNonSwitchLabel));
+            case CaseStatement(Switch enclosingSwitch, Constant<?> label,
+                               Statement stmt) ->
+                    (T) new CaseStatement(enclosingSwitch, label,
+                            loopLabelStatement(stmt, currentLabel,
+                                    currentNonSwitchLabel));
             case Exp _, Goto _ -> statement;
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String _) -> {
@@ -93,12 +102,14 @@ public class SemanticAnalysis {
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
                     case VarDecl declaration ->
-                            loopLabelVarDecl(declaration, newLabel);
-                    case Exp exp -> loopLabelStatement(exp, newLabel);
+                            loopLabelVarDecl(declaration, newLabel, newLabel);
+                    case Exp exp -> loopLabelStatement(exp, newLabel, newLabel);
                 };
-                Exp labeledCondition = loopLabelStatement(condition, newLabel);
-                Exp labelledPost = loopLabelStatement(post, newLabel);
-                Statement labelledBody = loopLabelStatement(body, newLabel);
+                Exp labeledCondition = loopLabelStatement(condition, newLabel
+                        , newLabel);
+                Exp labelledPost = loopLabelStatement(post, newLabel, newLabel);
+                Statement labelledBody = loopLabelStatement(body, newLabel,
+                        newLabel);
                 yield (T) new For(labeledForInit, labeledCondition,
                         labelledPost, labelledBody, newLabel);
 
@@ -106,38 +117,48 @@ public class SemanticAnalysis {
             }
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
                     (T) new If(condition, loopLabelStatement(ifTrue,
-                            currentLabel), loopLabelStatement(ifFalse,
-                            currentLabel));
+                            currentLabel, currentNonSwitchLabel),
+                            loopLabelStatement(ifFalse, currentLabel,
+                                    currentNonSwitchLabel));
             case NullStatement _ -> statement;
             case Return(Exp exp) ->
-                    (T) new Return(loopLabelStatement(exp, currentLabel));
+                    (T) new Return(loopLabelStatement(exp, currentLabel,
+                            currentNonSwitchLabel));
             case While(Exp condition, Statement body, String _) -> {
                 String newLabel = makeTemporary(".Lwhile.");
                 yield (T) new While(condition, loopLabelStatement(body,
-                        newLabel), newLabel);
+                        newLabel, newLabel), newLabel);
 
+            }
+            case Switch switchStatement -> {
+                loopLabelStatement(switchStatement.body,
+                        switchStatement.label, currentLabel);
+                yield (T) switchStatement;
             }
         };
     }
 
     private static VarDecl loopLabelVarDecl(VarDecl declaration,
-                                            String currentLabel) {
+                                            String currentLabel,
+                                            String currentNonSwitchLabel) {
         Initializer init = declaration.init();
         return new VarDecl(declaration.name(), loopLabelInitializer(init,
-                currentLabel), declaration.varType(),
+                currentLabel, currentNonSwitchLabel), declaration.varType(),
                 declaration.storageClass());
     }
 
     private static Initializer loopLabelInitializer(Initializer init,
-                                                    String currentLabel) {
+                                                    String currentLabel,
+                                                    String currentNonSwitchLabel) {
         return switch (init) {
             case CompoundInit(ArrayList<Initializer> inits, Type t) -> {
-                inits.replaceAll(i -> loopLabelInitializer(i, currentLabel));
+                inits.replaceAll(i -> loopLabelInitializer(i, currentLabel,
+                        currentNonSwitchLabel));
                 yield new CompoundInit(inits, t);
             }
             case SingleInit(Exp exp, Type targetType) ->
-                    new SingleInit(loopLabelStatement(exp, currentLabel),
-                            targetType);
+                    new SingleInit(loopLabelStatement(exp, currentLabel,
+                            currentNonSwitchLabel), targetType);
             case null -> null;
         };
     }
@@ -556,8 +577,41 @@ public class SemanticAnalysis {
     private static BlockItem typeCheckBlockItem(BlockItem blockItem,
                                                 Function enclosingFunction) {
         return switch (blockItem) {
-            case LabelledStatement(String label, Statement statement) -> new LabelledStatement(label,
-                    (Statement) typeCheckBlockItem(statement, enclosingFunction));
+            case LabelledStatement(String label, Statement statement) ->
+                    new LabelledStatement(label,
+                            (Statement) typeCheckBlockItem(statement,
+                                    enclosingFunction));
+            case CaseStatement(Switch enclosingSwitch, Constant<?> label,
+                               Statement statement) -> {
+                Type switchExpType = enclosingSwitch.exp.type();
+                var entries = enclosingSwitch.entries;
+                Constant<? extends Constant<?>> convertedConst;
+                if (label != null) {
+                    var t = label.type();
+                    if (!t.isInteger()) {
+                        throw new Err("case label is not an integer");
+                    }
+                    convertedConst =
+                            (Constant<?>) convertConst((StaticInit) label,
+                                    switchExpType);
+                    if (entries.contains(convertedConst)) {
+                        String err =
+                                "duplicate case: " + convertedConst.toLong();
+                        if (convertedConst.toLong() != label.toLong())
+                            err += " (converted from " + label + ")";
+                        throw new Err(err);
+                    }
+                } else {
+                    convertedConst = null;
+                    if (entries.contains(null)) {
+                        throw new Err("duplicate default");
+                    }
+                }
+                enclosingSwitch.addEntry(convertedConst);
+                yield new CaseStatement(enclosingSwitch, convertedConst,
+                        (Statement) typeCheckBlockItem(statement,
+                                enclosingFunction));
+            }
             case VarDecl declaration ->
                     typeCheckLocalVariableDeclaration(declaration);
             case Exp exp -> typeCheckAndConvert(exp);
@@ -613,7 +667,20 @@ public class SemanticAnalysis {
                 typeCheckStructureDeclaration(structDecl);
                 yield structDecl;
             }
-            case NullStatement _, Continue _, Break _ , Goto  _-> blockItem;
+            case NullStatement _, Continue _, Break _, Goto _ -> blockItem;
+            case Switch switchStatement -> {
+                var typedExp = (Exp) typeCheckBlockItem(switchStatement.exp,
+                        enclosingFunction);
+                Type t = typedExp.type();
+                if (!t.isInteger()) {
+                    throw new Err("switch quantity not an integer");
+                }
+                switchStatement.exp = promoteIfNecessary(typedExp);
+                switchStatement.body =
+                        (Statement) typeCheckBlockItem(switchStatement.body,
+                                enclosingFunction);
+                yield switchStatement;
+            }
             case null -> null;
         };
     }
@@ -891,7 +958,8 @@ public class SemanticAnalysis {
                 yield new Assignment(typedLeft, convertedRight, leftType);
             }
             case CompoundAssignment(CompoundAssignmentOperator compoundOp,
-                                    Exp left, Exp right, Type tempType, Type t) -> {
+                                    Exp left, Exp right, Type tempType,
+                                    Type t) -> {
                 ArithmeticOperator newOp = switch (compoundOp) {
                     case SUB_EQ -> SUB;
                     case ADD_EQ -> ADD;
@@ -912,11 +980,16 @@ public class SemanticAnalysis {
 //                SYMBOL_TABLE.put(temp.name(),
 //                        new SymbolTableEntry(t, LOCAL_ATTR));
 //
-//                //ugh I thought I could use a temp var to get around evaluating left twice, but it's not that easy
-//                // need a way to separate the assignment part from the evaluate part
-//                yield typeCheckExpression(new Assignment(new Var(temp.name(),t),
+//                //ugh I thought I could use a temp var to get around
+//                evaluating left twice, but it's not that easy
+//                // need a way to separate the assignment part from the
+//                evaluate part
+//                yield typeCheckExpression(new Assignment(new Var(temp.name
+//                (),t),
 //                        new BinaryOp(newOp, left, right, t), t));
-                BinaryOp foo= (BinaryOp) typeCheckExpression(new BinaryOp(newOp, left, right, t));
+                BinaryOp foo =
+                        (BinaryOp) typeCheckExpression(new BinaryOp(newOp,
+                                left, right, t));
 
                 Exp typedLeft = typeCheckAndConvert(left);
                 if (!isLvalue(typedLeft))
@@ -928,7 +1001,8 @@ public class SemanticAnalysis {
                 }
 
 
-                yield new CompoundAssignment(compoundOp, typedLeft, foo.right(), foo.type(), leftType);
+                yield new CompoundAssignment(compoundOp, typedLeft,
+                        foo.right(), foo.type(), leftType);
             }
             case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
                           Type _) when op == EQUALS || op == NOT_EQUALS -> {
@@ -1451,7 +1525,14 @@ public class SemanticAnalysis {
         return switch (blockItem) {
             case null -> null;
             case Exp exp -> resolveExp(exp, identifierMap, structureMap);
-            case LabelledStatement(String label, Statement statement) -> new LabelledStatement(label, resolveStatement(statement, identifierMap, structureMap));
+            case LabelledStatement(String label, Statement statement) ->
+                    new LabelledStatement(label, resolveStatement(statement,
+                            identifierMap, structureMap));
+            case CaseStatement(Switch enclosingSwitch, Constant<?> label,
+                               Statement statement) ->
+                    new CaseStatement(enclosingSwitch, label,
+                            resolveStatement(statement, identifierMap,
+                                    structureMap));
             case Return(Exp exp) ->
                     new Return(resolveExp(exp, identifierMap, structureMap));
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
@@ -1463,7 +1544,7 @@ public class SemanticAnalysis {
                     resolveBlock(block, copyIdentifierMap(identifierMap),
                             copyStructureMap(structureMap));
             case NullStatement nullStatement -> nullStatement;
-            case Break _, Continue _, Goto _-> blockItem;
+            case Break _, Continue _, Goto _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
                     new DoWhile(resolveStatement(body, identifierMap,
                             structureMap), resolveExp(condition,
@@ -1485,6 +1566,13 @@ public class SemanticAnalysis {
                     new While(resolveExp(condition, identifierMap,
                             structureMap), resolveStatement(body,
                             identifierMap, structureMap), label);
+            case Switch switchStatement -> {
+                switchStatement.exp = resolveExp(switchStatement.exp,
+                        identifierMap, structureMap);
+                switchStatement.body = resolveStatement(switchStatement.body,
+                        identifierMap, structureMap);
+                yield switchStatement;
+            }
         };
 
     }
@@ -1582,9 +1670,7 @@ public class SemanticAnalysis {
                                     "Invalid lvalue");
             case CompoundAssignment(CompoundAssignmentOperator op, Exp left,
                                     Exp right, Type tempType, Type type) ->
-                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") :
-                            new CompoundAssignment(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap),
-                                    tempType, type);
+                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new CompoundAssignment(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), tempType, type);
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
                     op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new BinaryOp(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), type);
             case Constant constant -> constant;

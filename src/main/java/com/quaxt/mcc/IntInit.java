@@ -93,4 +93,5 @@ public record IntInit(int i) implements StaticInit, Constant<IntInit> {
         }
         return this.apply(op, new IntInit((int) c2.toLong()));
     }
+
 }

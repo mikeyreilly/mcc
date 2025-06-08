@@ -5,6 +5,7 @@ import com.quaxt.mcc.asm.JmpCC;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.Constant;
+import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
@@ -17,11 +18,13 @@ import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
 public class Optimizer {
-    public static ProgramIr optimize(ProgramIr programIr, EnumSet<Optimization> optimizations) {
+    public static ProgramIr optimize(ProgramIr programIr,
+                                     EnumSet<Optimization> optimizations) {
         for (int i = 0; i < programIr.topLevels().size(); i++) {
             TopLevel topLevel = programIr.topLevels().get(i);
             if (topLevel instanceof FunctionIr f) {
-                programIr.topLevels().set(i, optimizeFunction(f, optimizations));
+                programIr.topLevels().set(i, optimizeFunction(f,
+                        optimizations));
             }
         }
         return programIr;
@@ -30,7 +33,8 @@ public class Optimizer {
     //helps me set conditional breakpoints
     static String CURRENT_FUNCTION_NAME = "";
 
-    private static TopLevel optimizeFunction(FunctionIr f, EnumSet<Optimization> optimizations) {
+    private static TopLevel optimizeFunction(FunctionIr f,
+                                             EnumSet<Optimization> optimizations) {
         CURRENT_FUNCTION_NAME = f.name();
         List<InstructionIr> instructions = f.instructions();
         boolean updated = true;
@@ -45,7 +49,8 @@ public class Optimizer {
                 updated |= PropagateCopies.propagateCopies(cfg, aliasedVars);
             }
             if (optimizations.contains(ELIMINATE_DEAD_STORES)) {
-                updated |= EliminateDeadStores.eliminateDeadStores(cfg, aliasedVars);
+                updated |= EliminateDeadStores.eliminateDeadStores(cfg,
+                        aliasedVars);
             }
             if (optimizations.contains(ELIMINATE_UNREACHABLE_CODE)) {
                 updated |= eliminateUnreachableCode(cfg);
@@ -53,10 +58,12 @@ public class Optimizer {
             instructions = cfgToInstructions(cfg);
 
         }
-        return new FunctionIr(f.name(), f.global(), f.type(), instructions, f.returnType());
+        return new FunctionIr(f.name(), f.global(), f.type(), instructions,
+                f.returnType());
     }
 
-    public static Set<VarIr> addressTakenAnalysis(List<InstructionIr> instructions) {
+    public static Set<VarIr> addressTakenAnalysis(
+            List<InstructionIr> instructions) {
         Set<VarIr> aliasedVars = new HashSet<>();
         for (var instr : instructions) {
             switch (instr) {
@@ -160,20 +167,29 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
+                case Compare(Type _, ValIr v1, ValIr v2) -> {
+                    if (v1 instanceof VarIr var1 && var1.isStatic())
+                        aliasedVars.add(var1);
+                    if (v2 instanceof VarIr var2 && var2.isStatic())
+                        aliasedVars.add(var2);
+                }
             }
         }
         return aliasedVars;
     }
 
-    private static boolean eliminateDeadStores(List<CfgNode> cfg, Set<VarIr> aliasedVars) {
+    private static boolean eliminateDeadStores(List<CfgNode> cfg,
+                                               Set<VarIr> aliasedVars) {
         throw new Todo();
     }
 
 
     /**
-     * return a new ArrayList like in but with items matching pred removed. Doesn't change in.
+     * return a new ArrayList like in but with items matching pred removed.
+     * Doesn't change in.
      */
-    public static HashSet<Copy> removeIf(HashSet<Copy> in, Predicate<? super Copy> pred) {
+    public static HashSet<Copy> removeIf(HashSet<Copy> in,
+                                         Predicate<? super Copy> pred) {
         HashSet<Copy> out = new HashSet<>(in);
         out.removeIf(pred);
         return out;
@@ -183,11 +199,12 @@ public class Optimizer {
         return removeIf(a, c -> !b.contains(c));
     }
 
-    private static <T extends AbstractInstruction> List<T> cfgToInstructions(List<CfgNode> cfg) {
+    private static <T extends AbstractInstruction> List<T> cfgToInstructions(
+            List<CfgNode> cfg) {
         ArrayList<T> instructions = new ArrayList<>();
         for (CfgNode n : cfg) {
-            if (n instanceof BasicBlock(int _, List ins,
-                                        ArrayList<CfgNode> _, ArrayList<CfgNode> _)) {
+            if (n instanceof BasicBlock(int _, List ins, ArrayList<CfgNode> _,
+                                        ArrayList<CfgNode> _)) {
                 for (var i : ins) {
                     if (!(i instanceof Ignore)) {
                         instructions.add((T) i);
@@ -205,8 +222,10 @@ public class Optimizer {
         return updated;
     }
 
-    private static <T extends AbstractInstruction> boolean removeUselessLabels(List<CfgNode> nodes) {
-        // iterate through all BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
+    private static <T extends AbstractInstruction> boolean removeUselessLabels(
+            List<CfgNode> nodes) {
+        // iterate through all BasicBlocks (n.b. neither the first nor last
+        // nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 1; i++) {
             BasicBlock<T> b = (BasicBlock<T>) nodes.get(i);
@@ -232,8 +251,10 @@ public class Optimizer {
         return updated;
     }
 
-    private static <T extends AbstractInstruction> boolean removeUselessJumps(List<CfgNode> nodes) {
-        // iterate through all but the last BasicBlocks (n.b. neither the first nor last nodes are BasicBlocks)
+    private static <T extends AbstractInstruction> boolean removeUselessJumps(
+            List<CfgNode> nodes) {
+        // iterate through all but the last BasicBlocks (n.b. neither the
+        // first nor last nodes are BasicBlocks)
         boolean updated = false;
         for (int i = 1; i < nodes.size() - 2; i++) {
             BasicBlock<T> b = (BasicBlock<T>) nodes.get(i);
@@ -261,12 +282,14 @@ public class Optimizer {
 
     private static boolean eliminateUnreachableBlocks(List<CfgNode> nodes) {
         Set<Integer> nodesToKeep = new HashSet<>();
-        nodesToKeep.add(nodes.getLast().nodeId());// always keep the exit node, even if there's an infinite loop
+        nodesToKeep.add(nodes.getLast().nodeId());// always keep the exit
+        // node, even if there's an infinite loop
         nodesToKeep(nodesToKeep, nodes, nodes.getFirst());
         return nodes.removeIf(n -> !nodesToKeep.contains(n.nodeId()));
     }
 
-    private static void nodesToKeep(Set<Integer> nodesToKeep, List<CfgNode> nodes, CfgNode node) {
+    private static void nodesToKeep(Set<Integer> nodesToKeep,
+                                    List<CfgNode> nodes, CfgNode node) {
         nodesToKeep.add(node.nodeId());
         for (var n : node.successors()) {
             if (!nodesToKeep.contains(n.nodeId()))
@@ -274,7 +297,8 @@ public class Optimizer {
         }
     }
 
-    public static <T extends AbstractInstruction> List<CfgNode> makeCFG(List<T> instructions) {
+    public static <T extends AbstractInstruction> List<CfgNode> makeCFG(
+            List<T> instructions) {
         List<List<T>> blocks = partitionIntoBasicBlocks(instructions);
         EntryNode entryNode = new EntryNode(new ArrayList<>());
         List<CfgNode> nodes = new ArrayList<>();
@@ -285,7 +309,8 @@ public class Optimizer {
         for (int i = 0; i <= max; i++) {
             var block = blocks.get(i);
             int blockId = i + 1;
-            var bb = new BasicBlock<T>(blockId, block, new ArrayList<>(), new ArrayList<>());
+            var bb = new BasicBlock<T>(blockId, block, new ArrayList<>(),
+                    new ArrayList<>());
             nodes.add(bb);
             if (block.getFirst() instanceof LabelIr(String label)) {
                 labelToNodeId.put(label, bb);
@@ -309,7 +334,7 @@ public class Optimizer {
                 case Jump(String label) ->
                         addEdge(nodes, nodeId, labelToNodeId.get(label));
                 case JmpCC(CmpOperator cmpOperator, boolean unsigned,
-                           String label) ->{
+                           String label) -> {
                     addEdge(nodes, nodeId, labelToNodeId.get(label));
                     addEdge(nodes, nodeId, nextId);
                 }
@@ -332,7 +357,8 @@ public class Optimizer {
         to.predecessors().add(from);
     }
 
-    private static <T extends AbstractInstruction> List<List<T>> partitionIntoBasicBlocks(List<T> instructions) {
+    private static <T extends AbstractInstruction> List<List<T>> partitionIntoBasicBlocks(
+            List<T> instructions) {
         List<List<T>> finishedBlocks = new ArrayList<>();
         List<T> currentBlock = new ArrayList<>();
         for (T instr : instructions) {
@@ -343,7 +369,8 @@ public class Optimizer {
                 currentBlock = new ArrayList<>();
                 currentBlock.add(instr);
             } else switch (instr) {
-                case Nullary _, JmpCC _, Jump _, JumpIfNotZero _, JumpIfZero _, ReturnIr _ -> {
+                case Nullary _, JmpCC _, Jump _, JumpIfNotZero _, JumpIfZero _,
+                     ReturnIr _ -> {
                     currentBlock.add(instr);
                     finishedBlocks.add(currentBlock);
                     currentBlock = new ArrayList<>();
@@ -369,7 +396,8 @@ public class Optimizer {
                              VarIr dstName) when v1 instanceof Constant c1 -> {
                     Constant co = c1.apply(op);
                     if (co == null) yield null;
-                    yield new Copy((ValIr) convertConst((StaticInit) co, valToType(dstName)), dstName);
+                    yield new Copy((ValIr) convertConst((StaticInit) co,
+                            valToType(dstName)), dstName);
                 }
 
                 case DoubleToInt(ValIr src,
@@ -401,7 +429,8 @@ public class Optimizer {
                         throw new Todo();
                         //yield null;
                     }
-                    yield new Copy((ValIr) convertConst((StaticInit) co, valToType(dstName)), dstName);
+                    yield new Copy((ValIr) convertConst((StaticInit) co,
+                            valToType(dstName)), dstName);
                 }
                 case JumpIfZero(ValIr v,
                                 String label) when v instanceof Constant<?> c -> {
@@ -426,7 +455,22 @@ public class Optimizer {
                         yield null;
                     yield new Copy((ValIr) convertConst(c1, dstT), dst);
                 }
+                case Compare(Type type, ValIr v1,
+                             ValIr v2) when v1 instanceof Constant c1 && v2 instanceof Constant c2 -> {
+                    Constant c3 = c1.apply1(ArithmeticOperator.SUB, c2);
+                    var nextInstruction = instructions.get(i + 1);
+                    if (nextInstruction instanceof JumpIfZero jiz) {
+                        instructions.set(i, Ignore.IGNORE);
+                        if (!c3.isZero()) {
+                            instructions.set(++i, Ignore.IGNORE);
+                        } else {
+                            instructions.set(++i, new Jump(jiz.label()));
+                        }
+                    }
+                    yield null;
+                }
                 default -> null;
+
 
             };
             if (newIn != null) {

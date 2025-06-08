@@ -29,7 +29,7 @@ public class Parser {
         return token;
     }
 
-    static Statement parseStatement(ArrayList<Token> tokens, List<String> labels) {
+    static Statement parseStatement(ArrayList<Token> tokens, List<String> labels, Switch enclosingSwitch) {
         Token token = tokens.getFirst();
         Token tokenType = token.type();
         if (RETURN == token.type()) {
@@ -46,24 +46,28 @@ public class Parser {
             expect(OPEN_PAREN, tokens);
             Exp condition = parseExp(tokens, 0, true);
             expect(CLOSE_PAREN, tokens);
-            Statement ifTrue = parseStatement(tokens, labels);
+            Statement ifTrue = parseStatement(tokens, labels, enclosingSwitch);
             Statement ifFalse = switch (tokens.getFirst()) {
                 case ELSE -> {
                     tokens.removeFirst();
-                    yield parseStatement(tokens, labels);
+                    yield parseStatement(tokens, labels, enclosingSwitch);
                 }
                 default -> null;
             };
             return new If(condition, ifTrue, ifFalse);
 
         } else if (token == OPEN_BRACE) {
-            return parseBlock(tokens, labels);
+            return parseBlock(tokens, labels, enclosingSwitch);
         } else if (token == WHILE) {
-            return parseWhile(tokens, labels);
+            return parseWhile(tokens, labels, enclosingSwitch);
         } else if (token == DO) {
-            return parseDoWhile(tokens, labels);
+            return parseDoWhile(tokens, labels, enclosingSwitch);
         } else if (token == FOR) {
-            return parseFor(tokens, labels);
+            tokens.removeFirst();
+            return parseFor(tokens, labels, enclosingSwitch);
+        } else if (token == SWITCH) {
+            tokens.removeFirst();
+            return parseSwitch(tokens, labels);
         } else if (token == BREAK) {
             tokens.removeFirst();
             expect(SEMICOLON, tokens);
@@ -77,8 +81,8 @@ public class Parser {
             var label = expectIdentifier(tokens);
             expect(SEMICOLON, tokens);
             return new Goto(label);
-        }else if (tokenType == LABEL) {
-            tokens.removeFirst();
+        } else if (tokenType == LABEL) {
+            tokens.removeFirst(); // LABEL
             tokens.removeFirst(); // has to be COLON because of how LABEL regex is defined
             TokenWithValue twv = (TokenWithValue) token;
 
@@ -87,7 +91,16 @@ public class Parser {
                 throw new Err("duplicate label: "+label);
             }
             labels.add(label);
-            return new LabelledStatement(label, parseStatement(tokens, labels));
+            return new LabelledStatement(".L"+label, parseStatement(tokens, labels, enclosingSwitch));
+        }  else if (tokenType == CASE) {
+            tokens.removeFirst(); // CASE
+            Constant<?> c = parseConst(tokens, true);
+            expect(COLON, tokens);
+            return new CaseStatement(enclosingSwitch, c, parseStatement(tokens, labels, enclosingSwitch));
+        }   else if (tokenType == DEFAULT) {
+            tokens.removeFirst(); // CASE
+            expect(COLON, tokens);
+            return new CaseStatement(enclosingSwitch, null, parseStatement(tokens, labels, enclosingSwitch));
         }
         Exp exp = parseExp(tokens, 0, true);
         expect(SEMICOLON, tokens);
@@ -95,9 +108,10 @@ public class Parser {
     }
 
     private static DoWhile parseDoWhile(ArrayList<Token> tokens,
-                                        List<String> labels) {
+                                        List<String> labels,
+                                        Switch enclosingSwitch) {
         expect(DO, tokens);
-        Statement body = parseStatement(tokens, labels);
+        Statement body = parseStatement(tokens, labels, enclosingSwitch);
         expect(WHILE, tokens);
         expect(OPEN_PAREN, tokens);
         Exp condition = parseExp(tokens, 0, true);
@@ -530,7 +544,7 @@ public class Parser {
 
         Block block;
         if (tokens.getFirst() == OPEN_BRACE) {
-            block = parseBlock(tokens, new ArrayList<>());
+            block = parseBlock(tokens, new ArrayList<>(), null);
         } else {
             expect(SEMICOLON, tokens);
             block = null;
@@ -549,31 +563,34 @@ public class Parser {
         throw new IllegalArgumentException("Expected IDENTIFIER got " + token);
     }
 
-    private static Block parseBlock(ArrayList<Token> tokens, List<String> labels) {
+    private static Block parseBlock(ArrayList<Token> tokens, List<String> labels,
+                                    Switch enclosingSwitch) {
         expect(OPEN_BRACE, tokens);
 
         ArrayList<BlockItem> blockItems = new ArrayList<>();
         while (tokens.getFirst() != CLOSE_BRACE) {
-            blockItems.add(parseBlockItem(tokens, labels));
+            blockItems.add(parseBlockItem(tokens, labels, enclosingSwitch));
         }
         tokens.removeFirst();
         return new Block(blockItems);
     }
 
-    private static While parseWhile(ArrayList<Token> tokens, List<String> labels) {
+    private static While parseWhile(ArrayList<Token> tokens, List<String> labels,
+                                    Switch enclosingSwitch) {
         expect(WHILE, tokens);
         expect(OPEN_PAREN, tokens);
         Exp condition = parseExp(tokens, 0, true);
         expect(CLOSE_PAREN, tokens);
-        Statement body = parseStatement(tokens, labels);
+        Statement body = parseStatement(tokens, labels, enclosingSwitch);
         return new While(condition, body, null);
     }
 
 
-    private static BlockItem parseBlockItem(ArrayList<Token> tokens, List<String> labels) {
+    private static BlockItem parseBlockItem(ArrayList<Token> tokens, List<String> labels,
+                                            Switch enclosingSwitch) {
         Token t = tokens.getFirst();
         return t == EXTERN || t == STATIC || isTypeSpecifier(tokens, 0) ?
-                parseDeclaration(tokens, false) : parseStatement(tokens, labels);
+                parseDeclaration(tokens, false) : parseStatement(tokens, labels, enclosingSwitch);
     }
 
     public static Constant parseConst(String value, Type type) {
@@ -979,8 +996,8 @@ public class Parser {
         return r;
     }
 
-    private static For parseFor(ArrayList<Token> tokens, List<String> labels) {
-        expect(FOR, tokens);
+    private static For parseFor(ArrayList<Token> tokens, List<String> labels,
+                                Switch enclosingSwitch) {
         expect(OPEN_PAREN, tokens);
         ForInit init = parseForInit(tokens);
         Token t = tokens.getFirst();
@@ -989,8 +1006,21 @@ public class Parser {
         t = tokens.getFirst();
         Exp post = t == CLOSE_PAREN ? null : parseExp(tokens, 0, true);
         expect(CLOSE_PAREN, tokens);
-        Statement body = parseStatement(tokens, labels);
+        Statement body = parseStatement(tokens, labels, enclosingSwitch);
         return new For(init, condition, post, body, null);
+    }
+    private static Switch parseSwitch(ArrayList<Token> tokens, List<String> labels) {
+        expect(OPEN_PAREN, tokens);
+        Exp switchExpression = parseExp(tokens, 0, true);
+        expect(CLOSE_PAREN, tokens);
+        Switch s= new Switch();
+        s.label = Mcc.makeTemporary(".Lswitch.");
+        Statement body = parseStatement(tokens, labels, s);
+
+        s.exp=switchExpression;
+
+        s.body=body;
+        return s;
     }
 
     private static Exp fail(String s) {
