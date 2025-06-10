@@ -4,6 +4,9 @@ import static com.quaxt.mcc.asm.PrimitiveTypeAsm.BYTE;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.LONGWORD;
 
 public record Imm(long i) implements Operand {
+    public static final Operand ZERO = new Imm(0);
+    public static final Operand ONE = new Imm(1);
+
     /**
      * It's awkward if it doesn't fit in a signed int
      */

@@ -24,9 +24,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case SetCC _ -> reg.b;
                 default -> reg.d;
             };
-            case Memory(IntegerReg reg, long offset) -> offset + "(%" + reg.q + ")";
+            case Memory(IntegerReg reg, long offset) ->
+                    offset + "(%" + reg.q + ")";
             case Data(String identifier, long offset) -> {
-                boolean isConstant = BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
+                boolean isConstant =
+                        BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
                 StringBuilder sb = new StringBuilder();
                 if (isConstant) sb.append(".L");
                 sb.append(identifier);
@@ -44,7 +46,6 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     throw new IllegalStateException("Unexpected value: " + o);
         };
     }
-
 
 
     private static String formatOperand(TypeAsm t, Instruction s, Operand o) {
@@ -84,8 +85,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         }
 
 
-        out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0\"");
-        out.println("                .section	.note.GNU-stack,\"\",@progbits");
+        out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22" +
+                ".04) 11.4.0\"");
+        out.println("                .section	.note.GNU-stack,\"\"," +
+                "@progbits");
     }
 
     private void emitStaticConstantAsm(PrintWriter out, StaticConstant v) {
@@ -174,12 +177,15 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         return sw.toString();
     }
 
-    private  static void emitInstruction(PrintWriter out, Instruction instruction) {
+    private static void emitInstruction(PrintWriter out,
+                                        Instruction instruction) {
         String s = switch (instruction) {
             case Mov(TypeAsm t, Operand src, Operand dst) ->
-                    instruction.format(t) + formatOperand(t, instruction, src) + ", " + formatOperand(t, instruction, dst);
+                    instruction.format(t) + formatOperand(t, instruction,
+                            src) + ", " + formatOperand(t, instruction, dst);
             case Lea(Operand src, Operand dst) ->
-                    "leaq\t" + formatOperand(QUADWORD, instruction, src) + ", " + formatOperand(QUADWORD, instruction, dst);
+                    "leaq\t" + formatOperand(QUADWORD, instruction, src) + "," +
+                            " " + formatOperand(QUADWORD, instruction, dst);
             case Push(Operand arg) ->
                     "pushq\t" + formatOperand(QUADWORD, instruction, arg);
 
@@ -189,9 +195,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield "ret";
             }
             case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
-                    instruction.format(t) + formatOperand(t, instruction, operand);
+                    instruction.format(t) + formatOperand(t, instruction,
+                            operand);
             case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
-                    instruction.format(t) + formatOperand(t, instruction, subtrahend) + ", " + formatOperand(t, instruction, minuend);
+                    instruction.format(t) + formatOperand(t, instruction,
+                            subtrahend) + ", " + formatOperand(t, instruction
+                            , minuend);
             case Binary(ArithmeticOperator op, TypeAsm t, Operand src,
                         Operand dst) -> {
                 String srcF = formatOperand(t, instruction, src);
@@ -202,14 +211,21 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield "jmp\t" + label;
             }
             case LabelIr(String label) -> label + ":";
-            case SetCC(CmpOperator cmpOperator, boolean unsigned,
-                       Operand o) ->
-                    "set" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + formatOperand(instruction, o);
+            case SetCC(CmpOperator cmpOperator, boolean unsigned, Operand o) ->
+                    "set" + (unsigned ? cmpOperator.unsignedCode :
+                            cmpOperator.code) + "\t" + formatOperand(instruction, o);
             case JmpCC(CmpOperator cmpOperator, boolean unsigned,
-                       String label) ->
-                    "j" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) + "\t" + label;
+                       String label) -> // cmpOperator = null is used for
+                // jump parity (ie. jump if last comparison was unordered) or
+                // jump not parity (unsigned true - parity, unsigned false
+                // -not parity). This violation of the principal of least astonishment
+                // is to spare me from adding a new CmpOperator just to deal with NaN
+                    "j" + (cmpOperator == null ? (unsigned ? "p" : "np") :
+                            unsigned ? cmpOperator.unsignedCode :
+                                    cmpOperator.code) + "\t" + label;
             case Call(String functionName) ->
-                    "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ? functionName : functionName + "@PLT");
+                    "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
+                            functionName : functionName + "@PLT");
             case Cdq(TypeAsm t) -> instruction.format(t);
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                        Operand dst) -> {
@@ -217,8 +233,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 String dstF = formatOperand(dstType, instruction, dst);
                 yield "movs" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
-            case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
-                               Operand src, Operand dst) -> {
+            case MovZeroExtend(TypeAsm srcType, TypeAsm dstType, Operand src,
+                               Operand dst) -> {
                 String srcF = formatOperand(srcType, instruction, src);
                 String dstF = formatOperand(dstType, instruction, dst);
                 yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
@@ -233,8 +249,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 String dstF = formatOperand(DOUBLE, instruction, dst);
                 yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
             }
-            case Comment(String comment) -> "# "+comment;
-            case Pop(IntegerReg arg) -> "popq\t" + formatOperand(instruction, arg);
+            case Comment(String comment) -> "# " + comment;
+            case Pop(IntegerReg arg) ->
+                    "popq\t" + formatOperand(instruction, arg);
         };
         if (instruction instanceof LabelIr) {
             out.println(s);

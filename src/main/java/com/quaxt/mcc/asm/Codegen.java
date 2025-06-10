@@ -2,6 +2,7 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.optimizer.Optimizer;
+import com.quaxt.mcc.parser.BinaryOp;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Var;
 import com.quaxt.mcc.registerallocator.RegisterAllocator;
@@ -742,7 +743,8 @@ public class Codegen {
             Operand dstByte = dstOp.plus(offset);
             ins.add(new Mov(BYTE, srcReg, dstByte));
             if (offset < byteCount - 1)
-                ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, QUADWORD, new Imm(8), srcReg));
+                ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, QUADWORD, new Imm(8)
+                        , srcReg));
             offset++;
         }
 
@@ -856,12 +858,15 @@ public class Codegen {
                     TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
                     if (typeAsm == DOUBLE) {
-                        if (op1==COMMA){
+                        if (op1 == COMMA) {
                             ins.add(new Mov(typeAsm, toOperand(v2),
                                     toOperand(dstName)));
-                        }else {
-                            ins.add(new Mov(typeAsm, toOperand(v1), toOperand(dstName)));
-                            ins.add(new Binary(convertOp(op1, typeAsm), typeAsm, toOperand(v2), toOperand(dstName)));
+                        } else {
+                            ins.add(new Mov(typeAsm, toOperand(v1),
+                                    toOperand(dstName)));
+                            ins.add(new Binary(convertOp(op1, typeAsm),
+                                    typeAsm, toOperand(v2),
+                                    toOperand(dstName)));
                         }
                     } else {
                         switch (op1) {
@@ -915,12 +920,24 @@ public class Codegen {
                     Type type = valToType(v1);
                     TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
-                    ins.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
+
                     // dstName will hold the result of the comparison, which
                     // is always a LONGWORD
-                    ins.add(new Mov(LONGWORD, new Imm(0), toOperand(dstName)));
-                    ins.add(new SetCC(op1, type.unsignedOrDoubleOrPointer(),
-                            toOperand(dstName)));
+
+                    if (typeAsm == DOUBLE) {
+                        Operand subtrahend = toOperand(v2);
+                        Operand minuend = toOperand(v1);
+                        Operand dst = toOperand(dstName);
+                        compareDouble(op1, typeAsm, subtrahend, minuend, dst,
+                                ins);
+                    } else {
+                        ins.add(new Cmp(typeAsm, toOperand(v2), toOperand(v1)));
+                        ins.add(new Mov(LONGWORD, Imm.ZERO,
+                                toOperand(dstName)));
+                        ins.add(new SetCC(op1,
+                                type.unsignedOrDoubleOrPointer(),
+                                toOperand(dstName)));
+                    }
                 }
                 case Compare(Type type, ValIr v1, ValIr v2) -> {
                     TypeAsm typeAsm = toTypeAsm(type);
@@ -1013,18 +1030,31 @@ public class Codegen {
                     }
                     ins.add(new JmpCC(NOT_EQUALS,
                             type.unsignedOrDoubleOrPointer(), label));
+                    if (typeAsm == DOUBLE) // v is NaN which is not equal to zero (but jne treats it like it is)
+                        ins.add(new JmpCC(null, true, label));
                 }
                 case JumpIfZero(ValIr v, String label) -> {
-                    if (v!=null) {
+                    if (v != null) {
                         Type type = valToType(v);
                         TypeAsm typeAsm = toTypeAsm(type);
                         if (typeAsm == DOUBLE) {
-                            ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
+                            ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0,
+                                    XMM0));
                             ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
+                            LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
+                            ins.add(new JmpCC(null,
+                                    true, endLabel.label()));
+
+                            ins.add(new JmpCC(EQUALS,
+                                    true, label));
+                            ins.add(endLabel);
                         } else {
                             ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
+                            ins.add(new JmpCC(EQUALS,
+                                    type.unsignedOrDoubleOrPointer(), label));
                         }
-                        ins.add(new JmpCC(EQUALS, type.unsignedOrDoubleOrPointer(), label));
+
+
                     } else {
                         ins.add(new JmpCC(EQUALS, false, label));
                     }
@@ -1121,10 +1151,8 @@ public class Codegen {
                         if (typeAsm == DOUBLE) {
                             ins.add(new Binary(BITWISE_XOR, DOUBLE, XMM0,
                                     XMM0));
-                            ins.add(new Cmp(DOUBLE, XMM0, src1));
-                            ins.add(new Mov(valToAsmType(dstIr), new Imm(0),
-                                    dst1));
-                            ins.add(new SetCC(EQUALS, true, dst1));
+                            compareDouble(EQUALS, DOUBLE, XMM0, src1, dst1,
+                                    ins);
                         } else {
                             ins.add(new Cmp(typeAsm, new Imm(0), src1));
                             ins.add(new Mov(valToAsmType(dstIr), new Imm(0),
@@ -1161,6 +1189,36 @@ public class Codegen {
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(),
                 returnInMemory, ins, toRegisters(returnValueClassification));
+    }
+
+    private static void compareDouble(CmpOperator op1, TypeAsm typeAsm,
+                                      Operand subtrahend, Operand minuend,
+                                      Operand dst, List<Instruction> ins) {
+        ins.add(new Cmp(typeAsm, subtrahend, minuend));
+        if (op1 == EQUALS || op1 == NOT_EQUALS) {
+            LabelIr isANLabel = newLabel(Mcc.makeTemporary(".Lan."));
+
+            ins.add(new JmpCC(null, false, // null false -> jnp (i.e. jump if
+                    // not NaN)
+                    isANLabel.label()));
+            // for NaN : == is always false and != is always true
+            ins.add(new Mov(LONGWORD, op1 == EQUALS ? Imm.ZERO : Imm.ONE, dst));
+            LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
+            ins.add(new Jump(endLabel.label()));
+
+            ins.add(isANLabel);
+            ins.add(new Mov(LONGWORD, Imm.ZERO, dst));
+            ins.add(new SetCC(op1, true, dst));
+
+            ins.add(endLabel);
+
+        } else {
+            ins.add(new Mov(LONGWORD, Imm.ZERO, dst));
+            LabelIr isNaNLabel = newLabel(Mcc.makeTemporary(".Lnan."));
+            ins.add(new JmpCC(null, true, isNaNLabel.label()));
+            ins.add(new SetCC(op1, true, dst));
+            ins.add(isNaNLabel);
+        }
     }
 
     final static Pair<Integer, Integer> NO_REGS = new Pair(0, 0);
