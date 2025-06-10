@@ -70,7 +70,7 @@ public class Mcc {
             case ULONG -> 8;
             case DOUBLE -> 8;
             case VOID -> 1;
-            case Structure(String tag) -> {
+            case Structure(boolean isUnion, String tag) -> {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? 1 : st.alignment();
             }
@@ -91,7 +91,7 @@ public class Mcc {
             case ULONG -> 8;
             case DOUBLE -> 8;
             case VOID -> 1;
-            case Structure(String tag) -> TYPE_TABLE.get(tag).alignment();
+            case Structure(boolean isUnion, String tag) -> TYPE_TABLE.get(tag).alignment();
         };
     }
 
@@ -112,7 +112,7 @@ public class Mcc {
             case DOUBLE -> 8;
             case VOID -> 1;
 
-            case Structure(String tag) -> {
+            case Structure(boolean isUnion, String tag) -> {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? -1 : st.size();
             }
@@ -132,6 +132,11 @@ public class Mcc {
             case CHAR, SCHAR, INT, LONG, DOUBLE -> true;
             default -> false;
         };
+    }
+
+    public static ArrayList<MemberEntry> members(Structure s) {
+        StructDef structDef = Mcc.TYPE_TABLE.get(s.tag());
+        return structDef.members();
     }
 
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}

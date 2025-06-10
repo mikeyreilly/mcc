@@ -1,11 +1,1 @@
-* TODO <2025-04-26 Sat> ch20
-** handling non int
-*** separate base graph for each register class
-* TODO <2025-04-26 Sat> unions
-* TODO <2025-04-26 Sat> typedef
-* TODO <2025-04-26 Sat> varargs
-* TODO <2025-04-26 Sat> the rest of c
-* TODO <2025-04-26 Sat> my own preprocessor
-* TODO <2025-04-26 Sat> my own assembler
-* TODO <2025-04-26 Sat> Windows support
-* TODO <2025-04-26 Sat> ARM support
+* TODO typedefs

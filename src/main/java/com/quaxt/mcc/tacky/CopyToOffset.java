@@ -5,5 +5,6 @@ public record CopyToOffset(ValIr src, VarIr dst, long offset) implements Instruc
         this.src=src;
         this.dst=dst;
         this.offset=offset;
+        offset=offset;
     }
 }

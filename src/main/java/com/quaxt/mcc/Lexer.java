@@ -82,6 +82,7 @@ public class Lexer {
                                 case "sizeof" -> SIZEOF;
                                 case "static" -> STATIC;
                                 case "struct" -> STRUCT;
+                                case "union" -> UNION;
                                 case "unsigned" -> UNSIGNED;
                                 case "void" -> VOID;
                                 case "while" -> WHILE;

@@ -97,11 +97,13 @@ public class IrGen {
                                List<InstructionIr> instructions, long offset) {
         switch (init) {
             case CompoundInit(ArrayList<Initializer> inits,
-                              Type compoundInitType) when compoundInitType instanceof Structure(
-                    String tag) -> {
+                              Type compoundInitType) when compoundInitType instanceof Structure(boolean isUnion,
+                                                                                                String tag) -> {
                 ArrayList<MemberEntry> members =
                         Mcc.TYPE_TABLE.get(tag).members();
-                for (int i = 0; i < inits.size(); i++) {
+                int limit = inits.size();
+                if (isUnion && limit > 1) limit = 1;
+                for (int i = 0; i < limit; i++) {
                     Initializer memInit = inits.get(i);
                     MemberEntry member = members.get(i);
                     switch (memInit) {
@@ -699,13 +701,13 @@ public class IrGen {
     }
 
     private static String tag(Exp structure) {
-        if (structure.type() instanceof Structure(String tag)) return tag;
+        if (structure.type() instanceof Structure(boolean isUnion, String tag)) return tag;
         throw new AssertionError();
     }
 
     private static String ptrTag(Exp structure) {
         if (structure.type() instanceof Pointer(
-                Type s) && s instanceof Structure(String tag)) return tag;
+                Type s) && s instanceof Structure(boolean isUnion, String tag)) return tag;
         throw new AssertionError();
     }
 

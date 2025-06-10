@@ -571,7 +571,7 @@ public class Codegen {
         } else {
             Structure st = (Structure) t;
             List<StructureType> classes =
-                    classifyStructure(Mcc.TYPE_TABLE.get(st.tag()));
+                    classifyStructure(st);
             return classes.getFirst() == StructureType.MEMORY;
         }
     }
@@ -589,7 +589,7 @@ public class Codegen {
             String nameOfRetVal = ((VarIr) retVal).identifier();
             Structure st = (Structure) SYMBOL_TABLE.get(nameOfRetVal).type();
             List<StructureType> classes =
-                    classifyStructure(Mcc.TYPE_TABLE.get(st.tag()));
+                    classifyStructure(st);
 
             if (classes.getFirst() == StructureType.MEMORY) {
                 return new ReturnValueClassification(Collections.emptyList(),
@@ -1328,7 +1328,7 @@ public class Codegen {
                 };
                 Type t = SYMBOL_TABLE.get(identifier).type();
                 List<StructureType> classes =
-                        classifyStructure(Mcc.TYPE_TABLE.get(((Structure) t).tag()));
+                        classifyStructure(t);
                 boolean useStack = true;
                 long structSize = type.size();
                 if (classes.getFirst() != StructureType.MEMORY) {
@@ -1382,7 +1382,7 @@ public class Codegen {
 
     enum StructureType {MEMORY, SSE, INTEGER}
 
-    private static List<StructureType> classifyStructure(StructDef structDef) {
+    private static List<StructureType> oldclassifyStructure(StructDef structDef) {
         int size = structDef.size();
         var members = structDef.members();
         if (size > 16) {
@@ -1402,6 +1402,74 @@ public class Codegen {
                 StructureType.INTEGER);
     }
 
+    public static List<StructureType> classifyStructure(Type t) {
+        long size = Mcc.size(t);
+        if (size > 16) {
+            long eightbyteCount = (size / 8) + (size % 8 == 0 ? 0 : 1);
+            List<StructureType> result = new ArrayList<>();
+            for (int i = 0; i < eightbyteCount; i++) {
+                result.add(StructureType.MEMORY);
+            }
+            return result;
+        } else {
+            StructureType[] classes = classifyEightbytes(0, StructureType.SSE, StructureType.SSE, t);
+            if (size > 8) {
+                List<StructureType> result = new ArrayList<>();
+                result.add(classes[0]);
+                result.add(classes[1]);
+                return result;
+            } else {
+                return List.of(classes[0]);
+            }
+        }
+    }
+
+    private static StructureType[] classifyEightbytes(long offset, StructureType first, StructureType second, Type type) {
+        if (type == Primitive.DOUBLE) {
+            return new StructureType[]{first, second};
+        } else if (type.isScalar()) {
+            if (offset < 8) {
+                return new StructureType[]{StructureType.INTEGER, second};
+            } else {
+                return new StructureType[]{first, StructureType.INTEGER};
+            }
+        } else if (type instanceof Structure s && s.isUnion()) {
+            ArrayList<MemberEntry> members = Mcc.members(s);
+            StructureType one = first, two = second;
+            for (var memberEntry : members) {
+                Type member = memberEntry.type();
+                StructureType[] result = classifyEightbytes(offset, one, two, member);
+                one = result[0];
+                two = result[1];
+            }
+            return new StructureType[]{one, two};
+        } else if (type instanceof Structure s) { // s is not uniion
+            ArrayList<MemberEntry> members = Mcc.members(s);
+            StructureType one = first, two = second;
+            for (var memberEntry : members) {
+                Type member = memberEntry.type();
+                long memberOffset = offset + memberEntry.offset();
+                StructureType[] result = classifyEightbytes(memberOffset, one, two, member);
+                one = result[0];
+                two = result[1];
+            }
+            return new StructureType[]{one, two};
+        } else if (type instanceof Array array) {
+            Type elementType = array.element();
+            long elemSize = Mcc.size(elementType);
+            StructureType one = first, two = second;
+            for (long i = 0; i < array.arraySize().toLong(); i++) {
+                long currentOffset = offset + (i * elemSize);
+                StructureType[] result = classifyEightbytes(currentOffset, one, two, elementType);
+                one = result[0];
+                two = result[1];
+            }
+            return new StructureType[]{one, two};
+        } else {
+            throw new RuntimeException("Internal error");
+        }
+    }
+
     private static void flattenTypes(List<Type> types,
                                      ArrayList<MemberEntry> members) {
         for (var m : members) {
@@ -1409,7 +1477,7 @@ public class Codegen {
             switch (type) {
                 case Array(Type element, Constant arraySize) ->
                         types.addAll(Collections.nCopies((int) arraySize.toLong(), element));
-                case Structure(String tag) ->
+                case Structure(boolean isUnion, String tag) ->
                         flattenTypes(types, Mcc.TYPE_TABLE.get(tag).members());
                 default -> types.add(type);
             }

@@ -16,7 +16,7 @@ public enum TokenType implements Token {
     MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0),
     UNSIGNED(), SIGNED(), GOTO(), CHAR(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),CASE(),DEFAULT(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
-    , SIZEOF(), STATIC(), STRUCT(), DECREMENT("--"), INCREMENT("\\+\\+"),
+    , SIZEOF(), STATIC(), STRUCT(), UNION(), DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
     OPEN_BRACKET("\\["), CLOSE_BRACKET("\\]"), ARROW("->"), DOT("([.])[^0-9]"
             , 1);
@@ -68,6 +68,7 @@ public enum TokenType implements Token {
             case SEMICOLON -> ";";
             case SINGLE_LINE_COMMENT -> "single_line_comment";
             case MULTILINE_COMMENT -> "multiline_comment";
+            case UNION -> "union";
             case UNSIGNED -> "unsigned";
             case SIGNED -> "signed";
             case SIZEOF -> "sizeof";

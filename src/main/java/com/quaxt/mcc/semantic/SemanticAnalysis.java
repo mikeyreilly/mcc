@@ -26,7 +26,13 @@ public class SemanticAnalysis {
 
     record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}
 
-    record StructureEntry(String name, boolean fromCurrentScope) {}
+    record StructureEntry(boolean isUnion, String name, boolean fromCurrentScope) {
+        public StructureEntry(boolean isUnion, String name, boolean fromCurrentScope){
+            this.isUnion = isUnion;
+            this.name = name;
+            this.fromCurrentScope = fromCurrentScope;
+        }
+    }
 
     public static Program loopLabelProgram(Program program) {
         ArrayList<Declaration> decls = program.declarations();
@@ -190,17 +196,19 @@ public class SemanticAnalysis {
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
         int structSize = 0;
         int structAlignment = 0;
+        boolean isUnion = structDecl.isUnion();
         for (MemberDeclaration member : structDecl.members()) {
             int memberAlignment = Mcc.typeAlignment(member.type());
-            int memberOffset = roundUp(structSize, memberAlignment);
+            int memberOffset = isUnion ? 0 : roundUp(structSize, memberAlignment);
             MemberEntry m = new MemberEntry(member.name(), member.type(),
                     memberOffset);
             memberEntries.add(m);
             structAlignment = Math.max(structAlignment, memberAlignment);
-            structSize = (int) (memberOffset + Mcc.size(member.type()));
+            int memberSize = (int) Mcc.size(member.type());
+            structSize = isUnion ? Math.max(memberSize,structSize) : memberOffset + memberSize;
         }
         structSize = roundUp(structSize, structAlignment);
-        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructDef(structAlignment,
+        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructDef(isUnion, structAlignment,
                 structSize, memberEntries));
     }
 
@@ -236,7 +244,7 @@ public class SemanticAnalysis {
                 break out;
             }
 
-            case Structure(String tag) -> {
+            case Structure(boolean isUnion, String tag) -> {
                 size *= Mcc.TYPE_TABLE.get(tag).size();
                 break out;
             }
@@ -249,29 +257,31 @@ public class SemanticAnalysis {
         switch (init) {
             case null -> acc.add(createZeroInit(targetType));
             case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
+                final int initsSize = inits.size();
                 switch (targetType) {
                     case Array(Type inner, Constant arraySize) -> {
                         long declaredLength = arraySize.toLong();
-                        if (declaredLength < inits.size()) {
-                            throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
+                        if (declaredLength < initsSize) {
+                            throw new Err("Length of initializer (" + initsSize + ") exceeds declared length of array (" + arraySize + ")");
                         }
                         inits.forEach(i -> convertCompoundInitializerToStaticInitList(i, inner, acc));
-                        if (declaredLength < inits.size()) {
-                            throw new Err("Length of initializer (" + inits.size() + ") exceeds declared length of array (" + arraySize + ")");
+                        if (declaredLength < initsSize) {
+                            throw new Err("Length of initializer (" + initsSize + ") exceeds declared length of array (" + arraySize + ")");
                         }
-                        if (declaredLength > inits.size()) {
+                        if (declaredLength > initsSize) {
                             acc.add(createZeroInit(new Array(inner,
-                                    new ULongInit(declaredLength - inits.size()))));
+                                    new ULongInit(declaredLength - initsSize))));
                         }
                     }
 
                     case Pointer _, FunType _, Primitive _ ->
                             throw new Err("illegal compound initializer for " + "scalar type:" + targetType);
 
-                    case Structure(String tag) -> {
+                    case Structure(boolean isUnion, String tag) -> {
                         StructDef structDef = Mcc.TYPE_TABLE.get(tag);
-                        if (inits.size() > structDef.members().size()) {
-                            throw new Err("Too many elements in structure " + "initializer");
+                        if (initsSize > structDef.members().size() || (isUnion && initsSize > 1)) {
+                            throw new Err("Too many elements in " + (isUnion ? "union " : "structure") +
+                                    "initializer");
                         }
                         int currentOffset = 0;
                         int i = 0;
@@ -300,7 +310,9 @@ public class SemanticAnalysis {
                 } else if (exp instanceof Str(String s,
                                               Type _) && targetType instanceof Pointer(
                         Type element)) {
-
+                    if (element != CHAR) {
+                        throw new Err("Can't initialize pointer to " + element + " with string literal");
+                    }
                     String pointerName = handleStringPointer(s);
                     acc.add(new PointerInit(pointerName));
                 } else {
@@ -826,16 +838,17 @@ public class SemanticAnalysis {
                         targetType), targetType);
             }
             case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
+                int initsSize = inits.size();
                 if (targetType instanceof Array(Type elementType,
                                                 Constant arraySize)) {
                     long zerosToAdd = 0;
                     if (arraySize != null) {
                         long l = arraySize.toLong();
-                        if (inits.size() > l) {
+                        if (initsSize > l) {
                             throw new Err("wrong number of values in " +
                                     "initializer");
                         }
-                        zerosToAdd = l - inits.size();
+                        zerosToAdd = l - initsSize;
                     }
                     inits.replaceAll(i -> typeCheckInit(i, elementType));
 
@@ -844,17 +857,17 @@ public class SemanticAnalysis {
                     }
                     yield new CompoundInit(inits, arraySize == null ?
                             new Array(elementType,
-                                    new ULongInit(inits.size())) : targetType);
-                } else if (targetType instanceof Structure(String tag)) {
+                                    new ULongInit(initsSize)) : targetType);
+                } else if (targetType instanceof Structure(boolean isUnion, String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     ArrayList<MemberEntry> members = structDef.members();
-                    if (inits.size() > members.size()) {
-                        throw new Err("Too many elements in structure " +
+                    if (initsSize > members.size() || (isUnion && initsSize > 1)) {
+                        throw new Err("Too many elements in " + (isUnion ? "union " : "structure") +
                                 "initializer");
                     }
                     ArrayList<Initializer> typeCheckedList = new ArrayList<>();
                     int i;
-                    for (i = 0; i < inits.size(); i++) {
+                    for (i = 0; i < initsSize; i++) {
                         typeCheckedList.add(typeCheckInit(inits.get(i),
                                 members.get(i).type()));
                     }
@@ -886,7 +899,7 @@ public class SemanticAnalysis {
             case Pointer _ -> ULONG.zeroInitializer;
             case FunType funType -> throw new AssertionError(funType);
 
-            case Structure(String tag) -> {
+            case Structure(boolean isUnion, String tag) -> {
                 StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                 ArrayList<MemberEntry> members = structDef.members();
                 ArrayList<Initializer> typeCheckedList = new ArrayList<>();
@@ -933,7 +946,7 @@ public class SemanticAnalysis {
         return switch (typedE.type()) {
             case Array(Type element, _) ->
                     new AddrOf(typedE, new Pointer(element));
-            case Structure(String tag) -> {
+            case Structure(boolean isUnion, String tag) -> {
                 if (Mcc.TYPE_TABLE.containsKey(tag)) yield typedE;
                 else throw new Err("Invalid use of incomplete structure type");
             }
@@ -1146,9 +1159,9 @@ public class SemanticAnalysis {
                             typedIfFalse);
                 else if (isArithmeticType(t1) && isArithmeticType(t1))
                     commonType = getCommonType(t1, t2);
-                else if (t1 instanceof Structure(
-                        String tag1) && t2 instanceof Structure(
-                        String tag2) && tag1.equals(tag2)) {
+                else if (t1 instanceof Structure(boolean isUnion1,
+                                                 String tag1) && t2 instanceof Structure(boolean isUnion2,
+                                                                                         String tag2) && tag1.equals(tag2)) {
                     commonType = t1;
                 } else
                     throw new Err("Can't convert branches of conditional to " + "a" + " common type");
@@ -1268,8 +1281,8 @@ public class SemanticAnalysis {
             case Arrow(Exp pointer, String member, Type _) -> {
                 Exp typedPointer = typeCheckAndConvert(pointer);
                 if (typedPointer.type() instanceof Pointer(
-                        Type structure) && structure instanceof Structure(
-                        String tag)) {
+                        Type structure) && structure instanceof Structure(boolean isUnion,
+                                                                          String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
@@ -1281,7 +1294,7 @@ public class SemanticAnalysis {
             }
             case Dot(Exp structure, String member, Type _) -> {
                 Exp typedStructure = typeCheckAndConvert(structure);
-                if (typedStructure.type() instanceof Structure(String tag)) {
+                if (typedStructure.type() instanceof Structure(boolean isUnion, String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
@@ -1306,7 +1319,7 @@ public class SemanticAnalysis {
     private static boolean isComplete(Type t) {
         return switch (t) {
             case VOID -> false;
-            case Structure(String tag) -> Mcc.TYPE_TABLE.containsKey(tag);
+            case Structure(boolean isUnion, String tag) -> Mcc.TYPE_TABLE.containsKey(tag);
             default -> true;
         };
     }
@@ -1360,11 +1373,17 @@ public class SemanticAnalysis {
     public static Type resolveType(Type typeSpecifier,
                                    Map<String, StructureEntry> structureMap) {
         return switch (typeSpecifier) {
-            case Structure(String tag) -> {
+            case Structure(boolean isUnion, String tag) -> {
                 var e = structureMap.get(tag);
-                if (e != null) yield new Structure(e.name());
+                if (e != null) {
+                    if (e.isUnion() != isUnion) {
+                        throw new Err("incompatible with earlier declaration of "
+                                + (e.isUnion() ? "union" : "struct") +" "+ tag);
+                    }
+                    yield new Structure(isUnion, e.name());
+                }
                 else
-                    throw new Err("Specified an undeclared structure: tag=" + tag);
+                    throw new Err("Specified an undeclared tag: tag=" + tag);
             }
             case Pointer(Type referenced) ->
                     new Pointer(resolveType(referenced, structureMap));
@@ -1405,12 +1424,22 @@ public class SemanticAnalysis {
                                                                   StructureEntry> structureMap) {
         StructureEntry prevEntry = structureMap.get(decl.tag());
         String uniqueTag;
+        if (prevEntry != null && prevEntry.fromCurrentScope()) {
+            if (prevEntry.isUnion() ) {
+                if (!decl.isUnion()) {
+                    throw new Err("Attempt to redeclare union as struct");
+                }
+            } else {
+                if (decl.isUnion()) {
+                    throw new Err("Attempt to redeclare as union");
+                }
+            }
+        }
         if (prevEntry == null || !prevEntry.fromCurrentScope()) {
             uniqueTag = makeTemporary(decl.tag() + ".");
-            structureMap.put(decl.tag(), new StructureEntry(uniqueTag, true));
+            structureMap.put(decl.tag(), new StructureEntry(decl.isUnion(), uniqueTag, true));
         } else {
             uniqueTag = prevEntry.name();
-
         }
         ArrayList<MemberDeclaration> processedMembers;
         if (decl.members() == null) processedMembers = null;
@@ -1425,7 +1454,7 @@ public class SemanticAnalysis {
                 processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name()));
             }
         }
-        return new StructDecl(uniqueTag, processedMembers);
+        return new StructDecl(decl.isUnion(), uniqueTag, processedMembers);
     }
 
     private static Declaration resolveFileScopeVariableDeclaration(
@@ -1605,7 +1634,7 @@ public class SemanticAnalysis {
         Map<String, StructureEntry> copy = HashMap.newHashMap(m.size());
         for (var e : m.entrySet()) {
             var v = e.getValue();
-            copy.put(e.getKey(), new StructureEntry(v.name(), false));
+            copy.put(e.getKey(), new StructureEntry(v.isUnion(), v.name(), false));
         }
         return copy;
 

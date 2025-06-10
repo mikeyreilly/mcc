@@ -300,12 +300,12 @@ public class Parser {
         TypeAndStorageClass typeAndStorageClass =
                 parseTypeAndStorageClass(tokens, throwExceptionIfNoType);
         if (typeAndStorageClass == null) return null;
-        if (typeAndStorageClass.type() instanceof Structure(String tag)) {
+        if (typeAndStorageClass.type() instanceof Structure(boolean isUnion, String tag)) {
             var t = tokens.getFirst();
             switch (t) {
                 case SEMICOLON:
                     tokens.removeFirst();
-                    return new StructDecl(tag, null);
+                    return new StructDecl(isUnion, tag, null);
                 case OPEN_BRACE: {
                     tokens.removeFirst();
                     ArrayList<MemberDeclaration> members = new ArrayList<>();
@@ -319,7 +319,7 @@ public class Parser {
                         throw new Err("A struct must have one or more member " +
                                 "declarators");
                     }
-                    return new StructDecl(tag, members);
+                    return new StructDecl(isUnion, tag, members);
                 }
 
                 default:
@@ -413,9 +413,9 @@ public class Parser {
 
         while (true) {
             t = tokens.getFirst();
-            if (t == STRUCT) {
+            if (t == STRUCT || t == UNION) {
                 tokens.removeFirst();
-                types.add(STRUCT);
+                types.add(t);
                 if (tokens.getFirst().type() == IDENTIFIER) {
                     types.add(tokens.removeFirst());
                 }
@@ -489,13 +489,14 @@ public class Parser {
                         fail("can't combine void with other type specifiers");
                     return Primitive.VOID;
                 }
-                case STRUCT -> {
+                case STRUCT, UNION -> {
+                    boolean isUnion = t == UNION;
                     if (types.size() > 2)
                         fail("can't combine void with other type specifiers");
                     if (types.get(1) instanceof TokenWithValue(Token type,
                                                                String tag) && type == IDENTIFIER)
-                        return new Structure(tag);
-                    else fail("identifier expected following struct");
+                        return new Structure(isUnion, tag);
+                    else fail("identifier expected following " + (isUnion ? "union" : "struct"));
                 }
                 default -> fail("invalid type specifier");
             }
@@ -527,7 +528,9 @@ public class Parser {
 
     private static boolean isTypeSpecifier(List<Token> tokens, int start) {
         Token first = tokens.get(start);
-        return CHAR == first || INT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first;
+        return CHAR == first || INT == first || LONG == first
+                || UNSIGNED == first || SIGNED == first || DOUBLE == first
+                || VOID == first || STRUCT == first || UNION == first;
     }
 
     private static Function parseRestOfFunction(ArrayList<String> paramNames,
@@ -921,7 +924,7 @@ public class Parser {
         while (isTypeSpecifier(tokens, 0)) {
             var t = tokens.removeFirst();
             typeSpecifiers.add(t);
-            if (t == STRUCT) typeSpecifiers.add(tokens.removeFirst());
+            if (t == STRUCT || t == UNION) typeSpecifiers.add(tokens.removeFirst());
         }
         AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens);
         return new TypeName(typeSpecifiers, abstractDeclarator);
