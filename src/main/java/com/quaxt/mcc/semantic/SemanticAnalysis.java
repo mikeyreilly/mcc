@@ -160,9 +160,12 @@ public class SemanticAnalysis {
     }
 
     private static double unsignedLongToDouble(long ul) {
-        double d = (double) (ul & 0x7fffffffffffffffL);
-        double r = ul < 0 ? d + 0x1.0p63 : d;
-        return r;
+        if (ul>0) return (double) ul;
+        long half = ul >>> 1;
+        long parity = ul & 1;
+        long roundedToOdd = half | parity;
+        double d = (double) roundedToOdd;
+        return d+d;
     }
 
     private static long doubleToUnsignedLong(double d) {
