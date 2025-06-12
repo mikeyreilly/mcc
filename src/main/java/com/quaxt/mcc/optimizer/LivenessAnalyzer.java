@@ -31,6 +31,7 @@ public class LivenessAnalyzer {
         for (CfgNode n : cfg) {
             if (n instanceof BasicBlock<?> node) {
                 annotateBlock(node.nodeId(), liveVars, blockAnnotations);
+              if (!alreadySeen.contains(node.nodeId()))  workList.add(node);
             }
         }
         while (!workList.isEmpty()) {

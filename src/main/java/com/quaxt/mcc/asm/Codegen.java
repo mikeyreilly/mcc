@@ -856,7 +856,6 @@ public class Codegen {
                               VarIr dstName) -> {
                     Type type = valToType(v1);
                     TypeAsm typeAsm = toTypeAsm(type);
-                    assert (typeAsm == valToAsmType(v2));
                     if (typeAsm == DOUBLE) {
                         if (op1 == COMMA) {
                             ins.add(new Mov(typeAsm, toOperand(v2),

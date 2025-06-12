@@ -142,11 +142,16 @@ public class Mcc {
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}
 
 
+
     public static int preprocess(Path cFile,
                                  Path iFile) throws IOException,
             InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder("gcc", "-E", "-P",
-                cFile.toString(), "-o", iFile.toString()).inheritIO();
+        return startProcess("gcc", "-E", "-P",
+                cFile.toString(), "-o", iFile.toString());
+    }
+
+    public static int startProcess(String... args) throws InterruptedException, IOException {
+        ProcessBuilder pb = new ProcessBuilder(args).inheritIO();
         return pb.start().waitFor();
     }
 
@@ -162,15 +167,23 @@ public class Mcc {
                 asmFile.resolveSibling(bareFileName + (doNotCompile ? ".o" :
                         "")).toString()));
         gccArgs.addAll(libs);
-        ProcessBuilder pb =
-                new ProcessBuilder(gccArgs.toArray(new String[0])).inheritIO();
-        return pb.start().waitFor();
+        return startProcess(gccArgs.toArray(new String[0]));
     }
 
-    public static void main(String[] args0) throws Exception {
+    public static void main(String[] args) {
+        try {
+            System.exit(mcc(args));
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+
+    public static int mcc(String... args0) throws Exception {
         LOGGER.info("started with args " + String.join(" ", args0));
         ArrayList<String> args =
                 Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
+
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;
         List<String> libs = new ArrayList<>();
@@ -227,44 +240,44 @@ public class Mcc {
         Path srcFile = Path.of(args.getFirst());
         if (args.size() > 1) {
             System.err.println("unrecognized argument: " + args.get(1));
-            System.exit(-1);
+            return -1;
         }
         String bareFileName = removeEnding(srcFile.getFileName().toString());
         Path intermediateFile = srcFile.resolveSibling(bareFileName + ".i");
 
         int preprocessExitCode = preprocess(srcFile, intermediateFile);
         if (preprocessExitCode != 0) {
-            System.exit(preprocessExitCode);
+            return preprocessExitCode;
         }
         ArrayList<Token> l = Lexer.lex(Files.readString(intermediateFile));
         Files.delete(intermediateFile);
         if (mode == Mode.LEX) {
-            return;
+            return 0;
         }
         Program program = Parser.parseProgram(l);
         if (!l.isEmpty()) {
             throw new IllegalArgumentException("Unexpected token " + l.getFirst());
         }
         if (mode == Mode.PARSE) {
-            return;
+            return 0;
         }
 
         program = SemanticAnalysis.resolveProgram(program);
         SemanticAnalysis.typeCheckProgram(program);
         program = SemanticAnalysis.loopLabelProgram(program);
         if (mode == Mode.VALIDATE) {
-            return;
+            return 0;
         }
         ProgramIr programIr = IrGen.programIr(program);
         if (mode == Mode.TACKY) {
-            return;
+            return 0;
         }
         if (!optimizations.isEmpty()) {
             programIr = Optimizer.optimize(programIr, optimizations);
         }
         ProgramAsm programAsm = Codegen.generateProgramAssembly(programIr);
         if (mode == Mode.CODEGEN) {
-            return;
+            return 0;
         }
         Path asmFile = srcFile.resolveSibling(bareFileName + ".s");
         try (PrintWriter pw =
@@ -274,14 +287,12 @@ public class Mcc {
         }
 
         if (mode == Mode.COMPILE) {
-            return;
+            return 0;
         }
         int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile,
                 libs);
-//        if (exitCode == 0) {
         Files.delete(asmFile);
-//        }
-        System.exit(exitCode);
+        return exitCode;
     }
 
 
