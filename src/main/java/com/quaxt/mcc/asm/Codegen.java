@@ -1230,7 +1230,6 @@ public class Codegen {
             return NO_REGS;
         List<TypedOperand> intDests = returnValueClassification.intDests();
         List<Operand> doubleDests = returnValueClassification.doubleDests();
-        //MR-TODO move this to register allocator
         int intDestsSize = intDests.size();
         int doubleDestsSize = doubleDests.size();
         return new Pair<>(intDestsSize, doubleDestsSize);

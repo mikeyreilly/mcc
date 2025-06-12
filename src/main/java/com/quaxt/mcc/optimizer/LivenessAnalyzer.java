@@ -11,6 +11,7 @@ import static com.quaxt.mcc.asm.Codegen.DOUBLE_REGISTERS;
 import static com.quaxt.mcc.asm.Codegen.INTEGER_RETURN_REGISTERS;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.IntegerReg.*;
+import static com.quaxt.mcc.optimizer.PropagateCopies.addNodesInReversePostOrder;
 
 public class LivenessAnalyzer {
 
@@ -22,11 +23,13 @@ public class LivenessAnalyzer {
             MeetFunction<V> meet, TransferFunction<V> transfer) {
 
         Set<V> liveVars = new HashSet<>();
-        ArrayDeque<BasicBlock<I>> workList = new ArrayDeque<>();
-        // MR-TODO initialize the worklist in reverse post order
+
+        var alreadySeen = new HashSet<Integer>();
+        ArrayDeque<BasicBlock> workList =new ArrayDeque<>();
+        addNodesInReversePostOrder(cfg.getFirst(), workList, alreadySeen);
+
         for (CfgNode n : cfg) {
             if (n instanceof BasicBlock<?> node) {
-                workList.add((BasicBlock<I>) node);
                 annotateBlock(node.nodeId(), liveVars, blockAnnotations);
             }
         }
@@ -274,7 +277,6 @@ See p. 606 */
                 }
                 case EntryNode _ ->
                         throw new Err("Malformed control-flow graph");
-                //MR-TODO move code from Codegen line 1140
                 case ExitNode _ -> {
                     Pair<Integer, Integer> returnRegsSize = (Pair<Integer,
                             Integer>) otherArg;
@@ -302,9 +304,6 @@ See p. 606 */
         instructionAnnotations.get(blockId)[instructionIndex] = liveVars;
     }
 
-    /**
-     * MR-TODO description starts p. 634
-     */
     public static void livenessAsmTransferFunction(
             BasicBlock<Instruction> block, Set<Operand> endLiveRegisters,
             HashMap<Integer, Set<Operand>[]> instructionAnnotations,

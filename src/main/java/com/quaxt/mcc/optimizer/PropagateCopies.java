@@ -183,7 +183,7 @@ public class PropagateCopies {
         INSTRUCTION_ANNOTATIONS.get(blockId)[instructionIndex]=currentReachingCopies;
     }
 
-    private static void addNodesInReversePostOrder(CfgNode node, ArrayDeque<BasicBlock> workList, Set<Integer> alreadySeen) {
+    public static void addNodesInReversePostOrder(CfgNode node, ArrayDeque<BasicBlock> workList, Set<Integer> alreadySeen) {
         if (alreadySeen.contains(node.nodeId())) return;
         alreadySeen.add(node.nodeId());
         for (var succ : node.successors()) {

@@ -26,16 +26,10 @@ public class RegisterAllocator {
         List<Instruction> instructions = functionAsm.instructions;
         List<Node> interferenceGraphGpr;
         List<Node> interferenceGraphMmx;
-//        var graphs = buildGraph(functionAsm);
-//        interferenceGraphGpr = graphs.key();
-//        interferenceGraphMmx = graphs.value();
-
-
         while (true) {
             var graphs = buildGraph(functionAsm);
             interferenceGraphGpr = graphs.key();
             interferenceGraphMmx = graphs.value();
-            //MR-TODO same for MMX
             Map<Operand, Operand> coalescedRegs = initDisjointSets();
             coalesce(interferenceGraphGpr, instructions, 12, coalescedRegs);
             coalesce(interferenceGraphMmx, instructions, 14, coalescedRegs);
@@ -437,7 +431,6 @@ public class RegisterAllocator {
         }
         int lowestAvailableColor = b.nextSetBit(0);
         if (lowestAvailableColor != -1) {
-            //MR-TODO same for MMX reg
             boolean chooseHighestAvailableColor =
                     chosenNode.operand instanceof IntegerReg r && r.isCalleeSaved;
             chosenNode.color = chooseHighestAvailableColor ? b.length() - 1 :
@@ -560,7 +553,6 @@ public class RegisterAllocator {
                 livenessAnalysis(cfg, returnRegisters);
         addEdges(cfg, interferenceGraphGpr, interferenceGraphMmx,
                 instructionAnnotations);
-        // MR-TODO handling other types while constructing the graph p. 637
         return new Pair<>(interferenceGraphGpr, interferenceGraphMmx);
     }
 
