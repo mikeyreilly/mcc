@@ -956,7 +956,6 @@ public class Codegen {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV, (int) offset1);
                     TypeAsm typeAsm = valToAsmType(srcV);
-                    assert (typeAsm == valToAsmType(dstV));
                     if (typeAsm instanceof ByteArray(long size,
                                                      long alignment)) {
                         copyBytes(ins, src, dst, size);

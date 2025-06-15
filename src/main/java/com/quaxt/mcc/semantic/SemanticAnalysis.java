@@ -4,6 +4,7 @@ import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.CharInit;
+import com.quaxt.mcc.parser.StructOrUnionSpecifier;
 import com.quaxt.mcc.tacky.PointerInit;
 import com.quaxt.mcc.tacky.StringInit;
 import com.quaxt.mcc.UCharInit;
@@ -69,7 +70,7 @@ public class SemanticAnalysis {
                             loopLabelStatement(innerStatement, currentLabel,
                                     currentNonSwitchLabel);
                     case Function function -> loopLabelFunction(function);
-                    case StructDecl structDecl -> structDecl;
+                    case StructOrUnionSpecifier structDecl -> structDecl;
                 });
                 yield (T) block;
             }
@@ -107,9 +108,12 @@ public class SemanticAnalysis {
                 String newLabel = makeTemporary(".Lfor.");
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
-                    case VarDecl declaration ->
-                            loopLabelVarDecl(declaration, newLabel, newLabel);
                     case Exp exp -> loopLabelStatement(exp, newLabel, newLabel);
+                    case DeclarationList dl-> {
+                        List<Declaration> list=dl.list();
+                        list.replaceAll(decl->loopLabelVarDecl((VarDecl) decl, newLabel, newLabel));
+                        yield dl;
+                    }
                 };
                 Exp labeledCondition = loopLabelStatement(condition, newLabel
                         , newLabel);
@@ -179,7 +183,7 @@ public class SemanticAnalysis {
                 case VarDecl varDecl ->
                         typeCheckFileScopeVariableDeclaration(varDecl);
 
-                case StructDecl structDecl -> {
+                case StructOrUnionSpecifier structDecl -> {
                     typeCheckStructureDeclaration(structDecl);
                     yield structDecl;
                 }
@@ -187,7 +191,8 @@ public class SemanticAnalysis {
         }
     }
 
-    private static void typeCheckStructureDeclaration(StructDecl structDecl) {
+    private static void typeCheckStructureDeclaration(
+            StructOrUnionSpecifier structDecl) {
         if (structDecl.members() == null) return;
         if (Mcc.TYPE_TABLE.containsKey(structDecl.tag())) {
             throw new Err("redefinition of struct");
@@ -218,7 +223,8 @@ public class SemanticAnalysis {
         return x - rem + n;
     }
 
-    private static void validateStructDefinition(StructDecl structDecl) {
+    private static void validateStructDefinition(
+            StructOrUnionSpecifier structDecl) {
         for (var m : structDecl.members()) {
             if (m.type() == VOID) fail("Can't declare void field");
             validateTypeSpecifier(m.type());
@@ -642,8 +648,11 @@ public class SemanticAnalysis {
                      String label) -> new For(switch (init) {
                 case null -> null;
                 case Exp exp -> typeCheckAndConvert(exp);
-                case VarDecl varDecl ->
-                        typeCheckLocalVariableDeclaration(varDecl);
+                case DeclarationList dl-> {
+                    List<Declaration> list=dl.list();
+                    list.replaceAll(decl->typeCheckLocalVariableDeclaration((VarDecl) decl));
+                    yield dl;
+                }
             }, condition == null ? null :
                     requireScalar(typeCheckAndConvert(condition)),
                     typeCheckAndConvert(post),
@@ -675,7 +684,7 @@ public class SemanticAnalysis {
                     new While(requireScalar(typeCheckAndConvert(condition)),
                             (Statement) typeCheckBlockItem(whileBody,
                                     enclosingFunction), label);
-            case StructDecl structDecl -> {
+            case StructOrUnionSpecifier structDecl -> {
                 typeCheckStructureDeclaration(structDecl);
                 yield structDecl;
             }
@@ -1410,7 +1419,7 @@ public class SemanticAnalysis {
                         decls.set(i,
                                 resolveFileScopeVariableDeclaration(varDecl,
                                         identifierMap, structureMap));
-                case StructDecl decl ->
+                case StructOrUnionSpecifier decl ->
                         decls.set(i, resolveStructureDeclaration(decl,
                                 structureMap));
             }
@@ -1419,8 +1428,9 @@ public class SemanticAnalysis {
         return program;
     }
 
-    private static StructDecl resolveStructureDeclaration(StructDecl decl,
-                                                          Map<String,
+    private static StructOrUnionSpecifier resolveStructureDeclaration(
+            StructOrUnionSpecifier decl,
+            Map<String,
                                                                   StructureEntry> structureMap) {
         StructureEntry prevEntry = structureMap.get(decl.tag());
         String uniqueTag;
@@ -1454,7 +1464,7 @@ public class SemanticAnalysis {
                 processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name()));
             }
         }
-        return new StructDecl(decl.isUnion(), uniqueTag, processedMembers);
+        return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag, processedMembers);
     }
 
     private static Declaration resolveFileScopeVariableDeclaration(
@@ -1543,7 +1553,7 @@ public class SemanticAnalysis {
             case Function function ->
                     resolveFunctionDeclaration(function, identifierMap,
                             structureMap);
-            case StructDecl structDecl ->
+            case StructOrUnionSpecifier structDecl ->
                     resolveStructureDeclaration(structDecl, structureMap);
         };
     }
@@ -1610,9 +1620,12 @@ public class SemanticAnalysis {
                                           Map<String, Entry> identifierMap,
                                           Map<String, StructureEntry> structureMap) {
         return switch (init) {
-            case VarDecl declaration ->
-                    resolveLocalIdentifierDeclaration(declaration,
-                            identifierMap, structureMap);
+            case DeclarationList dl-> {
+                List<Declaration> list=dl.list();
+                list.replaceAll(decl->resolveLocalIdentifierDeclaration((VarDecl) decl,
+                        identifierMap, structureMap));
+                yield dl;
+            }
             case Exp exp -> resolveExp(exp, identifierMap, structureMap);
             case null -> null;
         };
