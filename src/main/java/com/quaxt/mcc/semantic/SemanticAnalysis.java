@@ -4,6 +4,7 @@ import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.CharInit;
+import com.quaxt.mcc.parser.parser2.StructOrUnionSpecifier;
 import com.quaxt.mcc.tacky.PointerInit;
 import com.quaxt.mcc.tacky.StringInit;
 import com.quaxt.mcc.UCharInit;
@@ -69,7 +70,7 @@ public class SemanticAnalysis {
                             loopLabelStatement(innerStatement, currentLabel,
                                     currentNonSwitchLabel);
                     case Function function -> loopLabelFunction(function);
-                    case StructDecl structDecl -> structDecl;
+                    case StructOrUnionSpecifier structDecl -> structDecl;
                 });
                 yield (T) block;
             }
@@ -179,7 +180,7 @@ public class SemanticAnalysis {
                 case VarDecl varDecl ->
                         typeCheckFileScopeVariableDeclaration(varDecl);
 
-                case StructDecl structDecl -> {
+                case StructOrUnionSpecifier structDecl -> {
                     typeCheckStructureDeclaration(structDecl);
                     yield structDecl;
                 }
@@ -187,7 +188,8 @@ public class SemanticAnalysis {
         }
     }
 
-    private static void typeCheckStructureDeclaration(StructDecl structDecl) {
+    private static void typeCheckStructureDeclaration(
+            StructOrUnionSpecifier structDecl) {
         if (structDecl.members() == null) return;
         if (Mcc.TYPE_TABLE.containsKey(structDecl.tag())) {
             throw new Err("redefinition of struct");
@@ -218,7 +220,8 @@ public class SemanticAnalysis {
         return x - rem + n;
     }
 
-    private static void validateStructDefinition(StructDecl structDecl) {
+    private static void validateStructDefinition(
+            StructOrUnionSpecifier structDecl) {
         for (var m : structDecl.members()) {
             if (m.type() == VOID) fail("Can't declare void field");
             validateTypeSpecifier(m.type());
@@ -675,7 +678,7 @@ public class SemanticAnalysis {
                     new While(requireScalar(typeCheckAndConvert(condition)),
                             (Statement) typeCheckBlockItem(whileBody,
                                     enclosingFunction), label);
-            case StructDecl structDecl -> {
+            case StructOrUnionSpecifier structDecl -> {
                 typeCheckStructureDeclaration(structDecl);
                 yield structDecl;
             }
@@ -1410,7 +1413,7 @@ public class SemanticAnalysis {
                         decls.set(i,
                                 resolveFileScopeVariableDeclaration(varDecl,
                                         identifierMap, structureMap));
-                case StructDecl decl ->
+                case StructOrUnionSpecifier decl ->
                         decls.set(i, resolveStructureDeclaration(decl,
                                 structureMap));
             }
@@ -1419,8 +1422,9 @@ public class SemanticAnalysis {
         return program;
     }
 
-    private static StructDecl resolveStructureDeclaration(StructDecl decl,
-                                                          Map<String,
+    private static StructOrUnionSpecifier resolveStructureDeclaration(
+            StructOrUnionSpecifier decl,
+            Map<String,
                                                                   StructureEntry> structureMap) {
         StructureEntry prevEntry = structureMap.get(decl.tag());
         String uniqueTag;
@@ -1454,7 +1458,7 @@ public class SemanticAnalysis {
                 processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name()));
             }
         }
-        return new StructDecl(decl.isUnion(), uniqueTag, processedMembers);
+        return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag, processedMembers);
     }
 
     private static Declaration resolveFileScopeVariableDeclaration(
@@ -1543,7 +1547,7 @@ public class SemanticAnalysis {
             case Function function ->
                     resolveFunctionDeclaration(function, identifierMap,
                             structureMap);
-            case StructDecl structDecl ->
+            case StructOrUnionSpecifier structDecl ->
                     resolveStructureDeclaration(structDecl, structureMap);
         };
     }

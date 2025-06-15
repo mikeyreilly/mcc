@@ -1,9 +1,9 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Cmp;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
+import com.quaxt.mcc.parser.parser2.StructOrUnionSpecifier;
 import com.quaxt.mcc.semantic.*;
 
 import java.util.ArrayList;
@@ -89,7 +89,7 @@ public class IrGen {
                 }
                 emitTacky(null, instructions);
             }
-            case StructDecl _ -> {} // nothing to do: StructDecls are not in IR
+            case StructOrUnionSpecifier _ -> {} // nothing to do: StructDecls are not in IR
         }
     }
 

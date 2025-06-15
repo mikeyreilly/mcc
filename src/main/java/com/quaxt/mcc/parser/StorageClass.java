@@ -1,6 +1,8 @@
 package com.quaxt.mcc.parser;
 
-public enum StorageClass {
+import com.quaxt.mcc.parser.parser2.DeclarationSpecifier;
+
+public enum StorageClass implements DeclarationSpecifier {
     STATIC, EXTERN,
     /**
      * <blockquote>

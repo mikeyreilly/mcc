@@ -24,10 +24,19 @@ class MccTest {
     }
 
     @Test
+    void struct() throws Exception {
+        returns("struct", 0);
+    }
+
+    @Test
     void cast() throws Exception {
         returns("cast", 0);
     }
 
+    @Test
+    void multipleInitDeclarators() throws Exception {
+        returns("multiple_init_declarators",0);
+    }
     private static void returns(String testProgram,
                                 int expectedExitCode) throws Exception {
         assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c"));

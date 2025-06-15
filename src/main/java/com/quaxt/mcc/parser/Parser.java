@@ -3,6 +3,7 @@ package com.quaxt.mcc.parser;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
+import com.quaxt.mcc.parser.parser2.*;
 import com.quaxt.mcc.semantic.*;
 
 import java.util.*;
@@ -13,6 +14,7 @@ import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.SAR_EQ;
 import static com.quaxt.mcc.TokenType.*;
+import static com.quaxt.mcc.TokenType.VOID;
 import static com.quaxt.mcc.UnaryOperator.POST_DECREMENT;
 import static com.quaxt.mcc.UnaryOperator.POST_INCREMENT;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
@@ -24,8 +26,8 @@ public class Parser {
         stack.getLast().put(name, type);
     }
 
-    private static Type findTypeByName(ArrayList<Map<String, Type>> stack,
-                                       String name) {
+    public static Type findTypeByName(ArrayList<Map<String, Type>> stack,
+                                      String name) {
         for (int i = stack.size() - 1; i >= 0; i--) {
             Type t = stack.get(i).get(name);
             if (t != null) return t;
@@ -320,77 +322,7 @@ public class Parser {
         };
     }
 
-    private static Declaration parseDeclaration(ArrayList<Token> tokens,
-                                                boolean throwExceptionIfNoType,
-                                                ArrayList<Map<String, Type>> typeAliases) {
-        // parse int i; or int i=5; or int foo(void) or struct...;
-        TypeAndStorageClass typeAndStorageClass =
-                parseTypeAndStorageClass(tokens, throwExceptionIfNoType,
-                        typeAliases);
-        if (typeAndStorageClass == null) return null;
-        if (typeAndStorageClass.type() instanceof Structure(boolean isUnion,
-                                                            String tag)) {
-            var t = tokens.getFirst();
-            switch (t) {
-                case SEMICOLON:
-                    tokens.removeFirst();
-                    return new StructDecl(isUnion, tag, null);
-                case OPEN_BRACE: {
-                    tokens.removeFirst();
-                    ArrayList<MemberDeclaration> members = new ArrayList<>();
-                    while (tokens.getFirst() != CLOSE_BRACE) {
-                        members.add(parseMemberDeclaration(tokens,
-                                typeAliases));
-                        expect(SEMICOLON, tokens);
-                    }
-                    tokens.removeFirst(); // closing brace
-                    expect(SEMICOLON, tokens);
-                    if (members.isEmpty()) {
-                        throw new Err("A struct must have one or more member "
-                                + "declarators");
-                    }
-                    return new StructDecl(isUnion, tag, members);
-                }
-
-                default:
-                    break;
-            }
-        }
-        Declarator declarator = parseDeclarator(tokens, typeAliases);
-        NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator,
-                typeAndStorageClass.type());
-        String name = nameDeclTypeParams.name();
-        Type type = nameDeclTypeParams.type();
-        ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
-        if (type instanceof FunType(List<Type> paramTypes1, Type ret)) {
-            return parseRestOfFunction(paramNames, paramTypes1, tokens, name,
-                    ret, typeAndStorageClass.storageClass(), typeAliases);
-        }
-        Token token = tokens.removeFirst();
-        Initializer init;
-        switch (token.type()) {
-            case BECOMES:
-                init = parseInitializer(tokens, typeAliases);
-                expect(SEMICOLON, tokens);
-                break;
-            case SEMICOLON:
-                init = null;
-                break;
-            default:
-                throw new IllegalArgumentException("Expected ; or =, got " + token);
-        }
-
-
-        if (typeAndStorageClass.storageClass() == StorageClass.TYPEDEF) {
-            addTypedefToCurrentScope(typeAliases, name,
-                    type);
-        }
-
-        return new VarDecl(new Var(name, type), init, type,
-                typeAndStorageClass.storageClass());
-    }
-
-    private static MemberDeclaration parseMemberDeclaration(
+    public static MemberDeclaration parseMemberDeclaration(
             ArrayList<Token> tokens, ArrayList<Map<String, Type>> typeAliases) {
         TypeAndStorageClass typeAndStorageClass =
                 parseTypeAndStorageClass(tokens, true, typeAliases);
@@ -467,15 +399,17 @@ public class Parser {
                 tokens.removeFirst();
                 storageClasses.add(StorageClass.TYPEDEF);
             } else if (t instanceof TokenWithValue(Token tokenType,
-                                                       String name)
-                    && tokenType == IDENTIFIER && findTypeByName(typeAliases, name) != null) {
+                                                   String name) && tokenType == IDENTIFIER && findTypeByName(typeAliases, name) != null) {
                 // Annoying corner case - the following is valid:
                 //   typedef int myint;
                 //   int myint = 5;
-                // To deal with this we check if we have a type already, if we do we're done and we break out of the loop
-                // if we do not add this token to types and break out of the loop
+                // To deal with this we check if we have a type already, if
+                // we do we're done and we break out of the loop
+                // if we do not add this token to types and break out of the
+                // loop
 
-                type = types.isEmpty() ? null : parseType(types, false, typeAliases);
+                type = types.isEmpty() ? null : parseType(types, false,
+                        typeAliases);
                 if (type == null) {
                     tokens.removeFirst();
                     types.add(t);
@@ -511,9 +445,10 @@ public class Parser {
         boolean foundUnsigned = false;
         boolean foundChar = false;
         if (types.getFirst() instanceof TokenWithValue(Token type,
-                String name) && type == IDENTIFIER) {
+                                                       String name) && type == IDENTIFIER) {
             Type foundAlias = findTypeByName(typeAliases, name);
-            if (foundAlias == null && throwExceptionIfNoType) fail("invalid type specifier");
+            if (foundAlias == null && throwExceptionIfNoType)
+                fail("invalid type specifier");
             return foundAlias;
         }
         for (Token t : types) {
@@ -560,13 +495,19 @@ public class Parser {
                     if (types.get(1) instanceof TokenWithValue(Token type,
                                                                String tag) && type == IDENTIFIER)
                         return new Structure(isUnion, tag);
-                    else fail("identifier expected following " + (isUnion ? "union" : "struct"));
+                    else
+                        fail("identifier expected following " + (isUnion ?
+                                "union" : "struct"));
                 }
                 case TokenWithValue(Token type,
                                     String name) when type == IDENTIFIER -> {
-                    // The caller might pass in some aliases, in the list of tokens that it thinks signify types
-                    // And if the first item in that list is an alias then we would have already returned that type before entering this loop)
-                    // Any other aliases should be ignored, because they can't be types, they are regular identifiers
+                    // The caller might pass in some aliases, in the list of
+                    // tokens that it thinks signify types
+                    // And if the first item in that list is an alias then we
+                    // would have already returned that type before entering
+                    // this loop)
+                    // Any other aliases should be ignored, because they
+                    // can't be types, they are regular identifiers
                     if (findTypeByName(typeAliases, name) == null) {
                         fail("invalid type specifier");
                     } else {
@@ -602,13 +543,181 @@ public class Parser {
         return new Program(declarations);
     }
 
+    private static Declaration parseDeclaration(ArrayList<Token> tokens,
+                                                boolean throwExceptionIfNoType,
+                                                ArrayList<Map<String, Type>> typeAliases) {
+        // declaration:
+        //        declaration-specifiers init-declarator-list(opt) ";"
+
+        // init-declarator-list:
+        //         init-declarator
+        //         init-declarator-list "," init-declarator
+        // init-declarator:
+        //         declarator
+        //         declarator "=" initializer
+
+        List<DeclarationSpecifier> specifiers =
+                Parser2.parseDeclarationSpecifiers(tokens, typeAliases);
+        TypeAndStorageClass typeAndStorageClass =
+                parseTypeAndStorageClass2(specifiers, typeAliases);
+        if (typeAndStorageClass == null) return null;
+        if (tokens.getFirst() == SEMICOLON) {
+            tokens.removeFirst();
+            // just struct
+            if (typeAndStorageClass.type() instanceof Structure) {
+                for (var x : specifiers) {
+                    if (x instanceof StructOrUnionSpecifier su) return su;
+                }
+            }
+            throw new Todo();
+        }
+        Declarator declarator = parseDeclarator(tokens, typeAliases);
+        NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator,
+                typeAndStorageClass.type());
+        String name = nameDeclTypeParams.name();
+        Type type = nameDeclTypeParams.type();
+        ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
+        if (type instanceof FunType(List<Type> paramTypes1, Type ret)) {
+            return parseRestOfFunction(paramNames, paramTypes1, tokens, name,
+                    ret, typeAndStorageClass.storageClass(), typeAliases);
+        }
+        Token token = tokens.removeFirst();
+        Initializer init;
+        switch (token.type()) {
+            case BECOMES:
+                init = parseInitializer(tokens, typeAliases);
+                expect(SEMICOLON, tokens);
+                break;
+            case SEMICOLON:
+                init = null;
+                break;
+            default:
+                throw new IllegalArgumentException("Expected ; or =, got " + token);
+        }
+
+
+        if (typeAndStorageClass.storageClass() == StorageClass.TYPEDEF) {
+            addTypedefToCurrentScope(typeAliases, name, type);
+        }
+
+        return new VarDecl(new Var(name, type), init, type,
+                typeAndStorageClass.storageClass());
+    }
+
+    private static TypeAndStorageClass parseTypeAndStorageClass2(
+            List<DeclarationSpecifier> specifiers,
+            ArrayList<Map<String, Type>> typeAliases) {
+        if (specifiers.isEmpty()) return null;
+        List<Token> types = new ArrayList<>();
+        StorageClass storageClass = null;
+        //  Type type = null;
+        boolean foundInt = false;
+        boolean foundLong = false;
+        boolean foundSigned = false;
+        boolean foundUnsigned = false;
+        boolean foundChar = false;
+        boolean foundDouble = false;
+        boolean foundVoid = false;
+
+        Type type = null;
+
+        for (DeclarationSpecifier x : specifiers) {
+            switch (x) {
+                case StorageClass s -> {
+                    if (storageClass != null)
+                        throw new Err("Found second class " + s + ". Already "
+                                + "saw " + storageClass);
+                    storageClass = s;
+                }
+                case PrimitiveTypeSpecifier s -> {
+                    if (type != null) {
+                        fail("can't combine " + type + " with other specifiers");
+                    }
+                    switch (s) {
+                        case DOUBLE -> {
+                            if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble) {
+                                fail("can't combine double with other type " + "specifiers");
+                            }
+                            foundDouble = true;
+                        }
+                        case INT -> {
+                            if (foundInt || foundChar || foundDouble || foundVoid)
+                                fail("invalid type specifier");
+                            else foundInt = true;
+                        }
+                        case CHAR -> {
+                            if (foundChar || foundInt || foundLong || foundDouble || foundVoid)
+                                fail("invalid type specifier");
+                            else foundChar = true;
+                        }
+                        case LONG -> {
+                            if (foundLong || foundChar || foundDouble || foundVoid)
+                                fail("invalid type specifier");
+                            else foundLong = true;
+                        }
+                        case SIGNED -> {
+                            if (foundSigned || foundUnsigned || foundDouble || foundVoid)
+                                fail("invalid type specifier");
+                            else foundSigned = true;
+                        }
+                        case UNSIGNED -> {
+                            if (foundSigned || foundUnsigned || foundDouble || foundVoid)
+                                fail("invalid type specifier");
+                            else foundUnsigned = true;
+                        }
+                        case VOID -> {
+                            if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
+                                fail("can't combine void with other type " +
+                                        "specifiers");
+                            foundVoid = true;
+                        }
+                        default ->
+                                throw new Todo("This compiler doesn't yet " + "support the type: " + s);
+                    }
+
+                }
+
+                case StructOrUnionSpecifier structOrUnionSpecifier -> {
+                    if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
+                        fail("can't combine struct or union with other type " + "specifiers");
+                    type = new Structure(structOrUnionSpecifier.isUnion(),
+                            structOrUnionSpecifier.tag());
+                }
+                case TypedefName(String name) -> {
+                    if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
+                        fail("can't combine struct or union with other type " + "specifiers");
+                    type = findTypeByName(typeAliases, name);
+                }
+            }
+        }
+        if (type == null) {
+            if (foundUnsigned) {
+                if (foundLong) type = Primitive.ULONG;
+                else if (foundChar) type = Primitive.UCHAR;
+                else type = Primitive.UINT;
+            } else {
+                if (foundLong) type = Primitive.LONG;
+                else if (foundDouble) type = Primitive.DOUBLE;
+                else if (foundChar) type = foundSigned ? Primitive.SCHAR : Primitive.CHAR;
+                else if (foundVoid) type = Primitive.VOID;
+                else if (foundInt || foundSigned) type = Primitive.INT;
+                else throw new Err("Missing type specifier");
+            }
+        }
+
+
+        return new TypeAndStorageClass(type, storageClass, null);
+
+    }
+
     private static boolean isTypeSpecifier(List<Token> tokens, int start,
                                            ArrayList<Map<String, Type>> typeAliases) {
         Token first = tokens.get(start);
         if (CHAR == first || INT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first || UNION == first)
             return true;
-        return typeAliases != null && first instanceof TokenWithValue(Token type,
-                                               String name) && type == IDENTIFIER && findTypeByName(typeAliases, name) != null;
+        return typeAliases != null && first instanceof TokenWithValue(
+                Token type,
+                String name) && type == IDENTIFIER && findTypeByName(typeAliases, name) != null;
     }
 
     private static Function parseRestOfFunction(ArrayList<String> paramNames,
@@ -684,9 +793,7 @@ public class Parser {
                                             Switch enclosingSwitch,
                                             ArrayList<Map<String, Type>> typeAliases) {
         Token t = tokens.getFirst();
-        return t == EXTERN || t == STATIC || t == TYPEDEF || isTypeSpecifier(tokens, 0,
-                typeAliases) ? parseDeclaration(tokens, false, typeAliases) :
-                parseStatement(tokens, labels, enclosingSwitch, typeAliases);
+        return t == EXTERN || t == STATIC || t == TYPEDEF || isTypeSpecifier(tokens, 0, typeAliases) ? parseDeclaration(tokens, false, typeAliases) : parseStatement(tokens, labels, enclosingSwitch, typeAliases);
     }
 
     public static Constant parseConst(String value, Type type) {
