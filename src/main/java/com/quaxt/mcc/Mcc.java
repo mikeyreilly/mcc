@@ -26,28 +26,13 @@ import java.util.logging.*;
 public class Mcc {
     private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
-    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE =
-            new HashMap<>() {
-        @Override
-        public SymbolTableEntry put(String key, SymbolTableEntry value) {
-            return super.put(key, value);
-        }
-    };
+    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>();
+    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>();
+    public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
 
     public static void setAliased(String identifier) {
         SYMBOL_TABLE.get(identifier).aliased = true;
     }
-
-    public static final HashMap<String, StructDef> TYPE_TABLE =
-            new HashMap<>() {
-        @Override
-        public StructDef put(String key, StructDef value) {
-            return super.put(key, value);
-        }
-    };
-
-    public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
-
     public static String makeTemporary(String prefix) {
         return prefix + TEMP_COUNT.getAndIncrement();
     }
@@ -181,6 +166,11 @@ public class Mcc {
 
     public static int mcc(String... args0) throws Exception {
         LOGGER.info("started with args " + String.join(" ", args0));
+
+        SYMBOL_TABLE.clear();
+        TYPE_TABLE.clear();
+        TEMP_COUNT.set(0L);
+
         ArrayList<String> args =
                 Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
 
