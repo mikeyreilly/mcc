@@ -12,13 +12,18 @@ public final class FunctionAsm implements AsmNode, TopLevelAsm {
     public final List<Instruction> instructions;
     public IntegerReg[] calleeSavedRegs = new IntegerReg[0];
     public Pair<Integer, Integer> returnRegisters;
+    public long stackSize;
+    public boolean callsVaStart;
+
     public FunctionAsm(String name, boolean global, boolean returnInMemory,
-                       List<Instruction> instructions, Pair<Integer, Integer> returnRegisters) {
+                       List<Instruction> instructions,
+                       Pair<Integer, Integer> returnRegisters, boolean callsVaStart) {
         this.name = name;
         this.global = global;
         this.returnInMemory = returnInMemory;
         this.instructions = instructions;
         this.returnRegisters = returnRegisters;
+        this.callsVaStart = callsVaStart;
     }
 
 

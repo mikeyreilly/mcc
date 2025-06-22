@@ -115,6 +115,7 @@ public class RegisterAllocator {
                                 coalescedRegs), find(dst, coalescedRegs)));
 
 
+                case Test test -> {throw new Todo();}
             }
         }
         int oldSize = instructions.size();
@@ -505,6 +506,7 @@ public class RegisterAllocator {
                             interferenceGraphMmx, operand);
                 }
                 case Comment _, JmpCC _, Nullary _, Jump _, LabelIr _ -> {}
+                case Test test -> {throw new Todo();}
             }
         }
 
@@ -669,6 +671,7 @@ public class RegisterAllocator {
                                            List<Node> inteferenceGraphMmx) {
         for (var instr : instructions) {
             switch (instr) {
+                case Test test -> {throw new Todo();}
                 case Binary(ArithmeticOperator _, TypeAsm _, Operand src,
                             Operand dst) -> {
                     maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);

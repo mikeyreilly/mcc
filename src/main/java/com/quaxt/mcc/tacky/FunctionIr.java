@@ -7,4 +7,5 @@ import java.util.List;
 
 public record FunctionIr(String name, boolean global, List<Var> type,
                          List<InstructionIr> instructions,
-                         Type returnType) implements TopLevel {}
+                         Type returnType,
+                         boolean callsVaStart) implements TopLevel {}

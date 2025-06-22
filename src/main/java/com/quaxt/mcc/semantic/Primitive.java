@@ -29,6 +29,7 @@ public enum Primitive implements Type {
         return switch (tokenType) {
             case DOUBLE_LITERAL -> DOUBLE;
             case UNSIGNED_LONG_LITERAL -> ULONG;
+            case HEX_INT_LITERAL -> INT;
             case UNSIGNED_INT_LITERAL -> UINT;
             case LONG_LITERAL -> LONG;
             case INT_LITERAL -> INT;

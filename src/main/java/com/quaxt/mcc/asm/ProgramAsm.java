@@ -7,7 +7,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
 
+import static com.quaxt.mcc.ArithmeticOperator.SUB;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
+import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
@@ -85,8 +87,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         }
 
 
-        out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22" +
-                ".04) 11.4.0\"");
+        out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22" + ".04) 11.4.0\"");
         out.println("                .section	.note.GNU-stack,\"\"," +
                 "@progbits");
     }
@@ -153,6 +154,25 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         }
     }
 
+    /**
+     * If both args are same sign then rounds away from zero, if args are not
+     * same sign does something you probably don't want.
+     */
+    public static long roundAwayFromZero(long dividend, long divisor) {
+        long remainder = dividend % divisor;
+        if (remainder == 0) return dividend;
+        return dividend + divisor - remainder;
+    }
+
+    public static long calculateStackAdjustment(long bytesForLocals,
+                                                long calleeSavedCount) {
+        long calleeSavedBytes = 8 * calleeSavedCount;
+        long totalStackBytes = calleeSavedBytes + bytesForLocals;
+        long adjustedStackBytes = roundAwayFromZero(totalStackBytes, 16);
+
+        return adjustedStackBytes - calleeSavedBytes;
+    }
+
     private void emitFunctionAsm(PrintWriter out, FunctionAsm functionAsm) {
         String name = functionAsm.name;
         if (functionAsm.global)
@@ -162,6 +182,45 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         List<Instruction> instructions = functionAsm.instructions;
         printIndent(out, "pushq\t%rbp");
         printIndent(out, "movq\t%rsp, %rbp");
+        long stackSize = functionAsm.stackSize;
+        long remainder = stackSize % 16;
+        if (remainder != 0) {
+            stackSize += (16 - remainder);
+        }
+        IntegerReg[] calleeSavedRegs = functionAsm.calleeSavedRegs;
+        int calleeSavedCount = calleeSavedRegs.length;
+        //prologue
+        var end = new LabelIr(Mcc.makeTemporary(".L"));
+        if (functionAsm.callsVaStart) {
+            out.println("""
+                    movq	%rdi, -176(%rbp)
+                    movq	%rsi, -168(%rbp)
+                    movq	%rdx, -160(%rbp)
+                    movq	%rcx, -152(%rbp)
+                    movq	%r8, -144(%rbp)
+                    movq	%r9, -136(%rbp)
+                    testb	%al, %al
+                    je\t""" + end.label() + """
+                    
+                            movaps	%xmm0, -128(%rbp)
+                            movaps	%xmm1, -112(%rbp)
+                            movaps	%xmm2, -96(%rbp)
+                            movaps	%xmm3, -80(%rbp)
+                            movaps	%xmm4, -64(%rbp)
+                            movaps	%xmm5, -48(%rbp)
+                            movaps	%xmm6, -32(%rbp)
+                            movaps	%xmm7, -16(%rbp)
+                    """ + end.label() + ":");
+        }
+
+
+        emitInstruction(out, new Binary(SUB, QUADWORD,
+                new Imm(calculateStackAdjustment(stackSize, calleeSavedCount)), SP));
+        // push in reverse direction so we can pop in forward direction
+        for (int i = calleeSavedRegs.length - 1; i >= 0; i--) {
+            IntegerReg r = calleeSavedRegs[i];
+            emitInstruction(out, new Push(r));
+        }
         for (Instruction instruction : instructions) {
             emitInstruction(out, instruction);
 
@@ -184,8 +243,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     instruction.format(t) + formatOperand(t, instruction,
                             src) + ", " + formatOperand(t, instruction, dst);
             case Lea(Operand src, Operand dst) ->
-                    "leaq\t" + formatOperand(QUADWORD, instruction, src) + "," +
-                            " " + formatOperand(QUADWORD, instruction, dst);
+                    "leaq\t" + formatOperand(QUADWORD, instruction, src) + ","
+                            + " " + formatOperand(QUADWORD, instruction, dst);
             case Push(Operand arg) ->
                     "pushq\t" + formatOperand(QUADWORD, instruction, arg);
 
@@ -218,8 +277,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                        String label) -> // cmpOperator = null is used for
                 // jump parity (ie. jump if last comparison was unordered) or
                 // jump not parity (unsigned true - parity, unsigned false
-                // -not parity). This violation of the principal of least astonishment
-                // is to spare me from adding a new CmpOperator just to deal with NaN
+                // -not parity). This violation of the principal of least
+                // astonishment
+                // is to spare me from adding a new CmpOperator just to deal
+                // with NaN
                     "j" + (cmpOperator == null ? (unsigned ? "p" : "np") :
                             unsigned ? cmpOperator.unsignedCode :
                                     cmpOperator.code) + "\t" + label;
@@ -252,6 +313,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Comment(String comment) -> "# " + comment;
             case Pop(IntegerReg arg) ->
                     "popq\t" + formatOperand(instruction, arg);
+            case Test(TypeAsm t, Operand src1, Operand src2) ->
+                    instruction.format(t) + formatOperand(t, instruction,
+                            src1) + formatOperand(t, instruction, src2);
         };
         if (instruction instanceof LabelIr) {
             out.println(s);

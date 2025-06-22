@@ -27,8 +27,10 @@ public class SemanticAnalysis {
 
     record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}
 
-    record StructureEntry(boolean isUnion, String name, boolean fromCurrentScope) {
-        public StructureEntry(boolean isUnion, String name, boolean fromCurrentScope){
+    record StructureEntry(boolean isUnion, String name,
+                          boolean fromCurrentScope) {
+        public StructureEntry(boolean isUnion, String name,
+                              boolean fromCurrentScope) {
             this.isUnion = isUnion;
             this.name = name;
             this.fromCurrentScope = fromCurrentScope;
@@ -48,9 +50,9 @@ public class SemanticAnalysis {
     }
 
     private static Function loopLabelFunction(Function function) {
-        return new Function(function.name(), function.parameters(),
-                loopLabelStatement(function.body(), null, null),
-                function.funType(), function.storageClass());
+        return new Function(function.name, function.parameters,
+                loopLabelStatement(function.body, null, null),
+                function.funType, function.storageClass, function.callsVaStart);
 
     }
 
@@ -102,16 +104,15 @@ public class SemanticAnalysis {
                     (T) new CaseStatement(enclosingSwitch, label,
                             loopLabelStatement(stmt, currentLabel,
                                     currentNonSwitchLabel));
-            case Exp _, Goto _ -> statement;
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String _) -> {
                 String newLabel = makeTemporary(".Lfor.");
                 ForInit labeledForInit = switch (init) {
                     case null -> null;
                     case Exp exp -> loopLabelStatement(exp, newLabel, newLabel);
-                    case DeclarationList dl-> {
-                        List<Declaration> list=dl.list();
-                        list.replaceAll(decl->loopLabelVarDecl((VarDecl) decl, newLabel, newLabel));
+                    case DeclarationList dl -> {
+                        List<Declaration> list = dl.list();
+                        list.replaceAll(decl -> loopLabelVarDecl((VarDecl) decl, newLabel, newLabel));
                         yield dl;
                     }
                 };
@@ -145,6 +146,10 @@ public class SemanticAnalysis {
                         switchStatement.label, currentLabel);
                 yield (T) switchStatement;
             }
+            case Exp _, Goto _, BuiltinC23VaStart _, BuiltinVaEnd _ ->
+                    statement;
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + statement);
         };
     }
 
@@ -204,17 +209,19 @@ public class SemanticAnalysis {
         boolean isUnion = structDecl.isUnion();
         for (MemberDeclaration member : structDecl.members()) {
             int memberAlignment = Mcc.typeAlignment(member.type());
-            int memberOffset = isUnion ? 0 : roundUp(structSize, memberAlignment);
+            int memberOffset = isUnion ? 0 : roundUp(structSize,
+                    memberAlignment);
             MemberEntry m = new MemberEntry(member.name(), member.type(),
                     memberOffset);
             memberEntries.add(m);
             structAlignment = Math.max(structAlignment, memberAlignment);
             int memberSize = (int) Mcc.size(member.type());
-            structSize = isUnion ? Math.max(memberSize,structSize) : memberOffset + memberSize;
+            structSize = isUnion ? Math.max(memberSize, structSize) :
+                    memberOffset + memberSize;
         }
         structSize = roundUp(structSize, structAlignment);
-        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructDef(isUnion, structAlignment,
-                structSize, memberEntries));
+        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructDef(isUnion,
+                structAlignment, structSize, memberEntries));
     }
 
     private static int roundUp(int x, int n) {
@@ -286,8 +293,8 @@ public class SemanticAnalysis {
                     case Structure(boolean isUnion, String tag) -> {
                         StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                         if (initsSize > structDef.members().size() || (isUnion && initsSize > 1)) {
-                            throw new Err("Too many elements in " + (isUnion ? "union " : "structure") +
-                                    "initializer");
+                            throw new Err("Too many elements in " + (isUnion
+                                    ? "union " : "structure") + "initializer");
                         }
                         int currentOffset = 0;
                         int i = 0;
@@ -443,12 +450,12 @@ public class SemanticAnalysis {
 
 
     private static double unsignedLongToDouble(long ul) {
-        if (ul>0) return (double) ul;
+        if (ul > 0) return (double) ul;
         long half = ul >>> 1;
         long parity = ul & 1;
         long roundedToOdd = half | parity;
         double d = (double) roundedToOdd;
-        return d+d;
+        return d + d;
     }
 
     private static long doubleToUnsignedLong(double d) {
@@ -504,15 +511,16 @@ public class SemanticAnalysis {
 
     private static Function typeCheckFunctionDeclaration(Function decl,
                                                          boolean blockScope) {
-        Type ret = decl.funType().ret();
+        Type ret = decl.funType.ret();
+        boolean varargs = decl.funType.varargs();
         if (ret instanceof Array) {
             fail("A function cannot return an array");
         }
         validateTypeSpecifier(ret);
-        if (ret != VOID && !isComplete(ret) && decl.body() != null) {
+        if (ret != VOID && !isComplete(ret) && decl.body != null) {
             fail("function return type is incomplete");
         }
-        List<Type> oldParams = decl.funType().params();
+        List<Type> oldParams = decl.funType.params();
         ArrayList<Type> adjustedParams = new ArrayList<>(oldParams.size());
         for (int i = 0; i < oldParams.size(); i++) {
             Type p = oldParams.get(i);
@@ -520,59 +528,58 @@ public class SemanticAnalysis {
             if (p == VOID) {
                 fail("named parameter " + (i + 1) + " is void");
             }
-            if (!isComplete(p) && decl.body() != null) {
+            if (!isComplete(p) && decl.body != null) {
                 fail("function with incomplete type parameter");
             }
             adjustedParams.add(arrayToPointer(p));
         }
-        if (blockScope && decl.storageClass() == STATIC) {
+        if (blockScope && decl.storageClass == STATIC) {
             fail("invalid storage class for block scope function declaration "
-                    + "‘" + decl.name() + "’");
+                    + "‘" + decl.name + "’");
         }
-        boolean defined = decl.body() != null;
-        boolean global = decl.storageClass() != STATIC;
-        SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name());
+        boolean defined = decl.body != null;
+        boolean global = decl.storageClass != STATIC;
+        SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name);
         boolean alreadyDefined = false;
-        FunType funType = new FunType(adjustedParams, ret);
+        FunType funType = new FunType(adjustedParams, ret, varargs);
         if (oldEntry instanceof SymbolTableEntry ste) {
             var oldType = ste.type();
             if (oldType instanceof FunType) {
                 alreadyDefined = oldEntry.attrs().defined();
                 if (alreadyDefined && defined)
-                    fail("already defined: " + decl.name());
+                    fail("already defined: " + decl.name);
 
-                if (oldEntry.attrs().global() && decl.storageClass() == STATIC)
+                if (oldEntry.attrs().global() && decl.storageClass == STATIC)
                     fail("Static function declaration follows non-static");
                 global = oldEntry.attrs().global();
                 if (!funType.equals(oldType))
-                    fail("Incompatible function declarations for " + decl.name());
+                    fail("Incompatible function declarations for " + decl.name);
             } else {
-                fail("Incompatible function declarations for " + decl.name());
+                fail("Incompatible function declarations for " + decl.name);
             }
         }
         FunAttributes attrs =
-                new FunAttributes(alreadyDefined || decl.body() != null,
-                        global);
+                new FunAttributes(alreadyDefined || decl.body != null, global);
 
-        SYMBOL_TABLE.put(decl.name(), new SymbolTableEntry(funType, attrs));
+        SYMBOL_TABLE.put(decl.name, new SymbolTableEntry(funType, attrs));
 
         Block typeCheckedBody;
-        if (decl.body() != null) {
-            for (int i = 0; i < decl.parameters().size(); i++) {
-                Var param = decl.parameters().get(i);
+        if (decl.body != null) {
+            for (int i = 0; i < decl.parameters.size(); i++) {
+                Var param = decl.parameters.get(i);
                 SYMBOL_TABLE.put(param.name(),
                         new SymbolTableEntry(adjustedParams.get(i),
                                 LOCAL_ATTR));
             }
-            typeCheckedBody = typeCheckBlock(decl.body(), decl);
+            typeCheckedBody = typeCheckBlock(decl.body, decl);
         } else typeCheckedBody = null;
-        List<Var> declParams = decl.parameters();
+        List<Var> declParams = decl.parameters;
         for (int i = 0; i < declParams.size(); i++) {
             Var oldParam = declParams.get(i);
             declParams.set(i, new Var(oldParam.name(), adjustedParams.get(i)));
         }
-        return new Function(decl.name(), decl.parameters(), typeCheckedBody,
-                funType, decl.storageClass());
+        return new Function(decl.name, decl.parameters, typeCheckedBody,
+                funType, decl.storageClass, decl.callsVaStart);
     }
 
     private static Type arrayToPointer(Type p) {
@@ -634,7 +641,7 @@ public class SemanticAnalysis {
                     typeCheckLocalVariableDeclaration(declaration);
             case Exp exp -> typeCheckAndConvert(exp);
             case Function function -> {
-                if (function.body() != null)
+                if (function.body != null)
                     throw new Err("nested function definition not allowed");
                 else yield typeCheckFunctionDeclaration(function, true);
             }
@@ -648,9 +655,9 @@ public class SemanticAnalysis {
                      String label) -> new For(switch (init) {
                 case null -> null;
                 case Exp exp -> typeCheckAndConvert(exp);
-                case DeclarationList dl-> {
-                    List<Declaration> list=dl.list();
-                    list.replaceAll(decl->typeCheckLocalVariableDeclaration((VarDecl) decl));
+                case DeclarationList dl -> {
+                    List<Declaration> list = dl.list();
+                    list.replaceAll(decl -> typeCheckLocalVariableDeclaration((VarDecl) decl));
                     yield dl;
                 }
             }, condition == null ? null :
@@ -666,7 +673,7 @@ public class SemanticAnalysis {
                                     enclosingFunction));
 
             case Return(Exp exp) -> {
-                Type returnType = enclosingFunction.funType().ret();
+                Type returnType = enclosingFunction.funType.ret();
                 if (returnType == VOID) {
                     if (exp != null) {
                         fail("Can't return value from void function");
@@ -702,8 +709,26 @@ public class SemanticAnalysis {
                                 enclosingFunction);
                 yield switchStatement;
             }
+            case BuiltinC23VaStart(Var ap) -> {
+                if (!enclosingFunction.funType.varargs()) {
+                    throw new Err("va_start used in function with fixed " +
+                            "arguments.");
+                }
+                enclosingFunction.callsVaStart = true;
+                yield new BuiltinC23VaStart(requireVaList(ap));
+            }
+            case BuiltinVaEnd(Var ap) -> new BuiltinVaEnd(requireVaList(ap));
             case null -> null;
         };
+    }
+
+    private static Var requireVaList(Var ap) {
+        Var typedAp = (Var) typeCheckExpression(ap);
+        var t = typedAp.type();
+        if (!t.equals(Mcc.BUILTIN_VA_LIST)) {
+            throw new Err(ap + " is of type " + t + " but va_list is required");
+        }
+        return typedAp;
     }
 
     private static Exp requireScalar(Exp exp) {
@@ -721,7 +746,7 @@ public class SemanticAnalysis {
                     throw new Err("Illegal array of incomplete type");
                 validateTypeSpecifier(element);
             }
-            case FunType(List<Type> params, Type ret) -> {
+            case FunType(List<Type> params, Type ret, boolean varargs) -> {
                 validateTypeSpecifier(ret);
                 for (Type p : params) {
                     validateTypeSpecifier(p);
@@ -865,14 +890,15 @@ public class SemanticAnalysis {
                         inits.add(zeroInitializer(elementType));
                     }
                     yield new CompoundInit(inits, arraySize == null ?
-                            new Array(elementType,
-                                    new ULongInit(initsSize)) : targetType);
-                } else if (targetType instanceof Structure(boolean isUnion, String tag)) {
+                            new Array(elementType, new ULongInit(initsSize))
+                            : targetType);
+                } else if (targetType instanceof Structure(boolean isUnion,
+                                                           String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     ArrayList<MemberEntry> members = structDef.members();
                     if (initsSize > members.size() || (isUnion && initsSize > 1)) {
-                        throw new Err("Too many elements in " + (isUnion ? "union " : "structure") +
-                                "initializer");
+                        throw new Err("Too many elements in " + (isUnion ?
+                                "union " : "structure") + "initializer");
                     }
                     ArrayList<Initializer> typeCheckedList = new ArrayList<>();
                     int i;
@@ -1104,8 +1130,7 @@ public class SemanticAnalysis {
                     yield new BinaryOp(op, typedE1,
                             promoteIfNecessary(typedE2), typedE1.type());
                 }
-                if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE))
-                        || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
+                if ((op == REMAINDER && (t1 == DOUBLE || t2 == DOUBLE)) || ((op == REMAINDER || op == DIVIDE || op == IMUL) && (t1 instanceof Pointer || t2 instanceof Pointer)))
                     fail("invalid operands to binary " + op + " (have ‘" + t1 + "’ " + "and" + " ‘" + t2 + "’");
                 if ((op == BITWISE_AND || op == BITWISE_XOR || op == BITWISE_OR) && (t1 == DOUBLE || t2 == DOUBLE || t1 instanceof Pointer || t2 instanceof Pointer)) {
                     fail("invalid operands to binary " + op + " (have ‘" + t1 + "’ " + "and" + " ‘" + t2 + "’");
@@ -1169,8 +1194,8 @@ public class SemanticAnalysis {
                 else if (isArithmeticType(t1) && isArithmeticType(t1))
                     commonType = getCommonType(t1, t2);
                 else if (t1 instanceof Structure(boolean isUnion1,
-                                                 String tag1) && t2 instanceof Structure(boolean isUnion2,
-                                                                                         String tag2) && tag1.equals(tag2)) {
+                                                 String tag1) && t2 instanceof Structure(
+                        boolean isUnion2, String tag2) && tag1.equals(tag2)) {
                     commonType = t1;
                 } else
                     throw new Err("Can't convert branches of conditional to " + "a" + " common type");
@@ -1181,22 +1206,23 @@ public class SemanticAnalysis {
             case Constant constant -> constant;
             case Str(String s, Type type) ->
                     new Str(s, new Array(CHAR, new IntInit(s.length() + 1)));
-            case FunctionCall(Var name, List<Exp> args, Type _) -> {
+            case FunctionCall(Var name, List<Exp> args, boolean _, Type _) -> {
                 Type fType = SYMBOL_TABLE.get(name.name()).type();
                 yield switch (fType) {
-                    case FunType(List<Type> params, Type ret) -> {
-                        if (params.size() != args.size())
+                    case FunType(List<Type> params, Type ret,
+                                 boolean varargs) -> {
+                        if (varargs ? args.size() < params.size() :
+                                params.size() != args.size())
                             fail("Function called with wrong number of " +
                                     "arguments");
-                        ArrayList<Exp> convertedArgs = new ArrayList<>();
                         for (int i = 0; i < params.size(); i++) {
                             Exp arg = args.get(i);
                             Type paramType = params.get(i);
                             Exp typedArg = typeCheckAndConvert(arg);
-                            convertedArgs.add(convertByAssignment(typedArg,
+                            args.set(i, convertByAssignment(typedArg,
                                     paramType));
                         }
-                        yield new FunctionCall(name, convertedArgs, ret);
+                        yield new FunctionCall(name, args, varargs, ret);
                     }
                     default ->
                             fail("variable " + name.name() + " used as " +
@@ -1290,8 +1316,8 @@ public class SemanticAnalysis {
             case Arrow(Exp pointer, String member, Type _) -> {
                 Exp typedPointer = typeCheckAndConvert(pointer);
                 if (typedPointer.type() instanceof Pointer(
-                        Type structure) && structure instanceof Structure(boolean isUnion,
-                                                                          String tag)) {
+                        Type structure) && structure instanceof Structure(
+                        boolean isUnion, String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
@@ -1303,7 +1329,8 @@ public class SemanticAnalysis {
             }
             case Dot(Exp structure, String member, Type _) -> {
                 Exp typedStructure = typeCheckAndConvert(structure);
-                if (typedStructure.type() instanceof Structure(boolean isUnion, String tag)) {
+                if (typedStructure.type() instanceof Structure(boolean isUnion,
+                                                               String tag)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
@@ -1313,6 +1340,8 @@ public class SemanticAnalysis {
                 }
                 throw new Err("Tried to get member of non-structure");
             }
+            case BuiltinVaArg(Var ap, Type type) ->
+                    new BuiltinVaArg(requireVaList(ap), type);
         };
     }
 
@@ -1328,7 +1357,8 @@ public class SemanticAnalysis {
     private static boolean isComplete(Type t) {
         return switch (t) {
             case VOID -> false;
-            case Structure(boolean isUnion, String tag) -> Mcc.TYPE_TABLE.containsKey(tag);
+            case Structure(boolean isUnion, String tag) ->
+                    Mcc.TYPE_TABLE.containsKey(tag);
             default -> true;
         };
     }
@@ -1383,25 +1413,25 @@ public class SemanticAnalysis {
                                    Map<String, StructureEntry> structureMap) {
         return switch (typeSpecifier) {
             case Structure(boolean isUnion, String tag) -> {
-                var e = structureMap.get(tag);
+                StructureEntry e = structureMap.get(tag);
                 if (e != null) {
                     if (e.isUnion() != isUnion) {
-                        throw new Err("incompatible with earlier declaration of "
-                                + (e.isUnion() ? "union" : "struct") +" "+ tag);
+                        throw new Err("incompatible with earlier declaration "
+                                + "of " + (e.isUnion() ? "union" : "struct") + " " + tag);
                     }
                     yield new Structure(isUnion, e.name());
-                }
-                else
-                    throw new Err("Specified an undeclared tag: tag=" + tag);
+                } else if ("__builtin_va_list_item.0".equals(tag)) {
+                    yield new Structure(isUnion, "__builtin_va_list_item.0");
+                } else throw new Err("Specified an undeclared tag: tag=" + tag);
             }
             case Pointer(Type referenced) ->
                     new Pointer(resolveType(referenced, structureMap));
             case Array(Type element, Constant size) ->
                     new Array(resolveType(element, structureMap), size);
-            case FunType(List<Type> params, Type ret) ->
+            case FunType(List<Type> params, Type ret, boolean varargs) ->
                     new FunType(params.stream().map(p -> resolveType(p,
                             structureMap)).toList(), resolveType(ret,
-                            structureMap));
+                            structureMap), varargs);
             case Primitive primitive -> primitive;
         };
     }
@@ -1430,12 +1460,11 @@ public class SemanticAnalysis {
 
     private static StructOrUnionSpecifier resolveStructureDeclaration(
             StructOrUnionSpecifier decl,
-            Map<String,
-                                                                  StructureEntry> structureMap) {
+            Map<String, StructureEntry> structureMap) {
         StructureEntry prevEntry = structureMap.get(decl.tag());
         String uniqueTag;
         if (prevEntry != null && prevEntry.fromCurrentScope()) {
-            if (prevEntry.isUnion() ) {
+            if (prevEntry.isUnion()) {
                 if (!decl.isUnion()) {
                     throw new Err("Attempt to redeclare union as struct");
                 }
@@ -1447,7 +1476,8 @@ public class SemanticAnalysis {
         }
         if (prevEntry == null || !prevEntry.fromCurrentScope()) {
             uniqueTag = makeTemporary(decl.tag() + ".");
-            structureMap.put(decl.tag(), new StructureEntry(decl.isUnion(), uniqueTag, true));
+            structureMap.put(decl.tag(), new StructureEntry(decl.isUnion(),
+                    uniqueTag, true));
         } else {
             uniqueTag = prevEntry.name();
         }
@@ -1464,7 +1494,8 @@ public class SemanticAnalysis {
                 processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name()));
             }
         }
-        return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag, processedMembers);
+        return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
+                processedMembers);
     }
 
     private static Declaration resolveFileScopeVariableDeclaration(
@@ -1497,7 +1528,7 @@ public class SemanticAnalysis {
                                                        Map<String, Entry> identifierMap,
                                                        Map<String,
                                                                StructureEntry> structureMap) {
-        String name = function.name();
+        String name = function.name;
         if (identifierMap.get(name) instanceof Entry previousEntry) {
             if (previousEntry.fromCurrentScope() && !previousEntry.hasLinkage()) {
                 throw new Err("Duplicate declaration: " + name);
@@ -1507,21 +1538,21 @@ public class SemanticAnalysis {
         Map<String, Entry> innerMap = copyIdentifierMap(identifierMap);
         Map<String, StructureEntry> innerStructureMap =
                 copyStructureMap(structureMap);
-        List<Var> newArgs = resolveParams(function.parameters(), innerMap,
+        List<Var> newArgs = resolveParams(function.parameters, innerMap,
                 innerStructureMap);
 
-        Block newBody = function.body() instanceof Block block ?
+        Block newBody = function.body instanceof Block block ?
                 resolveBlock(block, innerMap, innerStructureMap) : null;
-        return new Function(function.name(), newArgs, newBody,
-                resolveFunType(function.funType(), innerStructureMap),
-                function.storageClass());
+        return new Function(function.name, newArgs, newBody,
+                resolveFunType(function.funType, innerStructureMap),
+                function.storageClass, function.callsVaStart);
     }
 
     private static FunType resolveFunType(FunType funType,
                                           Map<String, StructureEntry> structureMap) {
         return new FunType(funType.params().stream().map(p -> resolveType(p,
                 structureMap)).toList(), resolveType(funType.ret(),
-                structureMap));
+                structureMap), funType.varargs());
     }
 
     private static List<Var> resolveParams(List<Var> parameters,
@@ -1612,6 +1643,13 @@ public class SemanticAnalysis {
                         identifierMap, structureMap);
                 yield switchStatement;
             }
+            case BuiltinC23VaStart(Var ap) ->
+                    new BuiltinC23VaStart(resolveExp(ap, identifierMap,
+                            structureMap));
+            case BuiltinVaEnd(Var ap) ->
+                    new BuiltinVaEnd(resolveExp(ap, identifierMap,
+                            structureMap));
+
         };
 
     }
@@ -1620,10 +1658,9 @@ public class SemanticAnalysis {
                                           Map<String, Entry> identifierMap,
                                           Map<String, StructureEntry> structureMap) {
         return switch (init) {
-            case DeclarationList dl-> {
-                List<Declaration> list=dl.list();
-                list.replaceAll(decl->resolveLocalIdentifierDeclaration((VarDecl) decl,
-                        identifierMap, structureMap));
+            case DeclarationList dl -> {
+                List<Declaration> list = dl.list();
+                list.replaceAll(decl -> resolveLocalIdentifierDeclaration((VarDecl) decl, identifierMap, structureMap));
                 yield dl;
             }
             case Exp exp -> resolveExp(exp, identifierMap, structureMap);
@@ -1647,7 +1684,8 @@ public class SemanticAnalysis {
         Map<String, StructureEntry> copy = HashMap.newHashMap(m.size());
         for (var e : m.entrySet()) {
             var v = e.getValue();
-            copy.put(e.getKey(), new StructureEntry(v.isUnion(), v.name(), false));
+            copy.put(e.getKey(), new StructureEntry(v.isUnion(), v.name(),
+                    false));
         }
         return copy;
 
@@ -1735,8 +1773,9 @@ public class SemanticAnalysis {
                             structureMap), resolveExp(ifTrue, identifierMap,
                             structureMap), resolveExp(ifFalse, identifierMap,
                             structureMap), type);
-            case FunctionCall(Var name, List<Exp> args, Type type) ->
-                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, structureMap, args), type) : fail("Undeclared function:" + name);
+            case FunctionCall(Var name, List<Exp> args, boolean varargs,
+                              Type type) ->
+                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, structureMap, args), varargs, type) : fail("Undeclared function:" + name);
             case Cast(Type type, Exp e) -> {
                 Type resolvedType = resolveType(type, structureMap);
                 yield new Cast(resolvedType, resolveExp(e, identifierMap,
@@ -1756,6 +1795,11 @@ public class SemanticAnalysis {
             case Dot(Exp structure, String member, Type type) ->
                     new Dot(resolveExp(structure, identifierMap,
                             structureMap), member, type);
+            case BuiltinVaArg(Var e, Type type) -> {
+                Type resolvedType = resolveType(type, structureMap);
+                yield new BuiltinVaArg(resolveExp(e, identifierMap,
+                        structureMap), resolvedType);
+            }
         };
         return r;
     }

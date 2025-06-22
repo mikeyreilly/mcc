@@ -52,7 +52,7 @@ public class PropagateCopies {
                                 new ReturnIr(replaceOperand(v, reachingCopies));
                         case UnaryIr(UnaryOperator op, ValIr v1, VarIr dst) ->
                                 new UnaryIr(op, replaceOperand(v1, reachingCopies), dst);
-                        case FunCall(String _, ArrayList<ValIr> args,
+                        case FunCall(String _, ArrayList<ValIr> args, boolean _,
                                      ValIr _) -> {
                             args.replaceAll(op -> replaceOperand(op, reachingCopies));
                             yield instr;
@@ -93,6 +93,8 @@ public class PropagateCopies {
                         case ZeroExtendIr(ValIr v1, VarIr dst) ->
                                 new ZeroExtendIr(replaceOperand(v1, reachingCopies), dst);
 
+                        default ->
+                                throw new IllegalStateException("Unexpected value: " + instr);
                     };
                     if (!instr.equals(newInstr)) {
                         ins.set(j, newInstr);
@@ -137,7 +139,7 @@ public class PropagateCopies {
                     if (srcT.equals(dstT) || Mcc.isSigned(srcT) == Mcc.isSigned(dstT))
                         currentReachingCopies.add((Copy) instruction);
                 }
-                case FunCall(String _, ArrayList<ValIr> _, ValIr dst) ->
+                case FunCall(String _, ArrayList<ValIr> _, boolean _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()) || ((copy.src().equals(dst) || copy.dst().equals(dst))));
                 case Store(ValIr _, ValIr _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()));
@@ -172,6 +174,9 @@ public class PropagateCopies {
                 case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
                      ReturnIr _, Ignore _, Compare _ -> {}
 
+
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + instruction);
             }
 
         }

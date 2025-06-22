@@ -11,16 +11,17 @@ public enum TokenType implements Token {
             ".[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)" +
             "[^\\w.]", 1), UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]))" +
             "[^\\w.]", 1), UNSIGNED_INT_LITERAL("([0-9]+[uU])[^\\w.]", 1),
-    LONG_LITERAL("([0-9]+[lL])[^\\w.]", 1), INT_LITERAL("([0-9]+)[^\\w.]", 1)
+    LONG_LITERAL("([0-9]+[lL])[^\\w.]", 1), HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
     , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*"),
     MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0),
+    BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
     UNSIGNED(), SIGNED(), GOTO(), CHAR(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),
     TYPEDEF(), CASE(),DEFAULT(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
     , SIZEOF(), STATIC(), STRUCT(), UNION(), DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
-    OPEN_BRACKET("\\["), CLOSE_BRACKET("\\]"), ARROW("->"), DOT("([.])[^0-9]"
-            , 1);
+    OPEN_BRACKET("\\["), CLOSE_BRACKET("\\]"), ARROW("->"),
+    ELLIPSIS("\\.\\.\\."), DOT("([.])[^0-9]", 1);
     final Pattern regex;
     private final int group;
 
@@ -53,56 +54,61 @@ public enum TokenType implements Token {
     public String toString() {
         return switch (this) {
             case ARROW -> "->";
-            case LABEL -> "label";
-            case IDENTIFIER -> "identifier";
-            case OPEN_PAREN -> "(";
-            case CLOSE_PAREN -> ")";
-            case OPEN_BRACE -> "{";
-            case CLOSE_BRACE -> "}";
-            case CHAR_LITERAL -> "char_literal";
-            case STRING_LITERAL -> "string_literal";
-            case DOUBLE_LITERAL -> "double_literal";
-            case UNSIGNED_LONG_LITERAL -> "unsigned_long_literal";
-            case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";
-            case LONG_LITERAL -> "long_literal";
-            case INT_LITERAL -> "int_literal";
-            case SEMICOLON -> ";";
-            case SINGLE_LINE_COMMENT -> "single_line_comment";
-            case MULTILINE_COMMENT -> "multiline_comment";
-            case UNION -> "union";
-            case UNSIGNED -> "unsigned";
-            case SIGNED -> "signed";
-            case SIZEOF -> "sizeof";
-            case SWITCH -> "switch";
-            case TYPEDEF -> "typedef";
-            case CASE -> "case";
-            case DEFAULT -> "default";
-            case CHAR -> "char";
-            case GOTO -> "goto";
-            case DOUBLE -> "double";
-            case LONG -> "long";
-            case INT -> "int";
-            case RETURN -> "return";
-            case VOID -> "void";
-            case ELSE -> "else";
-            case IF -> "if";
+            case BITWISE_NOT -> "bitwise_not";
             case BREAK -> "break";
+            case CASE -> "case";
+            case CHAR -> "char";
+            case CHAR_LITERAL -> "char_literal";
+            case CLOSE_BRACE -> "}";
+            case CLOSE_BRACKET -> "]";
+            case CLOSE_PAREN -> ")";
+            case COLON -> ":";
             case CONTINUE -> "continue";
-            case WHILE -> "while";
+            case DECREMENT -> "decrement";
+            case DEFAULT -> "default";
             case DO -> "do";
             case DOT -> ".";
-            case FOR -> "for";
+            case DOUBLE -> "double";
+            case DOUBLE_LITERAL -> "double_literal";
+            case ELLIPSIS -> "ellipsis";
+            case ELSE -> "else";
             case EXTERN -> "extern";
-            case STATIC -> "static";
-            case STRUCT -> "struct";
-            case DECREMENT -> "decrement";
+            case FOR -> "for";
+            case GOTO -> "goto";
+            case IDENTIFIER -> "identifier";
+            case IF -> "if";
             case INCREMENT -> "increment";
-            case BITWISE_NOT -> "bitwise_not";
+            case INT -> "int";
+            case INT_LITERAL -> "int_literal";
+            case HEX_INT_LITERAL -> "hex_int_literal";
+            case LABEL -> "label";
+            case LONG -> "long";
+            case LONG_LITERAL -> "long_literal";
+            case MULTILINE_COMMENT -> "multiline_comment";
             case NOT -> "not";
-            case QUESTION_MARK -> "?";
-            case COLON -> ":";
+            case OPEN_BRACE -> "{";
             case OPEN_BRACKET -> "[";
-            case CLOSE_BRACKET -> "]";
+            case OPEN_PAREN -> "(";
+            case QUESTION_MARK -> "?";
+            case RETURN -> "return";
+            case SEMICOLON -> ";";
+            case SIGNED -> "signed";
+            case SINGLE_LINE_COMMENT -> "single_line_comment";
+            case SIZEOF -> "sizeof";
+            case STATIC -> "static";
+            case STRING_LITERAL -> "string_literal";
+            case STRUCT -> "struct";
+            case SWITCH -> "switch";
+            case BUILTIN_C23_VA_START -> "__builtin_c23_va_start";
+            case BUILTIN_VA_ARG -> "__builtin_va_arg";
+            case BUILTIN_VA_END -> "__builtin_va_end";
+            case TYPEDEF -> "typedef";
+            case UNION -> "union";
+            case UNSIGNED -> "unsigned";
+            case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";
+            case UNSIGNED_LONG_LITERAL -> "unsigned_long_literal";
+            case VOID -> "void";
+            case WHILE -> "while";
         };
     }
 }

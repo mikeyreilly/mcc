@@ -13,7 +13,6 @@ import java.util.function.Predicate;
 
 import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.Optimization.*;
-import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
@@ -59,7 +58,7 @@ public class Optimizer {
 
         }
         return new FunctionIr(f.name(), f.global(), f.type(), instructions,
-                f.returnType());
+                f.returnType(), f.callsVaStart());
     }
 
     public static Set<VarIr> addressTakenAnalysis(
@@ -106,7 +105,8 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
-                case FunCall(String _, ArrayList<ValIr> args, VarIr dst) -> {
+                case FunCall(String _, ArrayList<ValIr> args, boolean varargs,
+                             VarIr dst) -> {
                     for (var v1 : args) {
                         if (v1 instanceof VarIr var1 && var1.isStatic())
                             aliasedVars.add(var1);
@@ -173,6 +173,14 @@ public class Optimizer {
                     if (v2 instanceof VarIr var2 && var2.isStatic())
                         aliasedVars.add(var2);
                 }
+                case BuiltinC23VaStartIr(VarIr var1) -> {
+                    if (var1.isStatic()) aliasedVars.add(var1);
+                }
+                case BuiltinVaArgIr _ -> {
+                    // NOOP because already taken care of by va_start
+                }
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + instr);
             }
         }
         return aliasedVars;

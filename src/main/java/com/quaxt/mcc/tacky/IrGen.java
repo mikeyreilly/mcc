@@ -25,7 +25,7 @@ public class IrGen {
     public static ProgramIr programIr(Program program) {
         List<TopLevel> tackyDefs = new ArrayList<>();
         for (Function function : program.functions()) {
-            if (function.body() != null)
+            if (function.body != null)
                 tackyDefs.add(compileFunction(function));
         }
         convertSymbolsToTacky(tackyDefs);
@@ -60,11 +60,10 @@ public class IrGen {
 
     private static FunctionIr compileFunction(Function function) {
         List<InstructionIr> instructions = new ArrayList<>();
-        compileBlock(function.body(), instructions);
-        FunctionIr f = new FunctionIr(function.name(),
-                SYMBOL_TABLE.get(function.name()).attrs().global(),
-                function.parameters(), instructions, function.funType().ret());
-        ReturnIr ret = new ReturnIr(new IntInit(0));
+        compileBlock(function.body, instructions);
+        FunctionIr f = new FunctionIr(function.name,
+                SYMBOL_TABLE.get(function.name).attrs().global(), function.parameters, instructions, function.funType.ret(), function.callsVaStart);
+        ReturnIr ret = new ReturnIr(IntInit.ZERO);
         instructions.add(ret);
         return f;
     }
@@ -78,7 +77,7 @@ public class IrGen {
                                            List<InstructionIr> instructions) {
         switch (d) {
             case Function function -> {
-                if (function.body() != null) compileFunction(function);
+                if (function.body != null) compileFunction(function);
             }
             case VarDecl(Var name, Initializer init, Type _,
                          StorageClass storageClass) -> {
@@ -228,6 +227,11 @@ public class IrGen {
     private static void compileStatement(Statement i,
                                          List<InstructionIr> instructions) {
         switch (i) {
+            case BuiltinC23VaStart(Var exp) -> {
+                ValIr retVal = emitTackyAndConvert(exp,
+                        instructions);
+                instructions.add(new BuiltinC23VaStartIr((VarIr) retVal));
+            }
             case Switch switchStatement -> {
                 compileSwitch(switchStatement, instructions);
             }
@@ -315,6 +319,9 @@ public class IrGen {
                 instructions.add(newLabel(s));
                 compileStatement(statement, instructions);
             }
+            case BuiltinVaEnd builtinVaEnd -> {
+                // it's a NOOP
+            }
         }
     }
 
@@ -353,6 +360,7 @@ public class IrGen {
     private static ExpResult emitTacky(Exp expr,
                                        List<InstructionIr> instructions) {
         switch (expr) {
+
             case null:
                 return null;
             case IntInit c:
@@ -463,11 +471,11 @@ public class IrGen {
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         instructions.add(new JumpIfZero(v2,
                                 falseLabel.label()));
-                        instructions.add(new Copy(new IntInit(1), result));
+                        instructions.add(new Copy(IntInit.ONE, result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(falseLabel);
-                        instructions.add(new Copy(new IntInit(0), result));
+                        instructions.add(new Copy(IntInit.ZERO, result));
                         instructions.add(endLabel);
 
                         return new PlainOperand(result);
@@ -486,11 +494,11 @@ public class IrGen {
                         ValIr v2 = emitTackyAndConvert(right, instructions);
                         instructions.add(new JumpIfNotZero(v2,
                                 trueLabel.label()));
-                        instructions.add(new Copy(new IntInit(0), result));
+                        instructions.add(new Copy(IntInit.ZERO, result));
                         instructions.add(new Jump(endLabel.label()));
 
                         instructions.add(trueLabel);
-                        instructions.add(new Copy(new IntInit(1), result));
+                        instructions.add(new Copy(IntInit.ONE, result));
                         instructions.add(endLabel);
 
                         return new PlainOperand(result);
@@ -553,14 +561,14 @@ public class IrGen {
                 return assign(left, right, instructions);
             case Var(String name, Type _):
                 return new PlainOperand(new VarIr(name));
-            case FunctionCall(Var name, List<Exp> args, Type type): {
+            case FunctionCall(Var name, List<Exp> args, boolean varargs, Type type): {
                 VarIr result = type == VOID ? null : makeTemporary("tmp.",
                         type);
                 ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {
                     argVals.add(emitTackyAndConvert(e, instructions));
                 }
-                instructions.add(new FunCall(name.name(), argVals, result));
+                instructions.add(new FunCall(name.name(), argVals, varargs, result));
                 return new PlainOperand(result);
             }
             case Cast(Type t, Exp inner): {
@@ -680,6 +688,16 @@ public class IrGen {
                         new LongInit(memberOffset), 1, dstPtr));
                 return new DereferencedPointer(dstPtr);
             }
+            case BuiltinVaArg(Var identifier, Type type): {
+                VarIr src = (VarIr) emitTackyAndConvert(identifier,
+                        instructions);
+                VarIr dst = makeTemporary("tmp.", type);
+                instructions.add(new BuiltinVaArgIr(src, dst, type));
+                return new PlainOperand(dst);
+            }
+
+            default:
+                throw new IllegalStateException("Unexpected value: " + expr);
         }
     }
 

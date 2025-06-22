@@ -44,6 +44,36 @@ class MccTest {
                 Mcc.startProcess("src/test/resources/" + testProgram));
     }
 
+    @Test
+    void varargs1()  throws Exception {
+        returns("varargs1", 0);
+    }
+
+    @Test
+    void varargs2()  throws Exception {
+        returns("varargs2", 66);
+    }
+
+    @Test
+    void varargs3()  throws Exception {
+        returns("varargs3", 66);
+    }
+    @Test
+    void varargs3_no_stack()  throws Exception {
+        returns("varargs3_no_stack", 15);
+    }
+
+    @Test
+    void varargs_int_no_stack()  throws Exception {
+        returns("varargs_int_no_stack", 15);
+    }
+
+
+    @Test
+    void varargs_struct()  throws Exception {
+        returns("varargs_struct", 163);
+    }
+
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {

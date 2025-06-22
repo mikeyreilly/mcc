@@ -30,4 +30,5 @@ public final class Pseudo implements Reg {
     public int hashCode() {
         return Objects.hash(identifier, type, isStatic);
     }
+
 }

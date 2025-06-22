@@ -130,7 +130,7 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
-                case FunCall(String _, ArrayList<ValIr> args, ValIr dst) -> {
+                case FunCall(String _, ArrayList<ValIr> args, boolean _, ValIr dst) -> {
                     currentLiveVars.remove(dst);
                     for (var src : args) {
                         if (src instanceof VarIr v) {
@@ -241,6 +241,8 @@ See p. 606 */
                 }
                 case LabelIr _, Jump _, Ignore _ -> {}
 
+                default ->
+                        throw new IllegalStateException("Unexpected value: " + instruction);
             }
         }
         annotateBlock(block.nodeId(), currentLiveVars, blockAnnotations);
@@ -370,7 +372,7 @@ See p. 606 */
                 }
                 len = pc.doubleArguments().size();
                 for (int i = 0; i < len; i++) {
-                    used.add(Codegen.DOUBLE_REGISTERS[i]);
+                    used.add(DOUBLE_REGISTERS[i]);
                 }
                 return new Pair<>(used, Set.of(DI, SI, DX, CX, R8, R9, AX,
                         XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8,
@@ -469,6 +471,7 @@ See p. 606 */
                 return new Pair<>(used, Set.of());
             }
             case LabelIr _, Jump _, Comment _, Nullary _ -> {}
+            case Test test -> throw new Todo();
         }
         return EMPTY_PAIR;
     }

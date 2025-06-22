@@ -14,14 +14,14 @@ public class Lexer {
     static final Token[] TOKEN_TYPES_TO_MATCH =
             new Token[]{LABEL,IDENTIFIER, SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ, BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ, SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
                     CHAR_LITERAL, STRING_LITERAL, DOUBLE_LITERAL,
-                    UNSIGNED_LONG_LITERAL, UNSIGNED_INT_LITERAL,
+                    UNSIGNED_LONG_LITERAL, HEX_INT_LITERAL, UNSIGNED_INT_LITERAL,
                     CLOSE_BRACE, LONG_LITERAL, INT_LITERAL, SEMICOLON,
                     SINGLE_LINE_COMMENT, MULTILINE_COMMENT, DECREMENT,
                     INCREMENT, BITWISE_NOT, ARROW, SUB, ADD, IMUL, DIVIDE, BITWISE_XOR, REMAINDER,
                     AND, OR, EQUALS, NOT_EQUALS, SHL, LESS_THAN_OR_EQUAL,
                     SAR, GREATER_THAN_OR_EQUAL, LESS_THAN, GREATER_THAN, NOT,
                     BECOMES, QUESTION_MARK, COLON, COMMA, BITWISE_AND, BITWISE_OR, OPEN_BRACKET,
-                    CLOSE_BRACKET, DOT};
+                    CLOSE_BRACKET, ELLIPSIS, DOT};
 
     public static ArrayList<Token> lex(String src) {
         Matcher matcher = IDENTIFIER.regex.matcher(src);
@@ -54,6 +54,7 @@ public class Lexer {
                         else if (tokenType == LABEL
                                 || tokenType == IDENTIFIER
                                 || tokenType == DOUBLE_LITERAL
+                                || tokenType == HEX_INT_LITERAL
                                 || tokenType == INT_LITERAL
                                 || tokenType == LONG_LITERAL
                                 || tokenType == UNSIGNED_INT_LITERAL
@@ -62,6 +63,9 @@ public class Lexer {
                             int start = matcher.start();
                             String value = src.substring(start, end);
                             Token token = switch (value) {
+                                case  "__builtin_c23_va_start" -> BUILTIN_C23_VA_START ;
+                                case  "__builtin_va_arg" -> BUILTIN_VA_ARG ;
+                                case  "__builtin_va_end" -> BUILTIN_VA_END ;
                                 case "break" -> BREAK;
                                 case "char" -> CHAR;
                                 case "continue" -> CONTINUE;

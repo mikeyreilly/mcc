@@ -80,10 +80,9 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-                List<Instruction> instructionAsms = functionAsm.instructions;
                 RegisterAllocator.allocateRegisters(functionAsm);
-                AtomicLong offset = replacePseudoRegisters(instructionAsms,
-                        functionAsm.returnInMemory);
+                AtomicLong offset = replacePseudoRegisters(functionAsm);
+                functionAsm.stackSize = -offset.get();
                 fixUpInstructions(offset, functionAsm);
             }
         }
@@ -125,9 +124,16 @@ public class Codegen {
         } : op1;
     }
 
-    private static AtomicLong replacePseudoRegisters(
-            List<Instruction> instructions, boolean returnInMemory) {
-        AtomicLong offset = new AtomicLong(returnInMemory ? -16 : -8);
+    private static AtomicLong replacePseudoRegisters(FunctionAsm functionAsm) {
+
+        List<Instruction> instructions = functionAsm.instructions;
+
+        boolean returnInMemory = functionAsm.returnInMemory;
+        // for varargs functions we reserve 176 bytes (8 bytes for each of 6
+        // GPRs and 16 bytes for each of XMM0-XMM8)
+        long reservedSpace = functionAsm.callsVaStart ? 176 : 0;
+        if (returnInMemory) reservedSpace += 8;
+        AtomicLong offset = new AtomicLong(-reservedSpace);
         Map<String, Long> varTable = new HashMap<>();
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
@@ -176,50 +182,18 @@ public class Codegen {
                                 , varTable, offset));
                 case Comment comment -> comment;
                 case Pop pop -> throw new Todo();
+                case Test test -> throw new Todo();
             };
             instructions.set(i, newInst);
         }
         return offset;
     }
 
-    public static long calculateStackAdjustment(long bytesForLocals,
-                                                long calleeSavedCount) {
-        long calleeSavedBytes = 8 * calleeSavedCount;
-        long totalStackBytes = calleeSavedBytes + bytesForLocals;
-        long adjustedStackBytes = roundAwayFromZero(totalStackBytes, 16);
-
-        return adjustedStackBytes - calleeSavedBytes;
-    }
-
-    /**
-     * If both args are same sign then rounds away from zero, if args are not
-     * same sign does something you probably don't want.
-     */
-    private static long roundAwayFromZero(long dividend, long divisor) {
-        long remainder = dividend % divisor;
-        if (remainder == 0) return dividend;
-        return dividend + divisor - remainder;
-    }
-
     private static void fixUpInstructions(AtomicLong offset,
                                           FunctionAsm function) {
         var instructions = function.instructions;
-        // Fix up instructions
-        long stackSize = -offset.get();
-        // round up to next multiple of 16 (makes it easier to maintain
-        // alignment during function calls
-        long remainder = stackSize % 16;
-        if (remainder != 0) {
-            stackSize += (16 - remainder);
-        }
         IntegerReg[] calleeSavedRegs = function.calleeSavedRegs;
         int calleeSavedCount = calleeSavedRegs.length;
-        // push in reverse direction so we can pop in forward direction
-        for (IntegerReg r : calleeSavedRegs) {
-            instructions.addFirst(new Push(r));
-        }
-        instructions.addFirst(new Binary(SUB, QUADWORD,
-                new Imm(calculateStackAdjustment(stackSize, calleeSavedCount)), SP));
 
         // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
         for (int i = instructions.size() - 1; i >= 0; i--) {
@@ -515,7 +489,10 @@ public class Codegen {
             case VarIr(
                     String identifier) when valToType(val) instanceof Structure ->
                     new PseudoMem(identifier, offset);
-            default -> throw new AssertionError(val);
+            default -> {
+                if (offset == 0) yield toOperand(val);
+                else throw new AssertionError(val);
+            }
         };
     }
 
@@ -570,8 +547,7 @@ public class Codegen {
             return false;
         } else {
             Structure st = (Structure) t;
-            List<StructureType> classes =
-                    classifyStructure(st);
+            List<StructureType> classes = classifyStructure(st);
             return classes.getFirst() == StructureType.MEMORY;
         }
     }
@@ -588,8 +564,7 @@ public class Codegen {
         } else {
             String nameOfRetVal = ((VarIr) retVal).identifier();
             Structure st = (Structure) SYMBOL_TABLE.get(nameOfRetVal).type();
-            List<StructureType> classes =
-                    classifyStructure(st);
+            List<StructureType> classes = classifyStructure(st);
 
             if (classes.getFirst() == StructureType.MEMORY) {
                 return new ReturnValueClassification(Collections.emptyList(),
@@ -621,14 +596,14 @@ public class Codegen {
                                        List<Instruction> instructionAsms) {
         // so for classify we can classify operands here
         if (funCall instanceof FunCall(String name, ArrayList<ValIr> args,
-                                       ValIr dst)) {
+                                       boolean varargs, ValIr dst)) {
 
             final boolean returnInMemory;
             List<TypedOperand> intDests = Collections.emptyList();
             List<Operand> doubleDests = Collections.emptyList();
             int regIndex = 0;
             if (dst != null) {
-                ReturnValueClassification r = classifyReturnValue((VarIr) dst);
+                ReturnValueClassification r = classifyReturnValue(dst);
                 intDests = r.intDests;
                 doubleDests = r.doubleDests;
                 returnInMemory = r.returnInMemory;
@@ -701,6 +676,10 @@ public class Codegen {
                     instructionAsms.add(new Push(AX));
                 }
             }
+            if (varargs) {
+                instructionAsms.add(new Mov(LONGWORD,
+                        new Imm(doubleArguments.size()), AX));
+            }
             instructionAsms.add(new Call(name));
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
@@ -771,19 +750,20 @@ public class Codegen {
         for (var v : aliasedVars) {
             Mcc.setAliased(v.identifier());
         }
-        List<Instruction> ins = new ArrayList<>();
         List<Var> functionType = functionIr.type();
         List<TypedOperand> operands = new ArrayList<>();
         for (Var param : functionType) {
             var t = toTypeAsm(param.type());
             String name = param.name();
             operands.add(new TypedOperand(t, new Pseudo(name, t, false,
-                    Mcc.SYMBOL_TABLE.get(name).aliased)));
+                    SYMBOL_TABLE.get(name).aliased)));
         }
 
         boolean returnInMemory =
                 classifyReturnValueLight(functionIr.returnType());
         int regIndex = 0;
+        List<Instruction> ins = new ArrayList<>();
+
         if (returnInMemory) {
             ins.add(new Mov(QUADWORD, DI, new Memory(BP, -8)));
             regIndex = 1;
@@ -824,10 +804,11 @@ public class Codegen {
                 Operand src = new Memory(BP, offset);
                 copyBytes(ins, src, to.operand(), size);
             } else
-                ins.add(new Mov(to.type(), new Memory(BP, 16 + i * 8),
+                ins.add(new Mov(to.type(), new Memory(BP, 16 + i * 8L),
                         to.operand()));
             offset += 8;
         }
+        // so I guess we now have overflow_arg_area = Memory(BP, offset)
         for (InstructionIr inst : instructionIrs) {
             switch (inst) {
                 case AddPtr(ValIr ptrV, ValIr indexV, int scale,
@@ -946,7 +927,7 @@ public class Codegen {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV);
                     TypeAsm typeAsm = valToAsmType(srcV);
-                    assert (typeAsm == valToAsmType(dstV));
+                    assert (valToAsmType(dstV).equals(typeAsm));
                     if (typeAsm instanceof ByteArray(long size,
                                                      long alignment)) {
                         copyBytes(ins, src, dst, size);
@@ -1028,7 +1009,8 @@ public class Codegen {
                     }
                     ins.add(new JmpCC(NOT_EQUALS,
                             type.unsignedOrDoubleOrPointer(), label));
-                    if (typeAsm == DOUBLE) // v is NaN which is not equal to zero (but jne treats it like it is)
+                    if (typeAsm == DOUBLE) // v is NaN which is not equal to
+                        // zero (but jne treats it like it is)
                         ins.add(new JmpCC(null, true, label));
                 }
                 case JumpIfZero(ValIr v, String label) -> {
@@ -1039,12 +1021,11 @@ public class Codegen {
                             ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0,
                                     XMM0));
                             ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
-                            LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
-                            ins.add(new JmpCC(null,
-                                    true, endLabel.label()));
+                            LabelIr endLabel = newLabel(Mcc.makeTemporary(
+                                    ".Lend."));
+                            ins.add(new JmpCC(null, true, endLabel.label()));
 
-                            ins.add(new JmpCC(EQUALS,
-                                    true, label));
+                            ins.add(new JmpCC(EQUALS, true, label));
                             ins.add(endLabel);
                         } else {
                             ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
@@ -1181,12 +1162,162 @@ public class Codegen {
                     } else ins.add(new Mov(typeAsm, src, toOperand(dstV)));
                 }
                 case Ignore.IGNORE -> {}
+                case BuiltinC23VaStartIr(VarIr vaList) -> {
+//                    field   offset
+//                    gp_offset	0
+//                    fp_offset	4
+//                    overflow_arg_area	8
+//                    reg_save_area	16
+
+                    // gp_offset The element holds the offset in bytes from
+                    // reg_save_area to the
+                    //place where the next available general purpose argument
+                    // register is saved
+
+                    ins.add(new Mov(LONGWORD, Imm.ZERO,
+                            new PseudoMem(vaList.identifier(), 0)));
+
+                    //fp_offset The element holds the offset in bytes from
+                    // reg_save_area to the
+                    //place where the next available floating point argument
+                    // register is saved.
+                    ins.add(new Mov(LONGWORD, new Imm(48),
+                            new PseudoMem(vaList.identifier(), 4)));
+                    // overflow_arg_area
+                    ins.add(new Lea(new Memory(BP, offset),
+                            new PseudoMem(vaList.identifier(), 8)));
+
+                    // reg_save_area The element points to the start of the
+                    // register save area.
+                    ins.add(new Lea(new Memory(BP, -176),
+                            new PseudoMem(vaList.identifier(), 16)));
+
+
+                    //      throw new Todo("implement prologue first");
+                }
+                case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) -> {
+                    emitBuiltInVarArg(vaList, dst, ins, type);
+                }
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
             }
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(),
-                returnInMemory, ins, toRegisters(returnValueClassification));
+                returnInMemory, ins, toRegisters(returnValueClassification),
+                functionIr.callsVaStart());
+    }
+
+    private static void emitBuiltInVarArg(VarIr vaList, VarIr dst,
+                                          List<Instruction> ins, Type type) {
+
+        int numGp = 0;
+        int numFp = 0;
+        boolean floatFirst = false;
+        boolean canBePassedInRegisters = false;
+        long typeSize = Mcc.size(type);
+
+        if (type.isScalar()) {
+            canBePassedInRegisters = true;
+            if (type == Primitive.DOUBLE) numFp++;
+            else numGp++;
+        } else if (typeSize <= 16) {
+            canBePassedInRegisters = true;
+            if (type instanceof Structure structure) {
+                List<StructureType> classes = classifyStructure(structure);
+                for (int i = 0; i < classes.size(); i++) {
+                    var c = classes.get(i);
+                    if (c == StructureType.SSE) {
+                        numFp++;
+                        floatFirst = i == 0;
+                    } else if (c == StructureType.INTEGER) numGp++;
+                }
+            }
+        }
+
+        LabelIr stackLabel = newLabel(Mcc.makeTemporary(".Lstack."));
+        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
+
+        Operand gpOffset = new PseudoMem(vaList.identifier(), 0);
+        Operand fpOffset = new PseudoMem(vaList.identifier(), 4);
+
+// 1. Determine whether type may be passed in the registers. If not go to
+// step 7.
+// 2. Compute num_gp to hold the number of general purpose registers needed
+// to pass type
+// and num_fp to hold the number of floating point registers needed.
+// 3. Verify whether arguments fit into registers. In the case:
+// l->gp_offset > 48 − num_gp ∗ 8
+// or
+// l->fp_offset > 176 − num_fp ∗ 16
+// go to step 7.
+        if (canBePassedInRegisters) {
+            if (numGp>0) {
+                // is register available?
+                ins.add(new Cmp(LONGWORD, new Imm(48 - numGp * 8L), gpOffset));
+                // if not use stack
+                ins.add(new JmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
+            }
+            if (numFp>0) {
+                // is register available?
+                ins.add(new Cmp(LONGWORD, new Imm(176 - numFp * 16L), fpOffset));
+                // if not use stack
+                ins.add(new JmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
+            }
+// 4. Fetch type from l->reg_save_area with an offset of l->gp_offset and/or
+// l->fp_offset. This may require copying to a temporary location in case the
+// parameter is passed in different register classes or requires an alignment
+// greater
+// than 8 for general purpose registers and 16 for XMM registers.
+            for (int i = numFp + numGp - 1; i >= 0; i--) {
+                boolean isFp = numGp == 0 || (numFp == 1 && (floatFirst ?
+                        i == 0 : i == 1));
+
+                // add gp_offset/fp_offset to reg_save_area
+                var regSaveArea = new PseudoMem(vaList.identifier(), 16);
+                ins.add(new Mov(QUADWORD, regSaveArea, AX));
+                ins.add(new Mov(LONGWORD, isFp ? fpOffset : gpOffset, DX));
+                ins.add(new Binary(ADD, QUADWORD, DX, AX));
+                // mov what's at address gp_offset+reg_save_area to dst
+                int offset=i*8;
+// 6. Return the fetched type.
+                ins.add(new Mov(QUADWORD, new Memory(AX, 0),
+                        toOperand(dst, offset)));
+            }
+
+// 5. Set:
+// l->gp_offset = l->gp_offset + num_gp ∗ 8
+// l->fp_offset = l->fp_offset + num_fp ∗ 16.            if (numGp > 0)
+                ins.add(new Binary(ADD, LONGWORD, new Imm(8L * numGp), gpOffset));
+            if (numFp > 0)
+                ins.add(new Binary(ADD, LONGWORD, new Imm(16L * numFp), fpOffset));
+            ins.add(new Jump(endLabel.label()));
+
+
+        }
+
+
+
+// 7. Align l->overflow_arg_area upwards to a 16 byte boundary if alignment
+// needed by
+// type exceeds 8 byte boundary.
+
+
+
+        ins.add(stackLabel);
+
+        // 8. Fetch type from l->overflow_arg_area.
+// 9. Set l->overflow_arg_area to:
+// l->overflow_arg_area + sizeof(type)
+        var overFlowArgArea = new PseudoMem(vaList.identifier(), 8);
+        ins.add(new Mov(QUADWORD, overFlowArgArea, AX));
+//        ins.add(new Mov(QUADWORD, new Memory(AX, 0), toOperand(dst)));
+        copyBytes(ins,new Memory(AX, 0),toOperand(dst,0), typeSize);
+// 10. Align l->overflow_arg_area upwards to an 8 byte boundary.
+// 11. Return the fetched type.
+        long nextSlotOffset=ProgramAsm.roundAwayFromZero(typeSize, Math.max(Mcc.typeAlignment(type), 8));
+        ins.add(new Binary(ADD, QUADWORD, new Imm(nextSlotOffset), overFlowArgArea));
+        ins.add(endLabel);
+
     }
 
     private static void compareDouble(CmpOperator op1, TypeAsm typeAsm,
@@ -1324,8 +1455,7 @@ public class Codegen {
                     default -> throw new AssertionError();
                 };
                 Type t = SYMBOL_TABLE.get(identifier).type();
-                List<StructureType> classes =
-                        classifyStructure(t);
+                List<StructureType> classes = classifyStructure(t);
                 boolean useStack = true;
                 long structSize = type.size();
                 if (classes.getFirst() != StructureType.MEMORY) {
@@ -1379,26 +1509,6 @@ public class Codegen {
 
     enum StructureType {MEMORY, SSE, INTEGER}
 
-    private static List<StructureType> oldclassifyStructure(StructDef structDef) {
-        int size = structDef.size();
-        var members = structDef.members();
-        if (size > 16) {
-            return Collections.nCopies((size / 8) + (size % 8 == 0 ? 0 : 1),
-                    StructureType.MEMORY);
-        }
-        ArrayList<Type> scalarTypes = new ArrayList<>();
-        flattenTypes(scalarTypes, members);
-        Type a = scalarTypes.getFirst();
-        if (size > 8) {
-            Type z = scalarTypes.getLast();
-            return List.of(a == Primitive.DOUBLE ? StructureType.SSE :
-                    StructureType.INTEGER, z == Primitive.DOUBLE ?
-                    StructureType.SSE : StructureType.INTEGER);
-        }
-        return List.of(a == Primitive.DOUBLE ? StructureType.SSE :
-                StructureType.INTEGER);
-    }
-
     public static List<StructureType> classifyStructure(Type t) {
         long size = Mcc.size(t);
         if (size > 16) {
@@ -1409,7 +1519,8 @@ public class Codegen {
             }
             return result;
         } else {
-            StructureType[] classes = classifyEightbytes(0, StructureType.SSE, StructureType.SSE, t);
+            StructureType[] classes = classifyEightbytes(0, StructureType.SSE
+                    , StructureType.SSE, t);
             if (size > 8) {
                 List<StructureType> result = new ArrayList<>();
                 result.add(classes[0]);
@@ -1421,7 +1532,10 @@ public class Codegen {
         }
     }
 
-    private static StructureType[] classifyEightbytes(long offset, StructureType first, StructureType second, Type type) {
+    private static StructureType[] classifyEightbytes(long offset,
+                                                      StructureType first,
+                                                      StructureType second,
+                                                      Type type) {
         if (type == Primitive.DOUBLE) {
             return new StructureType[]{first, second};
         } else if (type.isScalar()) {
@@ -1435,7 +1549,8 @@ public class Codegen {
             StructureType one = first, two = second;
             for (var memberEntry : members) {
                 Type member = memberEntry.type();
-                StructureType[] result = classifyEightbytes(offset, one, two, member);
+                StructureType[] result = classifyEightbytes(offset, one, two,
+                        member);
                 one = result[0];
                 two = result[1];
             }
@@ -1446,18 +1561,19 @@ public class Codegen {
             for (var memberEntry : members) {
                 Type member = memberEntry.type();
                 long memberOffset = offset + memberEntry.offset();
-                StructureType[] result = classifyEightbytes(memberOffset, one, two, member);
+                StructureType[] result = classifyEightbytes(memberOffset, one
+                        , two, member);
                 one = result[0];
                 two = result[1];
             }
             return new StructureType[]{one, two};
-        } else if (type instanceof Array array) {
-            Type elementType = array.element();
-            long elemSize = Mcc.size(elementType);
+        } else if (type instanceof Array(Type element, Constant arraySize)) {
+            long elemSize = Mcc.size(element);
             StructureType one = first, two = second;
-            for (long i = 0; i < array.arraySize().toLong(); i++) {
+            for (long i = 0; i < arraySize.toLong(); i++) {
                 long currentOffset = offset + (i * elemSize);
-                StructureType[] result = classifyEightbytes(currentOffset, one, two, elementType);
+                StructureType[] result = classifyEightbytes(currentOffset,
+                        one, two, element);
                 one = result[0];
                 two = result[1];
             }

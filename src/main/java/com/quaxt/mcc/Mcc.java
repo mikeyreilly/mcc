@@ -27,7 +27,13 @@ public class Mcc {
     private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
     public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>();
-    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>();
+    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>(){
+        @Override
+        public StructDef put(String key, StructDef value) {
+            return super.put(key, value);
+        }
+    };
+
     public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
 
     public static void setAliased(String identifier) {
@@ -239,8 +245,31 @@ public class Mcc {
         if (preprocessExitCode != 0) {
             return preprocessExitCode;
         }
-        ArrayList<Token> l = Lexer.lex(Files.readString(intermediateFile));
+        String cSource = Files.readString(intermediateFile);
         Files.delete(intermediateFile);
+
+        mccHelper("""
+                struct __builtin_va_list_item {
+                    unsigned int gp_offset;
+                    unsigned int fp_offset;
+                    void *overflow_arg_area;
+                    void *reg_save_area;
+                };
+                
+                typedef struct __builtin_va_list_item  __builtin_va_list[1];
+                """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null,
+                null, true, Collections.emptyList());
+        BUILTIN_VA_LIST = Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
+
+        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs);
+    }
+    public static Type BUILTIN_VA_LIST = null;
+    private static int mccHelper(String cSource, Mode mode,
+                                 EnumSet<Optimization> optimizations,
+                                 Path srcFile, String bareFileName,
+                                 boolean doNotCompile,
+                                 List<String> libs) throws IOException, InterruptedException {
+        ArrayList<Token> l = Lexer.lex(cSource);
         if (mode == Mode.LEX) {
             return 0;
         }
@@ -279,8 +308,7 @@ public class Mcc {
         if (mode == Mode.COMPILE) {
             return 0;
         }
-        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile,
-                libs);
+        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile, libs);
         Files.delete(asmFile);
         return exitCode;
     }
