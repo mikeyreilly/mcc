@@ -6,6 +6,7 @@ import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Parser;
 import com.quaxt.mcc.parser.Program;
+import com.quaxt.mcc.parser.TokenList;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.IrGen;
 import com.quaxt.mcc.tacky.ProgramIr;
@@ -137,7 +138,7 @@ public class Mcc {
     public static int preprocess(Path cFile,
                                  Path iFile) throws IOException,
             InterruptedException {
-        return startProcess("gcc", "-E", "-P",
+        return startProcess("gcc", "-E", //"-P",
                 cFile.toString(), "-o", iFile.toString());
     }
 
@@ -269,13 +270,13 @@ public class Mcc {
                                  Path srcFile, String bareFileName,
                                  boolean doNotCompile,
                                  List<String> libs) throws IOException, InterruptedException {
-        ArrayList<Token> l = Lexer.lex(cSource);
+        TokenList l = Lexer.lex(cSource);
         if (mode == Mode.LEX) {
             return 0;
         }
         Program program = Parser.parseProgram(l);
         if (!l.isEmpty()) {
-            throw new IllegalArgumentException("Unexpected token " + l.getFirst());
+            throw makeErr("Unexpected token " + l.getFirst(), l);
         }
         if (mode == Mode.PARSE) {
             return 0;
@@ -321,5 +322,12 @@ public class Mcc {
         }
         throw new IllegalArgumentException(fileName + " does not have ending "
                 + ending);
+    }
+
+    public static Err makeErr(String s, TokenList tokens) {
+        if (tokens!=null) {
+            return new Err(s+" "+ tokens.positionString());
+        }
+        return new Err(s);
     }
 }
