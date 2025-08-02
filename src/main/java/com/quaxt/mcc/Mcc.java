@@ -56,6 +56,8 @@ public class Mcc {
             case CHAR -> 1;
             case UCHAR -> 1;
             case SCHAR -> 1;
+            case SHORT -> 2;
+            case USHORT -> 2;
             case INT -> 4;
             case UINT -> 4;
             case LONG -> 8;
@@ -77,6 +79,8 @@ public class Mcc {
             case CHAR -> 1;
             case UCHAR -> 1;
             case SCHAR -> 1;
+            case SHORT -> 2;
+            case USHORT -> 2;
             case INT -> 4;
             case UINT -> 4;
             case LONG -> 8;
@@ -97,6 +101,8 @@ public class Mcc {
             case CHAR -> 1;
             case UCHAR -> 1;
             case SCHAR -> 1;
+            case SHORT -> 2;
+            case USHORT -> 2;
             case INT -> 4;
             case UINT -> 4;
             case LONG -> 8;

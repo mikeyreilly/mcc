@@ -1,9 +1,9 @@
 package com.quaxt.mcc.parser;
 
 import com.quaxt.mcc.Token;
-import com.quaxt.mcc.TokenType;
 
 import java.util.ArrayList;
+import java.util.stream.Stream;
 
 public class TokenList  {
     String currentFilename;
@@ -44,6 +44,10 @@ public class TokenList  {
         var pos = positions.get(positionsIndex);
 
         return " at " + filenames.get(pos.file) + ":" + (pos.lineNumber + 1);
+    }
+
+    public Stream<Token> stream() {
+        return tokens.subList(cursor, tokens.size()).stream();
     }
 
     record Position(int file, int lineNumber, int tokenIndex) {}

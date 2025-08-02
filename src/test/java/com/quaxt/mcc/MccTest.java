@@ -39,7 +39,7 @@ class MccTest {
     }
     private static void returns(String testProgram,
                                 int expectedExitCode) throws Exception {
-        assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c"));
+        assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c", "--optimize"));
         assertEquals(expectedExitCode,
                 Mcc.startProcess("src/test/resources/" + testProgram));
     }
@@ -72,6 +72,11 @@ class MccTest {
     @Test
     void varargs_struct()  throws Exception {
         returns("varargs_struct", 163);
+    }
+
+    @Test
+    void short_test()  throws Exception {
+        returns("short", 5);
     }
 
     @AfterAll

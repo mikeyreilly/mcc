@@ -4,6 +4,10 @@ package com.quaxt.mcc.parser;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.semantic.*;
+import com.quaxt.mcc.tacky.InstructionIr;
+import com.quaxt.mcc.tacky.IrGen;
+import com.quaxt.mcc.tacky.ReturnIr;
+import com.quaxt.mcc.tacky.ValIr;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -12,11 +16,14 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.SAR_EQ;
+import static com.quaxt.mcc.Mcc.makeErr;
 import static com.quaxt.mcc.TokenType.*;
 import static com.quaxt.mcc.TokenType.VOID;
 import static com.quaxt.mcc.UnaryOperator.POST_DECREMENT;
 import static com.quaxt.mcc.UnaryOperator.POST_INCREMENT;
+import static com.quaxt.mcc.optimizer.Optimizer.optimizeInstructions;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
+import static com.quaxt.mcc.semantic.SemanticAnalysis.typeCheckAndConvert;
 
 public class Parser {
 
@@ -56,6 +63,7 @@ public class Parser {
         switch (tokens.getFirst()) {
             case VOID -> ts = PrimitiveTypeSpecifier.VOID;
             case CHAR -> ts = PrimitiveTypeSpecifier.CHAR;
+            case SHORT -> ts = PrimitiveTypeSpecifier.SHORT;
             case INT -> ts = PrimitiveTypeSpecifier.INT;
             case LONG -> ts = PrimitiveTypeSpecifier.LONG;
             case DOUBLE -> ts = PrimitiveTypeSpecifier.DOUBLE;
@@ -159,10 +167,11 @@ public class Parser {
     }
 
     private static Token expect(Token expected, TokenList tokens) {
-        Token token = tokens.removeFirst();
+        Token token = tokens.getFirst();
         if (expected != token.type()) {
-            throw new IllegalArgumentException("Expected " + expected + ", " + "got " + token);
+            throw makeErr("Expected " + expected + ", " + "got " + token, tokens);
         }
+        tokens.removeFirst();
         return token;
     }
 
@@ -374,7 +383,7 @@ public class Parser {
     record AbstractArrayDeclarator(AbstractDeclarator abstractDeclarator,
                                    Constant arraySize) implements AbstractDeclarator {}
 
-    private static String debugTokens(List<Token> tokens) {
+    private static String debugTokens(TokenList tokens) {
         return tokens.stream().map(Object::toString).collect(Collectors.joining(" "));
     }
 
@@ -440,7 +449,7 @@ public class Parser {
         } else {
             while (tokens.getFirst() == OPEN_BRACKET) {
                 tokens.removeFirst();
-                var c = parseConst(tokens, false);
+                Constant c = parseConstExp(tokens, typeAliases);
                 if (c instanceof DoubleInit) {
                     throw new Err("illegal non-integer array size");
                 }
@@ -450,6 +459,26 @@ public class Parser {
         }
         return d;
     }
+
+    private static Constant parseConstExp(TokenList tokens,
+                                          ArrayList<Map<String, Type>> typeAliases) {
+        int cursorAtStart=tokens.cursor;
+        Exp e = parseExp(tokens, 0, false, typeAliases);
+        e= typeCheckAndConvert(e);
+        if (e instanceof Constant c) return c;
+        List<InstructionIr> foo=new ArrayList<>();
+        var r=new Return(e);
+        IrGen.compileStatement(r,foo);
+        foo=optimizeInstructions(
+                EnumSet.allOf(Optimization.class), foo);
+        if (foo.size()==1 && foo.getFirst() instanceof ReturnIr(Constant val)) {
+            return val;
+        }
+        tokens.cursor = cursorAtStart;
+        throw makeErr("Expected constant but found "+tokens.getFirst(), tokens);
+    }
+
+
 
     private static NameDeclTypeParams processDeclarator(Declarator declarator,
                                                         Type baseType) {
@@ -743,7 +772,7 @@ public class Parser {
                 init = null;
                 break;
             default:
-                throw Mcc.makeErr("Expected ; or =, got " + token, tokens);
+                throw makeErr("Expected ; or =, got " + token, tokens);
         }
 
 
@@ -761,13 +790,15 @@ public class Parser {
             ArrayList<Map<String, Type>> typeAliases) {
         if (specifiers.isEmpty()) return null;
         StorageClass storageClass = null;
+        boolean foundChar = false;
+        boolean foundShort = false;
         boolean foundInt = false;
         boolean foundLong = false;
         boolean foundSigned = false;
         boolean foundUnsigned = false;
-        boolean foundChar = false;
         boolean foundDouble = false;
         boolean foundVoid = false;
+
         Type type = null;
 
         for (DeclarationSpecifier x : specifiers) {
@@ -785,7 +816,7 @@ public class Parser {
                     }
                     switch (s) {
                         case DOUBLE -> {
-                            if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble) {
+                            if (foundInt || foundShort || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble) {
                                 fail("can't combine double with other type " + "specifiers");
                             }
                             foundDouble = true;
@@ -796,12 +827,17 @@ public class Parser {
                             else foundInt = true;
                         }
                         case CHAR -> {
-                            if (foundChar || foundInt || foundLong || foundDouble || foundVoid)
+                            if (foundChar || foundInt || foundShort || foundLong || foundDouble || foundVoid)
                                 fail("invalid type specifier");
                             else foundChar = true;
                         }
+                        case SHORT -> {
+                            if (foundLong || foundShort || foundChar || foundDouble || foundVoid)
+                                fail("invalid type specifier");
+                            else foundShort = true;
+                        }
                         case LONG -> {
-                            if (foundLong || foundChar || foundDouble || foundVoid)
+                            if (foundLong || foundShort || foundChar || foundDouble || foundVoid)
                                 fail("invalid type specifier");
                             else foundLong = true;
                         }
@@ -816,26 +852,26 @@ public class Parser {
                             else foundUnsigned = true;
                         }
                         case VOID -> {
-                            if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
+                            if (foundInt || foundShort || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
                                 fail("can't combine void with other type " +
                                         "specifiers");
                             foundVoid = true;
                         }
                         default ->
-                                throw new Todo("This compiler doesn't yet " + "support the type: " + s);
+                                throw new Todo("This compiler doesn't yet support the type: " + s);
                     }
 
                 }
 
                 case StructOrUnionSpecifier structOrUnionSpecifier -> {
                     if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
-                        fail("can't combine struct or union with other type " + "specifiers");
+                        fail("can't combine struct or union with other type specifiers");
                     type = new Structure(structOrUnionSpecifier.isUnion(),
                             structOrUnionSpecifier.tag());
                 }
                 case TypedefName(String name) -> {
                     if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
-                        fail("can't combine struct or union with other type " + "specifiers");
+                        fail("can't combine struct or union with other type specifiers");
                     type = findTypeByName(typeAliases, name);
                 }
             }
@@ -843,10 +879,12 @@ public class Parser {
         if (type == null) {
             if (foundUnsigned) {
                 if (foundLong) type = Primitive.ULONG;
+                else if (foundShort) type = Primitive.USHORT;
                 else if (foundChar) type = Primitive.UCHAR;
                 else type = Primitive.UINT;
             } else {
                 if (foundLong) type = Primitive.LONG;
+                else if (foundShort) type = Primitive.SHORT;
                 else if (foundDouble) type = Primitive.DOUBLE;
                 else if (foundChar)
                     type = foundSigned ? Primitive.SCHAR : Primitive.CHAR;
@@ -864,7 +902,7 @@ public class Parser {
     private static boolean isTypeSpecifier(TokenList tokens, int start,
                                            ArrayList<Map<String, Type>> typeAliases) {
         Token first = tokens.get(start);
-        if (CHAR == first || INT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first || UNION == first)
+        if (CHAR == first || INT == first || SHORT ==first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first || UNION == first)
             return true;
         return typeAliases != null && first instanceof TokenWithValue(
                 Token type,
@@ -1420,7 +1458,7 @@ public class Parser {
     }
 
     private static Exp fail(String s) {
-        throw Mcc.makeErr(s, null);
+        throw makeErr(s, null);
     }
 
     private record TypeAndStorageClass(Type type, StorageClass storageClass,

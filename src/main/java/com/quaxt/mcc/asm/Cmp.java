@@ -14,6 +14,7 @@ public record Cmp(TypeAsm type, Operand subtrahend,
     public String format(TypeAsm t) {
         return switch (t) {
             case BYTE -> "cmpb	";
+            case WORD -> "cmpw	";
             case LONGWORD -> "cmpl	";
             case QUADWORD -> "cmpq	";
             case DOUBLE -> "comisd	";

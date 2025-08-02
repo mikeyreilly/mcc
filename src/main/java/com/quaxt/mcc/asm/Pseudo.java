@@ -1,5 +1,7 @@
 package com.quaxt.mcc.asm;
 
+import com.quaxt.mcc.Err;
+
 import java.util.Objects;
 
 public final class Pseudo implements Reg {

@@ -11,6 +11,7 @@ public sealed interface Instruction extends AbstractInstruction permits Binary, 
         return this.getClass().getSimpleName().toLowerCase() + switch (t) {
             case ByteArray byteArray -> "q";
             case BYTE -> "b";
+            case WORD -> "w";
             case LONGWORD -> "l";
             case QUADWORD -> "q";
             case DOUBLE -> "sd";

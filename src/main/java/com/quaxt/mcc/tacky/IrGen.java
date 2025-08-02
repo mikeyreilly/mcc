@@ -224,7 +224,7 @@ public class IrGen {
     }
 
 
-    private static void compileStatement(Statement i,
+    public static void compileStatement(Statement i,
                                          List<InstructionIr> instructions) {
         switch (i) {
             case BuiltinC23VaStart(Var exp) -> {
@@ -363,20 +363,22 @@ public class IrGen {
 
             case null:
                 return null;
-            case IntInit c:
+            case Constant<?> c:
                 return new PlainOperand(c);
-            case LongInit c:
-                return new PlainOperand(c);
-            case UIntInit c:
-                return new PlainOperand(c);
-            case ULongInit c:
-                return new PlainOperand(c);
-            case DoubleInit c:
-                return new PlainOperand(c);
-            case CharInit c:
-                return new PlainOperand(c);
-            case UCharInit c:
-                return new PlainOperand(c);
+//            case IntInit c:
+//                return new PlainOperand(c);
+//            case LongInit c:
+//                return new PlainOperand(c);
+//            case UIntInit c:
+//                return new PlainOperand(c);
+//            case ULongInit c:
+//                return new PlainOperand(c);
+//            case DoubleInit c:
+//                return new PlainOperand(c);
+//            case CharInit c:
+//                return new PlainOperand(c);
+//            case UCharInit c:
+//                return new PlainOperand(c);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
                 ValIr cond = emitTackyAndConvert(condition, instructions);
@@ -733,7 +735,7 @@ public class IrGen {
         throw new AssertionError();
     }
 
-    private static ValIr emitTackyAndConvert(Exp e,
+    public static ValIr emitTackyAndConvert(Exp e,
                                              List<InstructionIr> instructions) {
         ExpResult result = emitTacky(e, instructions);
         return switch (result) {

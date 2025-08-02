@@ -476,7 +476,9 @@ public class SemanticAnalysis {
                 // > 2^31
                 case UINT -> new UIntInit((int) (long) d);
                 case CHAR, SCHAR -> new CharInit((byte) (long) d);
+                case SHORT -> new ShortInit((short) (long) d);
                 case UCHAR -> new UCharInit((byte) doubleToUnsignedLong(d));
+                case USHORT -> new UShortInit((short) doubleToUnsignedLong(d));
                 default ->
                         throw new IllegalArgumentException("not a const:" + init);
             };
@@ -485,6 +487,8 @@ public class SemanticAnalysis {
             case IntInit(int i) -> i;
             case CharInit(byte i) -> i;
             case UCharInit(byte i) -> i & 0xff;
+            case ShortInit(short i) -> i;
+            case UShortInit(short i) -> i & 0xffff;
             case LongInit(long l) -> l;
             case UIntInit(int i) -> Integer.toUnsignedLong(i);
             case ULongInit(long l) -> l;
@@ -503,6 +507,8 @@ public class SemanticAnalysis {
             case UINT -> new UIntInit((int) initL);
             case CHAR, SCHAR -> new CharInit((byte) initL);
             case UCHAR -> new UCharInit((byte) initL);
+            case SHORT -> new ShortInit((short) initL);
+            case USHORT -> new UShortInit((short) initL);
             case Pointer _ -> new ULongInit((int) initL);
             default -> null;
         };
@@ -975,7 +981,7 @@ public class SemanticAnalysis {
         return t instanceof Primitive && t != VOID;
     }
 
-    private static Exp typeCheckAndConvert(Exp exp) {
+    public static Exp typeCheckAndConvert(Exp exp) {
         if (exp == null) return null;
         var typedE = typeCheckExpression(exp);
         return switch (typedE.type()) {

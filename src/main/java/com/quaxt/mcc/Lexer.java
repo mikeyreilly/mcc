@@ -54,7 +54,7 @@ public class Lexer {
 
             }
             boolean atStartOfLine = i - startOfLine <= 1;
-            if (atStartOfLine && src.charAt(i) == '#' && i < len - 1 && src.charAt(i + 1) == ' ') {
+            while (atStartOfLine && src.charAt(i) == '#' && i < len - 1 && src.charAt(i + 1) == ' ') {
                 int startOfLineNumber = i + 2;
                 int endOfLineNumber = startOfLineNumber;
                 char c;
@@ -119,6 +119,7 @@ public class Lexer {
                                 case "int" -> INT;
                                 case "long" -> LONG;
                                 case "return" -> RETURN;
+                                case "short" -> SHORT;
                                 case "switch" -> SWITCH;
                                 case "typedef" -> TYPEDEF;
                                 case "case" -> CASE;

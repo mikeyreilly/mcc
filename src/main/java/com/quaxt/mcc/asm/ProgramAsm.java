@@ -53,9 +53,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private static String formatOperand(TypeAsm t, Instruction s, Operand o) {
         if (o instanceof IntegerReg reg) {
             return "%" + switch (t) {
+                case BYTE -> reg.b;
+                case WORD -> reg.w;
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
-                case BYTE -> reg.b;
                 case ByteArray _ -> reg.q;
                 default ->
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
@@ -104,6 +105,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private static void writeValue(PrintWriter out, StaticInit init) {
         out.println("                " + switch (init) {
             case DoubleInit(double d) -> ".quad " + Double.doubleToLongBits(d);
+            case ShortInit(short l) -> ".value " + l;
+            case UShortInit(short l) -> ".value " + Integer.toUnsignedString(l & 0xffff);
             case IntInit(int l) -> ".long " + l;
             case LongInit(long l) -> ".quad " + l;
             case UIntInit(int l) -> ".long " + Integer.toUnsignedString(l);

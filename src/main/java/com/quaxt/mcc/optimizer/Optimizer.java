@@ -36,6 +36,14 @@ public class Optimizer {
                                              EnumSet<Optimization> optimizations) {
         CURRENT_FUNCTION_NAME = f.name();
         List<InstructionIr> instructions = f.instructions();
+        instructions = optimizeInstructions(optimizations, instructions);
+        return new FunctionIr(f.name(), f.global(), f.type(), instructions,
+                f.returnType(), f.callsVaStart());
+    }
+
+    public static List<InstructionIr> optimizeInstructions(
+            EnumSet<Optimization> optimizations,
+            List<InstructionIr> instructions) {
         boolean updated = true;
         while (updated) {
             updated = false;
@@ -57,8 +65,7 @@ public class Optimizer {
             instructions = cfgToInstructions(cfg);
 
         }
-        return new FunctionIr(f.name(), f.global(), f.type(), instructions,
-                f.returnType(), f.callsVaStart());
+        return instructions;
     }
 
     public static Set<VarIr> addressTakenAnalysis(
