@@ -135,6 +135,8 @@ public class Lexer {
                                 case "const" -> CONST;
                                 case "volatile" -> VOLATILE;
                                 case "restrict" -> RESTRICT;
+                                case "__restrict__" -> RESTRICT;
+                                case "__restrict" -> RESTRICT;
                                 case "_Atomic" -> ATOMIC;
                                 default -> new TokenWithValue(tokenType, value);
                             };

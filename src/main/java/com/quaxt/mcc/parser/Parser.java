@@ -357,7 +357,9 @@ public class Parser {
         return new DoWhile(body, condition, null);
     }
 
-    sealed interface Declarator permits ArrayDeclarator, FunDeclarator, Ident
+    sealed interface ParameterDeclaration permits Declarator, AbstractDeclarator {}
+
+    sealed interface Declarator extends ParameterDeclaration permits ArrayDeclarator, FunDeclarator, Ident
             , PointerDeclarator {}
 
     record Ident(String identifier) implements Declarator {}
@@ -370,13 +372,13 @@ public class Parser {
     record FunDeclarator(List<ParamInfo> params, Declarator declarator,
                          boolean varargs) implements Declarator {}
 
-    record ParamInfo(Type type, Declarator declarator) {}
+    record ParamInfo(Type type, ParameterDeclaration declarator) {}
 
 
     record NameDeclTypeParams(String name, Type type,
                               ArrayList<String> paramNames) {}
 
-    sealed interface AbstractDeclarator permits AbstractArrayDeclarator,
+    sealed interface AbstractDeclarator extends ParameterDeclaration permits AbstractArrayDeclarator,
             AbstractBase, AbstractPointer, DirectAbstractDeclarator {}
 
     record AbstractBase() implements AbstractDeclarator {}
@@ -435,6 +437,7 @@ public class Parser {
     private static Declarator parseDeclarator(TokenList tokens,
                                               ArrayList<Map<String, Type>> typeAliases) {
         Token t = tokens.removeFirst();
+        if (t==RESTRICT) t=tokens.removeFirst();
         Declarator d = switch (t) {
             case OPEN_PAREN -> {
                 Declarator inner = parseDeclarator(tokens, typeAliases);
@@ -475,8 +478,9 @@ public class Parser {
                             parseTypeAndStorageClass(specifiers, typeAliases);
                     if (typeAndStorageClass.storageClass() != null)
                         fail("error: storage class specified for parameter");
-                    Declarator paramDeclarator = parseDeclarator(tokens,
-                            typeAliases);
+                    ParameterDeclaration paramDeclarator = parseParameterDeclaration(tokens, typeAliases);
+//                    Declarator paramDeclarator = parseDeclarator(tokens,
+//                            typeAliases);
                     NameDeclTypeParams nameDeclTypeParams =
                             processDeclarator(paramDeclarator,
                                     typeAndStorageClass.type());
@@ -484,6 +488,7 @@ public class Parser {
                             paramDeclarator));
 
                     Token token = tokens.removeFirst();
+                    if (token == RESTRICT) token = tokens.removeFirst();
                     if (token == CLOSE_PAREN) break;
                     else if (token != COMMA)
                         throw new IllegalArgumentException("Expected COMMA, " + "got " + token);
@@ -503,6 +508,19 @@ public class Parser {
             }
         }
         return d;
+    }
+
+    private static ParameterDeclaration parseParameterDeclaration(TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
+//        parameter-declaration:
+//            attribute-specifier-sequenceopt declaration-specifiers declarator
+//            attribute-specifier-sequenceopt declaration-specifiers abstract-declaratoropt
+        int cursorAtStart = tokens.cursor;
+        try {
+            return parseDeclarator(tokens, typeAliases);
+        } catch (Err e){
+            tokens.cursor = cursorAtStart;
+            return parseAbstractDeclarator(tokens);
+        }
     }
 
     private static Constant parseConstExp(TokenList tokens,
@@ -525,7 +543,7 @@ public class Parser {
     }
 
 
-    private static NameDeclTypeParams processDeclarator(Declarator declarator,
+    private static NameDeclTypeParams processDeclarator(ParameterDeclaration declarator,
                                                         Type baseType) {
         return switch (declarator) {
             case Ident(String name) ->
@@ -561,6 +579,8 @@ public class Parser {
                 Array derivedType = new Array(baseType, size);
                 yield processDeclarator(inner, derivedType);
             }
+            case AbstractDeclarator abstractDeclarator->
+                    new NameDeclTypeParams(null, processAbstractDeclarator(abstractDeclarator, baseType),new ArrayList<>());
         };
     }
 
