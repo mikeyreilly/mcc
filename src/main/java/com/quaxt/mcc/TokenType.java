@@ -4,6 +4,7 @@ import java.util.regex.Pattern;
 
 public enum TokenType implements Token {
     LABEL("([a-zA-Z_]\\w*)\\s*:", 1),
+    GCC_ATTRIBUTE("__attribute__"),
     IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), CHAR_LITERAL("'([^'\\\\\n" +
             "]|\\\\['\"\\\\?abfnrtv])'"), STRING_LITERAL("\"([^\"\\\\\n" +
@@ -17,6 +18,7 @@ public enum TokenType implements Token {
     BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
     UNSIGNED(), SIGNED(), GOTO(), CHAR(), SHORT(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),
     TYPEDEF(), CASE(),DEFAULT(),
+    CONST(), VOLATILE(), RESTRICT(), ATOMIC(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
     , SIZEOF(), STATIC(), STRUCT(), UNION(), DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
@@ -108,8 +110,13 @@ public enum TokenType implements Token {
             case UNSIGNED -> "unsigned";
             case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";
             case UNSIGNED_LONG_LITERAL -> "unsigned_long_literal";
+            case CONST -> "const";
+            case VOLATILE -> "volatile";
+            case RESTRICT -> "restrict";
+            case ATOMIC -> "_Atomic";
             case VOID -> "void";
             case WHILE -> "while";
+            case GCC_ATTRIBUTE -> "__attribute__";
         };
     }
 }

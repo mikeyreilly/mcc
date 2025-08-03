@@ -37,12 +37,14 @@ public class Parser {
         //        function-specifier declaration-specifiers(opt) (not supported)
         StorageClass storageClass;
         TypeSpecifier typeSpecifier;
-
+        TypeQualifier typeQualifier;
         var l = new ArrayList<DeclarationSpecifier>();
         while (true) {
             if (tokens.isEmpty() || tokens.getFirst().equals(SEMICOLON)) break;
             if ((storageClass = parseStorageClassSpecifier(tokens)) != null) {
                 l.add(storageClass);
+            } else if ((typeQualifier = parseTypeQualifier(tokens)) != null) {
+                l.add(typeQualifier);
             } else if ((typeSpecifier = parseTypeSpecifier(tokens,
                     typeAliases)) != null) {
                 typeAliases = null; // we only want to recognize a typedef
@@ -53,6 +55,21 @@ public class Parser {
         return l;
 
 
+    }
+
+    private static TypeQualifier parseTypeQualifier(TokenList tokens) {
+        TypeQualifier tq;
+        switch (tokens.getFirst()) {
+            case CONST -> tq = TypeQualifier.CONST;
+            case VOLATILE -> tq = TypeQualifier.VOLATILE;
+            case RESTRICT -> tq = TypeQualifier.RESTRICT;
+            case ATOMIC -> tq = TypeQualifier.ATOMIC;
+            default -> {
+                return null;
+            }
+        }
+        tokens.removeFirst();
+        return tq;
     }
 
 
@@ -136,8 +153,7 @@ public class Parser {
         return new StructOrUnionSpecifier(isUnion, tag, members);
     }
 
-    private static StorageClass parseStorageClassSpecifier(
-            TokenList tokens) {
+    private static StorageClass parseStorageClassSpecifier(TokenList tokens) {
         StorageClass sc;
         switch (tokens.getFirst()) {
             case TYPEDEF -> sc = StorageClass.TYPEDEF;
@@ -158,7 +174,7 @@ public class Parser {
     }
 
     private static Type findTypeByName(ArrayList<Map<String, Type>> stack,
-                                      String name) {
+                                       String name) {
         for (int i = stack.size() - 1; i >= 0; i--) {
             Type t = stack.get(i).get(name);
             if (t != null) return t;
@@ -169,14 +185,43 @@ public class Parser {
     private static Token expect(Token expected, TokenList tokens) {
         Token token = tokens.getFirst();
         if (expected != token.type()) {
-            throw makeErr("Expected " + expected + ", " + "got " + token, tokens);
+            if (token == GCC_ATTRIBUTE) {
+                stripGccAttribute(tokens);
+                return expect(expected, tokens);
+            }
+            throw makeErr("Expected " + expected + ", " + "got " + token,
+                    tokens);
         }
         tokens.removeFirst();
         return token;
     }
 
-    static Statement parseStatement(TokenList tokens,
-                                    List<String> labels, Switch enclosingSwitch,
+    private static void stripGccAttribute(TokenList tokens) {
+        int cursorAtStart = tokens.cursor;
+        tokens.removeFirst();
+
+        if (tokens.removeFirst() == OPEN_PAREN && tokens.removeFirst() == OPEN_PAREN) {
+            int openCount = 2;
+            while (!tokens.isEmpty()) {
+                Token t = tokens.removeFirst();
+                if (t == OPEN_PAREN) openCount++;
+                if (t == CLOSE_PAREN) {
+                    openCount--;
+                    if (openCount == 0) return;
+                }
+            }
+            tokens.cursor = cursorAtStart;
+            throw makeErr("Error parsing __attribute__. I never found closing \"))\""
+                    , tokens);
+        } else {
+            tokens.cursor = cursorAtStart;
+            throw makeErr("Error: __attribute__ should be followed by \"((\""
+                    , tokens);
+        }
+    }
+
+    static Statement parseStatement(TokenList tokens, List<String> labels,
+                                    Switch enclosingSwitch,
                                     ArrayList<Map<String, Type>> typeAliases) {
         Token token = tokens.getFirst();
         Token tokenType = token.type();
@@ -275,7 +320,8 @@ public class Parser {
                                                             ArrayList<Map<String, Type>> typeAliases) {
         // we can either have (args, paramN)
         // or (ap) - ap will be the name of the arg in the c code
-        // processing the va list. paramN is the name of the last parameter before the varags
+        // processing the va list. paramN is the name of the last parameter
+        // before the varags
         // This compiler doesn't do anything with paramN.
         expect(OPEN_PAREN, tokens);
         String ap = expectIdentifier(tokens);
@@ -289,16 +335,15 @@ public class Parser {
     }
 
     private static BuiltinVaEnd parseBuiltinVaEnd(TokenList tokens,
-                                                            List<String> labels,
-                                                            ArrayList<Map<String, Type>> typeAliases) {
+                                                  List<String> labels,
+                                                  ArrayList<Map<String, Type>> typeAliases) {
         expect(OPEN_PAREN, tokens);
         String ap = expectIdentifier(tokens);
         expect(CLOSE_PAREN, tokens);
         return new BuiltinVaEnd(new Var(ap, null));
     }
 
-    private static DoWhile parseDoWhile(TokenList tokens,
-                                        List<String> labels,
+    private static DoWhile parseDoWhile(TokenList tokens, List<String> labels,
                                         Switch enclosingSwitch,
                                         ArrayList<Map<String, Type>> typeAliases) {
         expect(DO, tokens);
@@ -322,8 +367,8 @@ public class Parser {
     record ArrayDeclarator(Declarator declarator,
                            Constant size) implements Declarator {}
 
-    record FunDeclarator(List<ParamInfo> params,
-                         Declarator declarator, boolean varargs) implements Declarator {}
+    record FunDeclarator(List<ParamInfo> params, Declarator declarator,
+                         boolean varargs) implements Declarator {}
 
     record ParamInfo(Type type, Declarator declarator) {}
 
@@ -402,8 +447,8 @@ public class Parser {
                                 String name) when type == IDENTIFIER ->
                     new Ident(name);
             default ->
-                    throw new Err("while parsing declarator found unexpected "
-                            + "token :" + t);
+                    throw makeErr("while parsing declarator found unexpected "
+                            + "token :" + t, tokens);
         };
         if (tokens.getFirst() == OPEN_PAREN) {
             tokens.removeFirst();
@@ -418,7 +463,7 @@ public class Parser {
                 params = new ArrayList<>();
 
                 while (true) {
-                    if (tokens.getFirst() == ELLIPSIS){
+                    if (tokens.getFirst() == ELLIPSIS) {
                         tokens.removeFirst();
                         varargs = true;
                         expect(CLOSE_PAREN, tokens);
@@ -462,22 +507,22 @@ public class Parser {
 
     private static Constant parseConstExp(TokenList tokens,
                                           ArrayList<Map<String, Type>> typeAliases) {
-        int cursorAtStart=tokens.cursor;
+        int cursorAtStart = tokens.cursor;
         Exp e = parseExp(tokens, 0, false, typeAliases);
-        e= typeCheckAndConvert(e);
+        e = typeCheckAndConvert(e);
         if (e instanceof Constant c) return c;
-        List<InstructionIr> foo=new ArrayList<>();
-        var r=new Return(e);
-        IrGen.compileStatement(r,foo);
-        foo=optimizeInstructions(
-                EnumSet.allOf(Optimization.class), foo);
-        if (foo.size()==1 && foo.getFirst() instanceof ReturnIr(Constant val)) {
+        List<InstructionIr> foo = new ArrayList<>();
+        var r = new Return(e);
+        IrGen.compileStatement(r, foo);
+        foo = optimizeInstructions(EnumSet.allOf(Optimization.class), foo);
+        if (foo.size() == 1 && foo.getFirst() instanceof ReturnIr(
+                Constant val)) {
             return val;
         }
         tokens.cursor = cursorAtStart;
-        throw makeErr("Expected constant but found "+tokens.getFirst(), tokens);
+        throw makeErr("Expected constant but found " + tokens.getFirst(),
+                tokens);
     }
-
 
 
     private static NameDeclTypeParams processDeclarator(Declarator declarator,
@@ -487,7 +532,8 @@ public class Parser {
                     new NameDeclTypeParams(name, baseType, new ArrayList<>());
             case PointerDeclarator(Declarator d) ->
                     processDeclarator(d, new Pointer(baseType));
-            case FunDeclarator(List<ParamInfo> params, Declarator d, boolean varargs) -> {
+            case FunDeclarator(List<ParamInfo> params, Declarator d,
+                               boolean varargs) -> {
 
                 ArrayList<String> paramNames = new ArrayList<>();
                 List<Type> paramTypes = new ArrayList<>();
@@ -502,7 +548,8 @@ public class Parser {
                     paramNames.add(name);
                     paramTypes.add(type);
                 }
-                FunType derivedType = new FunType(paramTypes, baseType, varargs);
+                FunType derivedType = new FunType(paramTypes, baseType,
+                        varargs);
                 yield new NameDeclTypeParams(switch (d) {
                     case Ident(String name) -> name;
                     default ->
@@ -517,8 +564,8 @@ public class Parser {
         };
     }
 
-    private static MemberDeclaration parseMemberDeclaration(
-            TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
+    private static MemberDeclaration parseMemberDeclaration(TokenList tokens,
+                                                            ArrayList<Map<String, Type>> typeAliases) {
         List<DeclarationSpecifier> specifiers =
                 parseDeclarationSpecifiers(tokens, typeAliases);
         TypeAndStorageClass typeAndStorageClass =
@@ -673,11 +720,12 @@ public class Parser {
         ArrayList<Map<String, Type>> typeAliases = new ArrayList<>();
         // built initial typeAliases. Will contain __builtin_va_list
         typeAliases.add(new HashMap<>());
-        SymbolTableEntry e=Mcc.SYMBOL_TABLE.get("__builtin_va_list");
+        SymbolTableEntry e = Mcc.SYMBOL_TABLE.get("__builtin_va_list");
         if (e != null) { // before Mcc.mcc loading the users c file, it loads
             // some built in source which is parsed and validated to
             // create __builtin_va_list. So during that parsing e will be null.
-            addTypedefToCurrentScope(typeAliases, "__builtin_va_list", e.type());
+            addTypedefToCurrentScope(typeAliases, "__builtin_va_list",
+                    e.type());
         }
         DeclarationList declarationList;
         while ((declarationList = parseDeclarationList(tokens, true,
@@ -733,7 +781,8 @@ public class Parser {
                 tokens.removeFirst();
             } else if (token.equals(OPEN_PAREN) || token.equals(IMUL) || token instanceof TokenWithValue(
                     Token type, String _) && type == IDENTIFIER) {
-                var decl = parseDeclaration(tokens, typeAndStorageClass, typeAliases);
+                var decl = parseDeclaration(tokens, typeAndStorageClass,
+                        typeAliases);
                 l.add(decl);
                 if (decl instanceof Function) break out;
             } else {
@@ -757,7 +806,6 @@ public class Parser {
         Type type = nameDeclTypeParams.type();
         ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
         if (type instanceof FunType funType) {
-
             return parseRestOfFunction(paramNames, tokens, name,
                     typeAndStorageClass.storageClass(), typeAliases, funType);
         }
@@ -800,6 +848,8 @@ public class Parser {
         boolean foundVoid = false;
 
         Type type = null;
+        EnumSet<TypeQualifier> typeQualifiers =
+                EnumSet.noneOf(TypeQualifier.class);
 
         for (DeclarationSpecifier x : specifiers) {
             switch (x) {
@@ -858,21 +908,24 @@ public class Parser {
                             foundVoid = true;
                         }
                         default ->
-                                throw new Todo("This compiler doesn't yet support the type: " + s);
+                                throw new Todo("This compiler doesn't yet " + "support the type: " + s);
                     }
 
                 }
 
                 case StructOrUnionSpecifier structOrUnionSpecifier -> {
                     if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
-                        fail("can't combine struct or union with other type specifiers");
+                        fail("can't combine struct or union with other type " + "specifiers");
                     type = new Structure(structOrUnionSpecifier.isUnion(),
                             structOrUnionSpecifier.tag());
                 }
                 case TypedefName(String name) -> {
                     if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
-                        fail("can't combine struct or union with other type specifiers");
+                        fail("can't combine struct or union with other type " + "specifiers");
                     type = findTypeByName(typeAliases, name);
+                }
+                case TypeQualifier typeQualifier -> {
+                    typeQualifiers.add(typeQualifier);
                 }
             }
         }
@@ -895,14 +948,15 @@ public class Parser {
         }
 
 
-        return new TypeAndStorageClass(type, storageClass, null);
+        return new TypeAndStorageClass(type, storageClass, null,
+                typeQualifiers);
 
     }
 
     private static boolean isTypeSpecifier(TokenList tokens, int start,
                                            ArrayList<Map<String, Type>> typeAliases) {
         Token first = tokens.get(start);
-        if (CHAR == first || INT == first || SHORT ==first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first || UNION == first)
+        if (CHAR == first || INT == first || SHORT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first || VOID == first || STRUCT == first || UNION == first)
             return true;
         return typeAliases != null && first instanceof TokenWithValue(
                 Token type,
@@ -916,7 +970,7 @@ public class Parser {
                                                 ArrayList<Map<String, Type>> typeAliases,
                                                 FunType funType) {
 
-        List<Type> paramTypes=funType.params();
+        List<Type> paramTypes = funType.params();
 
         List<Var> params = new ArrayList<>();
         for (int i = 0; i < paramNames.size(); i++) {
@@ -930,8 +984,8 @@ public class Parser {
             expect(SEMICOLON, tokens);
             block = null;
         }
-        return new Function(functionName, params, block,
-                funType, storageClass, false);
+        return new Function(functionName, params, block, funType,
+                storageClass, false);
     }
 
     private static String expectIdentifier(TokenList tokens) {
@@ -944,8 +998,8 @@ public class Parser {
         throw new IllegalArgumentException("Expected IDENTIFIER got " + token);
     }
 
-    private static Block parseBlock(TokenList tokens,
-                                    List<String> labels, Switch enclosingSwitch,
+    private static Block parseBlock(TokenList tokens, List<String> labels,
+                                    Switch enclosingSwitch,
                                     ArrayList<Map<String, Type>> typeAliases) {
         expect(OPEN_BRACE, tokens);
 
@@ -974,8 +1028,8 @@ public class Parser {
         return new Block(blockItems);
     }
 
-    private static While parseWhile(TokenList tokens,
-                                    List<String> labels, Switch enclosingSwitch,
+    private static While parseWhile(TokenList tokens, List<String> labels,
+                                    Switch enclosingSwitch,
                                     ArrayList<Map<String, Type>> typeAliases) {
         expect(WHILE, tokens);
         expect(OPEN_PAREN, tokens);
@@ -988,7 +1042,7 @@ public class Parser {
 
 
     private static Constant parseConst(String value, Type type, boolean hex) {
-        int base = hex?16:10;
+        int base = hex ? 16 : 10;
         if (type == Primitive.DOUBLE)
             return new DoubleInit(Double.parseDouble(value));
         if (type.isSigned()) {
@@ -1126,7 +1180,7 @@ public class Parser {
         if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
             tokens.removeFirst();
-            boolean isHex=HEX_INT_LITERAL==token.type();
+            boolean isHex = HEX_INT_LITERAL == token.type();
             switch (token.type()) {
                 case HEX_INT_LITERAL:
                 case INT_LITERAL:
@@ -1141,7 +1195,8 @@ public class Parser {
                         default -> 0;
                     });
 
-                    return parseConst(value.substring(isHex ? 2 : 0, len), t, isHex);
+                    return parseConst(value.substring(isHex ? 2 : 0, len), t,
+                            isHex);
                 }
                 case CHAR_LITERAL: {
                     return new IntInit(parseChar(value));
@@ -1192,7 +1247,7 @@ public class Parser {
             case BUILTIN_VA_ARG -> {
                 tokens.removeFirst();
                 expect(OPEN_PAREN, tokens);
-                String identifier=expectIdentifier(tokens);
+                String identifier = expectIdentifier(tokens);
                 expect(COMMA, tokens);
                 TypeName typeName = parseTypeName(tokens, typeAliases);
                 Type type = typeNameToType(typeName, typeAliases);
@@ -1253,7 +1308,9 @@ public class Parser {
                 expect(CLOSE_PAREN, tokens);
                 yield exp;
             }
-            default -> throw new Err("Expected either identifier, constant or (, found:" + tokens.getFirst());
+            default ->
+                    throw new Err("Expected either identifier, constant or (,"
+                            + " found:" + tokens.getFirst());
         };
     }
 
@@ -1299,7 +1356,7 @@ public class Parser {
                 }
             }
         }
-        for(int i = 0;i < consecutiveStringCount;i++){
+        for (int i = 0; i < consecutiveStringCount; i++) {
             tokens.removeFirst();
         }
         return new String(cs, 0, toIndex);
@@ -1441,8 +1498,7 @@ public class Parser {
         return new For(init, condition, post, body, null);
     }
 
-    private static Switch parseSwitch(TokenList tokens,
-                                      List<String> labels,
+    private static Switch parseSwitch(TokenList tokens, List<String> labels,
                                       ArrayList<Map<String, Type>> typeAliases) {
         expect(OPEN_PAREN, tokens);
         Exp switchExpression = parseExp(tokens, 0, true, typeAliases);
@@ -1462,6 +1518,7 @@ public class Parser {
     }
 
     private record TypeAndStorageClass(Type type, StorageClass storageClass,
-                                      String typeDefName) {}
+                                       String typeDefName,
+                                       EnumSet<TypeQualifier> typeQualifiers) {}
 
 }
