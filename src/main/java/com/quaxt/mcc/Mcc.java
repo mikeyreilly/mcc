@@ -64,7 +64,7 @@ public class Mcc {
             case ULONG -> 8;
             case DOUBLE -> 8;
             case VOID -> 1;
-            case Structure(boolean isUnion, String tag) -> {
+            case Structure(boolean isUnion, String tag, StructDef _) -> {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? 1 : st.alignment();
             }
@@ -87,7 +87,7 @@ public class Mcc {
             case ULONG -> 8;
             case DOUBLE -> 8;
             case VOID -> 1;
-            case Structure(boolean isUnion, String tag) -> TYPE_TABLE.get(tag).alignment();
+            case Structure(boolean isUnion, String tag, StructDef _) -> TYPE_TABLE.get(tag).alignment();
         };
     }
 
@@ -110,7 +110,7 @@ public class Mcc {
             case DOUBLE -> 8;
             case VOID -> 1;
 
-            case Structure(boolean isUnion, String tag) -> {
+            case Structure(boolean isUnion, String tag, StructDef _) -> {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? -1 : st.size();
             }

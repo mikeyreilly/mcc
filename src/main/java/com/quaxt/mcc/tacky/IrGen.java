@@ -42,7 +42,7 @@ public class IrGen {
                 }
                 case FunAttributes funAttributes -> {}
                 case IdentifierAttributes.LocalAttr localAttr -> {}
-                case StaticAttributes(InitialValue init, boolean global) -> {
+                case StaticAttributes(InitialValue init, boolean global, StorageClass _) -> {
                     if (init instanceof InitialValue.Tentative) {
                         tackyDefs.add(new StaticVariable(name, global,
                                 value.type(),
@@ -80,7 +80,8 @@ public class IrGen {
                 if (function.body != null) compileFunction(function);
             }
             case VarDecl(Var name, Initializer init, Type _,
-                         StorageClass storageClass) -> {
+                         StorageClass storageClass,
+                         StructOrUnionSpecifier structOrUnionSpecifier) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
                     assign(new VarIr(name.name()), init, instructions, 0);
@@ -97,7 +98,8 @@ public class IrGen {
         switch (init) {
             case CompoundInit(ArrayList<Initializer> inits,
                               Type compoundInitType) when compoundInitType instanceof Structure(boolean isUnion,
-                                                                                                String tag) -> {
+                                                                                                String tag,
+            StructDef _) -> {
                 ArrayList<MemberEntry> members =
                         Mcc.TYPE_TABLE.get(tag).members();
                 int limit = inits.size();
@@ -320,7 +322,7 @@ public class IrGen {
                 compileStatement(statement, instructions);
             }
             case BuiltinVaEnd builtinVaEnd -> {
-                // it's a NOOP
+                // it'structOrUnionSpecifier a NOOP
             }
         }
     }
@@ -625,7 +627,7 @@ public class IrGen {
                 // the
                 // "wrong" (index-first) order and it would make this code
                 // simpler.
-                // On the other hand,  it's not all that complicated and it
+                // On the other hand,  it'structOrUnionSpecifier not all that complicated and it
                 // is nice
                 // having the AST closely resemble the corresponding code
                 if (left.type() instanceof Pointer(Type referenced)) {
@@ -725,13 +727,13 @@ public class IrGen {
     }
 
     private static String tag(Exp structure) {
-        if (structure.type() instanceof Structure(boolean isUnion, String tag)) return tag;
+        if (structure.type() instanceof Structure(boolean isUnion, String tag, StructDef _)) return tag;
         throw new AssertionError();
     }
 
     private static String ptrTag(Exp structure) {
         if (structure.type() instanceof Pointer(
-                Type s) && s instanceof Structure(boolean isUnion, String tag)) return tag;
+                Type s) && s instanceof Structure(boolean isUnion, String tag, StructDef _)) return tag;
         throw new AssertionError();
     }
 

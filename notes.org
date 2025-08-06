@@ -1,0 +1,50 @@
+* <2025-08-04 Mon> Refactoring structs
+
+The current approach seems flawed. It's a bit of a mess having a Type
+Struct which doesn't know what its members are and another thing
+StructDef which is not even a type. It's particularly troublesome that
+geting from one to the other involves a lookup in a map by the struct
+tag. This is unworkable because of anonymous structs.
+
+So my naive idea is to convert Struct to a class, with a nullable
+field that can hold its members. The idea is that when we have an
+anonymous struct, we should also have members. And when we have a
+declaration of type struct, we can do the same kind of look up we do
+now to find the memebers.
+
+The problem is how to get there from what I have now. Currently we only support
+structs that have tags which means currently we can't do anything like
+
+    typedef stuct {
+        int foo;
+    } S;
+
+We could potentially add some bogus made up tag here and that would be
+an easier way of making this thing work. We could generate a tag that
+would only be in scope for the typedef itself.
+
+But that's a bit of a hack and we would have to have similar hacks elsewhere for when we encounter this kind of thing outsife of typedefs e.g.
+
+void foo(struct {int i;}){
+}
+
+Which triggers a warning in gcc
+
+anonymous struct declared inside parameter list will not be visible outside of this definition or declaration
+
+but appears to be legal, even if there is no use for it. Then there is this
+
+    int main(void) {
+        struct {int i;} s = {17};
+        return s.i;
+    }
+
+I don't know if my idea is actually workable. The main unknown is that sometimes in our code we hava
+
+struct s foo = bar;
+
+and we don't know at the time of parsing what the members of this
+struct s thing is. I think - maybe it's fine. Going to hack at it and
+see!
+
+

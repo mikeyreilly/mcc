@@ -12,7 +12,7 @@ import static com.quaxt.mcc.TokenType.*;
 
 public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
-    static final Token[] TOKEN_TYPES_TO_MATCH = new Token[]{LABEL, GCC_ATTRIBUTE, IDENTIFIER,
+    static final Token[] TOKEN_TYPES_TO_MATCH = new Token[]{LABEL, IDENTIFIER,
             SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ,
             BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ,
             SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE, CHAR_LITERAL,
@@ -106,6 +106,8 @@ public class Lexer {
                                         BUILTIN_C23_VA_START;
                                 case "__builtin_va_arg" -> BUILTIN_VA_ARG;
                                 case "__builtin_va_end" -> BUILTIN_VA_END;
+                                case "__asm__" -> ASM;
+                                case "__attribute__" -> GCC_ATTRIBUTE;
                                 case "break" -> BREAK;
                                 case "char" -> CHAR;
                                 case "continue" -> CONTINUE;

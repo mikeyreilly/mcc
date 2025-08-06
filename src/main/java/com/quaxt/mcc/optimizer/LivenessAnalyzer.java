@@ -239,6 +239,13 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
+                case BuiltinVaArgIr(VarIr src, VarIr dst, Type type) -> {
+                    currentLiveVars.remove(dst);
+                    currentLiveVars.add(src);
+                }
+                case BuiltinC23VaStartIr(VarIr dst) -> {
+                    currentLiveVars.remove(dst);
+                }
                 case LabelIr _, Jump _, Ignore _ -> {}
 
                 default ->

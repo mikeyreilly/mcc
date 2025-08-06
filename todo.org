@@ -1,5 +1,2 @@
-* line numbers in error messages
 * function pointers
-* attributes
-* const (and other type qualifiers)
-* short
+

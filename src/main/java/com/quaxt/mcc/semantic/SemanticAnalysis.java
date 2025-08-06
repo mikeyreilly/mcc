@@ -159,7 +159,7 @@ public class SemanticAnalysis {
         Initializer init = declaration.init();
         return new VarDecl(declaration.name(), loopLabelInitializer(init,
                 currentLabel, currentNonSwitchLabel), declaration.varType(),
-                declaration.storageClass());
+                declaration.storageClass(), declaration.structOrUnionSpecifier());
     }
 
     private static Initializer loopLabelInitializer(Initializer init,
@@ -196,9 +196,9 @@ public class SemanticAnalysis {
         }
     }
 
-    private static void typeCheckStructureDeclaration(
+    private static StructDef typeCheckStructureDeclaration(
             StructOrUnionSpecifier structDecl) {
-        if (structDecl.members() == null) return;
+        if (structDecl == null || structDecl.members() == null) return null;
         if (Mcc.TYPE_TABLE.containsKey(structDecl.tag())) {
             throw new Err("redefinition of struct");
         }
@@ -208,6 +208,7 @@ public class SemanticAnalysis {
         int structAlignment = 0;
         boolean isUnion = structDecl.isUnion();
         for (MemberDeclaration member : structDecl.members()) {
+            typeCheckStructureDeclaration(member.structOrUnionSpecifier());
             int memberAlignment = Mcc.typeAlignment(member.type());
             int memberOffset = isUnion ? 0 : roundUp(structSize,
                     memberAlignment);
@@ -220,8 +221,10 @@ public class SemanticAnalysis {
                     memberOffset + memberSize;
         }
         structSize = roundUp(structSize, structAlignment);
-        Mcc.TYPE_TABLE.put(structDecl.tag(), new StructDef(isUnion,
-                structAlignment, structSize, memberEntries));
+        var sd = new StructDef(isUnion,
+                structAlignment, structSize, memberEntries);
+        Mcc.TYPE_TABLE.put(structDecl.tag(), sd);
+        return sd;
     }
 
     private static int roundUp(int x, int n) {
@@ -257,7 +260,7 @@ public class SemanticAnalysis {
                 break out;
             }
 
-            case Structure(boolean isUnion, String tag) -> {
+            case Structure(boolean isUnion, String tag, StructDef _) -> {
                 size *= Mcc.TYPE_TABLE.get(tag).size();
                 break out;
             }
@@ -290,7 +293,7 @@ public class SemanticAnalysis {
                     case Pointer _, FunType _, Primitive _ ->
                             throw new Err("illegal compound initializer for " + "scalar type:" + targetType);
 
-                    case Structure(boolean isUnion, String tag) -> {
+                    case Structure(boolean isUnion, String tag, StructDef _) -> {
                         StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                         if (initsSize > structDef.members().size() || (isUnion && initsSize > 1)) {
                             throw new Err("Too many elements in " + (isUnion
@@ -365,7 +368,7 @@ public class SemanticAnalysis {
         STRING_TABLE.put(s, stringId);
         StringInit stringInit = new StringInit(s, true);
         StaticAttributes attrs =
-                new StaticAttributes(new Initial(Collections.singletonList(stringInit)), false);
+                new StaticAttributes(new Initial(Collections.singletonList(stringInit)), false,  STATIC);
         SYMBOL_TABLE.put(stringId, new SymbolTableEntry(new Pointer(CHAR),
                 attrs));
         return stringId;
@@ -385,12 +388,18 @@ public class SemanticAnalysis {
     }
 
     private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
+        var structOrUnionSpecifier = decl.structOrUnionSpecifier();
+        StructDef sd = null;
+        if (structOrUnionSpecifier != null){
+            sd = typeCheckStructureDeclaration(structOrUnionSpecifier);
+        }
         InitialValue initialValue;
         var varType = decl.varType();
-        if (varType == VOID) {
+        if (varType == VOID && decl.storageClass() != StorageClass.TYPEDEF) {
             fail("Can't declare void variable");
         }
-        if (!isComplete(varType) && (decl.storageClass() != EXTERN || decl.init() != null)) {
+        if (((sd != null && !isComplete(sd)) || !isComplete(varType))
+                && ((decl.storageClass() != EXTERN && decl.storageClass() != StorageClass.TYPEDEF) || decl.init() != null)) {
             fail("Can't declare incomplete variable");
         }
         if (decl.init() == null)
@@ -419,7 +428,7 @@ public class SemanticAnalysis {
                 fail("conflicting variable linkage");
 
             if (attrs instanceof StaticAttributes(InitialValue oldInit,
-                                                  boolean _)) {
+                                                  boolean _, StorageClass _)) {
 
                 if (oldInit instanceof Initial oldInitialConstant) {
                     if (initialValue instanceof Initial)
@@ -430,18 +439,18 @@ public class SemanticAnalysis {
             }
         }
         // when initializing a static pointer with a string
-        if (varType instanceof Pointer(Type referenced) && referenced == CHAR) {
+        if (varType instanceof Pointer(Type referenced) && referenced == CHAR && decl.storageClass() != StorageClass.TYPEDEF) {
             String uniqueName = makeTemporary(decl.name() + ".string.");
             StringInit stringInit =
                     (StringInit) ((Initial) initialValue).initList().getFirst();
             SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(CHAR,
                     new IntInit(stringInit.str().length() + 1)),
                     new ConstantAttr(stringInit)));
-            StaticAttributes attrs = new StaticAttributes(initialValue, global);
+            StaticAttributes attrs = new StaticAttributes(initialValue, global, decl.storageClass());
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
                     , attrs));
         } else {
-            StaticAttributes attrs = new StaticAttributes(initialValue, global);
+            StaticAttributes attrs = new StaticAttributes(initialValue, global, decl.storageClass());
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
                     , attrs));
         }
@@ -767,6 +776,7 @@ public class SemanticAnalysis {
     private static VarDecl typeCheckLocalVariableDeclaration(VarDecl decl) {
         validateTypeSpecifier(decl.varType());
         if (decl.varType() == VOID) fail("Can't declare void variable");
+        var sd=typeCheckStructureDeclaration(decl.structOrUnionSpecifier());
         if (!isComplete(decl.varType())) {
             if (decl.storageClass() != EXTERN)
                 fail("Attempt to declare variable of incomplete type with " + "non-external storage class");
@@ -784,7 +794,7 @@ public class SemanticAnalysis {
             } else {
                 SYMBOL_TABLE.put(decl.name().name(),
                         new SymbolTableEntry(decl.varType(),
-                                new StaticAttributes(NO_INITIALIZER, true)));
+                                new StaticAttributes(NO_INITIALIZER, true, decl.storageClass())));
             }
             return decl;
         } else if (decl.storageClass() == STATIC) {
@@ -805,19 +815,19 @@ public class SemanticAnalysis {
                     SYMBOL_TABLE.put(uniqueName,
                             new SymbolTableEntry(new Array(referenced,
                                     new IntInit((int) strlen(staticInits))),
-                                    new StaticAttributes(initialValue, false)));
+                                    new StaticAttributes(initialValue, false, decl.storageClass())));
                     SYMBOL_TABLE.put(decl.name().name(),
                             new SymbolTableEntry(decl.varType(),
-                                    new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false)));
+                                new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false, decl.storageClass())));
                 } else
                     throw new Err("Can't initialize pointer to " + referenced + " with string literal");
             } else
 
                 SYMBOL_TABLE.put(decl.name().name(),
                         new SymbolTableEntry(decl.varType(),
-                                new StaticAttributes(initialValue, false)));
+                            new StaticAttributes(initialValue, false, decl.storageClass())));
             return new VarDecl(new Var(decl.name().name(), decl.varType()),
-                    decl.init(), decl.varType(), decl.storageClass());
+                    decl.init(), decl.varType(), decl.storageClass(),decl.structOrUnionSpecifier());
         } else {
             Initializer init;
             Type type = decl.varType();
@@ -834,7 +844,7 @@ public class SemanticAnalysis {
 
 
             return new VarDecl(new Var(decl.name().name(), type), init, type,
-                    decl.storageClass());
+                    decl.storageClass(), decl.structOrUnionSpecifier());
         }
     }
 
@@ -899,7 +909,7 @@ public class SemanticAnalysis {
                             new Array(elementType, new ULongInit(initsSize))
                             : targetType);
                 } else if (targetType instanceof Structure(boolean isUnion,
-                                                           String tag)) {
+                                                           String tag, StructDef _)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     ArrayList<MemberEntry> members = structDef.members();
                     if (initsSize > members.size() || (isUnion && initsSize > 1)) {
@@ -940,7 +950,7 @@ public class SemanticAnalysis {
             case Pointer _ -> ULONG.zeroInitializer;
             case FunType funType -> throw new AssertionError(funType);
 
-            case Structure(boolean isUnion, String tag) -> {
+            case Structure(boolean isUnion, String tag, StructDef _) -> {
                 StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                 ArrayList<MemberEntry> members = structDef.members();
                 ArrayList<Initializer> typeCheckedList = new ArrayList<>();
@@ -987,7 +997,7 @@ public class SemanticAnalysis {
         return switch (typedE.type()) {
             case Array(Type element, _) ->
                     new AddrOf(typedE, new Pointer(element));
-            case Structure(boolean isUnion, String tag) -> {
+            case Structure(boolean isUnion, String tag, StructDef _) -> {
                 if (Mcc.TYPE_TABLE.containsKey(tag)) yield typedE;
                 else throw new Err("Invalid use of incomplete structure type");
             }
@@ -1035,7 +1045,7 @@ public class SemanticAnalysis {
 //                        new SymbolTableEntry(t, LOCAL_ATTR));
 //
 //                //ugh I thought I could use a temp var to get around
-//                evaluating left twice, but it's not that easy
+//                evaluating left twice, but it'structOrUnionSpecifier not that easy
 //                // need a way to separate the assignment part from the
 //                evaluate part
 //                yield typeCheckExpression(new Assignment(new Var(temp.name
@@ -1200,8 +1210,8 @@ public class SemanticAnalysis {
                 else if (isArithmeticType(t1) && isArithmeticType(t1))
                     commonType = getCommonType(t1, t2);
                 else if (t1 instanceof Structure(boolean isUnion1,
-                                                 String tag1) && t2 instanceof Structure(
-                        boolean isUnion2, String tag2) && tag1.equals(tag2)) {
+                                                 String tag1, StructDef _) && t2 instanceof Structure(
+                        boolean isUnion2, String tag2, StructDef _) && tag1.equals(tag2)) {
                     commonType = t1;
                 } else
                     throw new Err("Can't convert branches of conditional to " + "a" + " common type");
@@ -1323,7 +1333,7 @@ public class SemanticAnalysis {
                 Exp typedPointer = typeCheckAndConvert(pointer);
                 if (typedPointer.type() instanceof Pointer(
                         Type structure) && structure instanceof Structure(
-                        boolean isUnion, String tag)) {
+                        boolean isUnion, String tag, StructDef _)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
@@ -1336,7 +1346,7 @@ public class SemanticAnalysis {
             case Dot(Exp structure, String member, Type _) -> {
                 Exp typedStructure = typeCheckAndConvert(structure);
                 if (typedStructure.type() instanceof Structure(boolean isUnion,
-                                                               String tag)) {
+                                                               String tag, StructDef _)) {
                     StructDef structDef = Mcc.TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
@@ -1363,10 +1373,18 @@ public class SemanticAnalysis {
     private static boolean isComplete(Type t) {
         return switch (t) {
             case VOID -> false;
-            case Structure(boolean isUnion, String tag) ->
+            case Structure(boolean isUnion, String tag, StructDef _) ->
                     Mcc.TYPE_TABLE.containsKey(tag);
             default -> true;
         };
+    }
+
+    private static boolean isComplete(StructDef sd) {
+        if (sd==null) return true;
+        for(MemberEntry me:sd.members()){
+            if (!isComplete(me.type())) return false;
+        }
+        return true;
     }
 
     private static boolean isPointerToComplete(Type t1) {
@@ -1418,16 +1436,16 @@ public class SemanticAnalysis {
     public static Type resolveType(Type typeSpecifier,
                                    Map<String, StructureEntry> structureMap) {
         return switch (typeSpecifier) {
-            case Structure(boolean isUnion, String tag) -> {
+            case Structure(boolean isUnion, String tag, StructDef sd) -> {
                 StructureEntry e = structureMap.get(tag);
                 if (e != null) {
-                    if (e.isUnion() != isUnion) {
+                    if (e.isUnion() != isUnion && tag != null) {
                         throw new Err("incompatible with earlier declaration "
                                 + "of " + (e.isUnion() ? "union" : "struct") + " " + tag);
                     }
-                    yield new Structure(isUnion, e.name());
+                    yield new Structure(isUnion, e.name(), sd);
                 } else if ("__builtin_va_list_item.0".equals(tag)) {
-                    yield new Structure(isUnion, "__builtin_va_list_item.0");
+                    yield new Structure(isUnion, "__builtin_va_list_item.0", null);
                 } else throw new Err("Specified an undeclared tag: tag=" + tag);
             }
             case Pointer(Type referenced) ->
@@ -1467,6 +1485,7 @@ public class SemanticAnalysis {
     private static StructOrUnionSpecifier resolveStructureDeclaration(
             StructOrUnionSpecifier decl,
             Map<String, StructureEntry> structureMap) {
+        if (decl == null) return null;
         StructureEntry prevEntry = structureMap.get(decl.tag());
         String uniqueTag;
         if (prevEntry != null && prevEntry.fromCurrentScope()) {
@@ -1497,7 +1516,11 @@ public class SemanticAnalysis {
                         throw new Err("Duplicate structure member name");
                     }
                 }
-                processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name()));
+                StructOrUnionSpecifier sous = member.structOrUnionSpecifier();
+                if (sous != null && sous.members() != null) { // sous without members would already be resolved
+                    sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), structureMap);
+                }
+                processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name(), sous));
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
@@ -1509,12 +1532,17 @@ public class SemanticAnalysis {
             Map<String, StructureEntry> structureMap) {
         return switch (varDecl) {
             case VarDecl(Var name, Initializer init, Type type,
-                         StorageClass storageClass) -> {
+                         StorageClass storageClass,
+                         StructOrUnionSpecifier structOrUnionSpecifier) -> {
+                if (structOrUnionSpecifier != null){
+                    structOrUnionSpecifier = resolveStructureDeclaration(structOrUnionSpecifier,
+                            structureMap);
+                }
                 identifierMap.put(name.name(), new Entry(name.name(), true,
                         true));
                 Type t = resolveType(type, structureMap);
                 yield new VarDecl(new Var(name.name(), t), init, t,
-                        storageClass);
+                        storageClass, structOrUnionSpecifier);
             }
         };
     }
@@ -1566,7 +1594,7 @@ public class SemanticAnalysis {
                                            Map<String, StructureEntry> innerStructureMap) {
         List<Var> newParams = new ArrayList<>();
         for (Var d : parameters) {
-            if (identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
+            if (d.name()!=null && identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
                 fail("Duplicate variable declaration");
             }
             String uniqueName = makeTemporary(d.name() + ".");
@@ -1716,15 +1744,20 @@ public class SemanticAnalysis {
                     new Entry(decl.name().name(), true, true));
             return new VarDecl(decl.name(), decl.init(),
                     resolveType(decl.varType(), structureMap),
-                    decl.storageClass());
+                    decl.storageClass(), decl.structOrUnionSpecifier());
         }
         String uniqueName = makeTemporary(decl.name().name() + ".");
         identifierMap.put(decl.name().name(), new Entry(uniqueName, true,
                 false));
         var init = decl.init();
+        StructOrUnionSpecifier sous = decl.structOrUnionSpecifier();
+        if (sous != null && sous.members() != null) { // sous without members would already be resolved
+            sous = resolveStructureDeclaration(decl.structOrUnionSpecifier(), structureMap);
+        }
         return new VarDecl(new Var(uniqueName, null), resolveInitializer(init
                 , identifierMap, structureMap), resolveType(decl.varType(),
-                structureMap), decl.storageClass());
+                structureMap), decl.storageClass(),
+                sous);
     }
 
     private static Initializer resolveInitializer(Initializer init,

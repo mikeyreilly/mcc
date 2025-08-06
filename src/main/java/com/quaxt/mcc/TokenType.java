@@ -4,7 +4,6 @@ import java.util.regex.Pattern;
 
 public enum TokenType implements Token {
     LABEL("([a-zA-Z_]\\w*)\\s*:", 1),
-    GCC_ATTRIBUTE("__attribute__"),
     IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), CHAR_LITERAL("'([^'\\\\\n" +
             "]|\\\\['\"\\\\?abfnrtv])'"), STRING_LITERAL("\"([^\"\\\\\n" +
@@ -15,6 +14,8 @@ public enum TokenType implements Token {
     LONG_LITERAL("([0-9]+[lL])[^\\w.]", 1), HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
     , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*"),
     MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0),
+    ASM(),
+    GCC_ATTRIBUTE(),
     BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
     UNSIGNED(), SIGNED(), GOTO(), CHAR(), SHORT(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),
     TYPEDEF(), CASE(),DEFAULT(),
@@ -56,6 +57,7 @@ public enum TokenType implements Token {
     public String toString() {
         return switch (this) {
             case ARROW -> "->";
+            case ASM -> "__asm__";
             case BITWISE_NOT -> "bitwise_not";
             case BREAK -> "break";
             case CASE -> "case";

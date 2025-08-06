@@ -7,7 +7,6 @@ import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.InstructionIr;
 import com.quaxt.mcc.tacky.IrGen;
 import com.quaxt.mcc.tacky.ReturnIr;
-import com.quaxt.mcc.tacky.ValIr;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,6 +16,7 @@ import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.SAR_EQ;
 import static com.quaxt.mcc.Mcc.makeErr;
+import static com.quaxt.mcc.Mcc.makeTemporary;
 import static com.quaxt.mcc.TokenType.*;
 import static com.quaxt.mcc.TokenType.VOID;
 import static com.quaxt.mcc.UnaryOperator.POST_DECREMENT;
@@ -150,8 +150,15 @@ public class Parser {
         } else if (tag == null) {
             throw new Err("Expected either union identifer or '{', found: " + tokens.removeFirst());
         }
+        //MR-TODO something better
+        if (tag == null) tag = generateTagForAnonymousStructOrUnion();
         return new StructOrUnionSpecifier(isUnion, tag, members);
     }
+
+    private static String generateTagForAnonymousStructOrUnion() {
+        return makeTemporary("tag.");
+    }
+
 
     private static StorageClass parseStorageClassSpecifier(TokenList tokens) {
         StorageClass sc;
@@ -189,6 +196,10 @@ public class Parser {
                 stripGccAttribute(tokens);
                 return expect(expected, tokens);
             }
+            if (token == ASM) {
+                stripAsm(tokens);
+                return expect(expected, tokens);
+            }
             throw makeErr("Expected " + expected + ", " + "got " + token,
                     tokens);
         }
@@ -216,6 +227,30 @@ public class Parser {
         } else {
             tokens.cursor = cursorAtStart;
             throw makeErr("Error: __attribute__ should be followed by \"((\""
+                    , tokens);
+        }
+    }
+
+    private static void stripAsm(TokenList tokens) {
+        int cursorAtStart = tokens.cursor;
+        tokens.removeFirst();
+
+        if (tokens.removeFirst() == OPEN_PAREN ) {
+            int openCount = 1;
+            while (!tokens.isEmpty()) {
+                Token t = tokens.removeFirst();
+                if (t == OPEN_PAREN) openCount++;
+                if (t == CLOSE_PAREN) {
+                    openCount--;
+                    if (openCount == 0) return;
+                }
+            }
+            tokens.cursor = cursorAtStart;
+            throw makeErr("Error parsing __asm__. I never found closing \")\""
+                    , tokens);
+        } else {
+            tokens.cursor = cursorAtStart;
+            throw makeErr("Error: __attribute__ should be followed by \"(\""
                     , tokens);
         }
     }
@@ -503,6 +538,8 @@ public class Parser {
                 if (c instanceof DoubleInit) {
                     throw new Err("illegal non-integer array size");
                 }
+                if (c.toLong() < 0L)
+                    throw new Err("illegal negative array size");
                 d = new ArrayDeclarator(d, c);
                 expect(CLOSE_BRACKET, tokens);
             }
@@ -529,11 +566,11 @@ public class Parser {
         Exp e = parseExp(tokens, 0, false, typeAliases);
         e = typeCheckAndConvert(e);
         if (e instanceof Constant c) return c;
-        List<InstructionIr> foo = new ArrayList<>();
+        List<InstructionIr> irs = new ArrayList<>();
         var r = new Return(e);
-        IrGen.compileStatement(r, foo);
-        foo = optimizeInstructions(EnumSet.allOf(Optimization.class), foo);
-        if (foo.size() == 1 && foo.getFirst() instanceof ReturnIr(
+        IrGen.compileStatement(r, irs);
+        irs = optimizeInstructions(EnumSet.allOf(Optimization.class), irs);
+        if (irs.size() == 1 && irs.getFirst() instanceof ReturnIr(
                 Constant val)) {
             return val;
         }
@@ -598,7 +635,7 @@ public class Parser {
         var t = nameDeclTypeParams.type();
         if (t instanceof FunType)
             fail("error: member declaration can't be function");
-        return new MemberDeclaration(t, nameDeclTypeParams.name());
+        return new MemberDeclaration(t, nameDeclTypeParams.name(), typeAndStorageClass.structOrUnionSpecifier());
 
     }
 
@@ -697,7 +734,7 @@ public class Parser {
                         fail("can't combine void with other type specifiers");
                     if (types.get(1) instanceof TokenWithValue(Token type,
                                                                String tag) && type == IDENTIFIER)
-                        return new Structure(isUnion, tag);
+                        return new Structure(isUnion, tag, null);
                     else
                         fail("identifier expected following " + (isUnion ?
                                 "union" : "struct"));
@@ -790,8 +827,6 @@ public class Parser {
         boolean first = false;
         out:
         while (!tokens.isEmpty()) {
-            //MR-TODO that annoyting cornercase with typedef myint myint;
-            //System.out.println(tokens.getFirst());
             var token = tokens.getFirst();
             if (token.equals(SEMICOLON)) {
                 tokens.removeFirst();
@@ -808,7 +843,6 @@ public class Parser {
             } else {
                 break out;
             }
-
         }
         if (l.isEmpty()) {
             throw new Err("Expected identifier or (");
@@ -849,7 +883,8 @@ public class Parser {
         }
 
         return new VarDecl(new Var(name, type), init, type,
-                typeAndStorageClass.storageClass());
+                typeAndStorageClass.storageClass(),
+                typeAndStorageClass.structOrUnionSpecifier());
     }
 
 
@@ -866,7 +901,7 @@ public class Parser {
         boolean foundUnsigned = false;
         boolean foundDouble = false;
         boolean foundVoid = false;
-
+        StructOrUnionSpecifier structOrUnionSpecifier = null;
         Type type = null;
         EnumSet<TypeQualifier> typeQualifiers =
                 EnumSet.noneOf(TypeQualifier.class);
@@ -933,11 +968,12 @@ public class Parser {
 
                 }
 
-                case StructOrUnionSpecifier structOrUnionSpecifier -> {
+                case StructOrUnionSpecifier sous -> {
                     if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
                         fail("can't combine struct or union with other type " + "specifiers");
-                    type = new Structure(structOrUnionSpecifier.isUnion(),
-                            structOrUnionSpecifier.tag());
+                    type = new Structure(sous.isUnion(),
+                            sous.tag(), null);
+                    structOrUnionSpecifier = sous;
                 }
                 case TypedefName(String name) -> {
                     if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
@@ -969,7 +1005,7 @@ public class Parser {
 
 
         return new TypeAndStorageClass(type, storageClass, null,
-                typeQualifiers);
+                typeQualifiers, structOrUnionSpecifier);
 
     }
 
@@ -1281,7 +1317,7 @@ public class Parser {
                     case IDENTIFIER,
                          // if we're in the middle of a ?: expression we
                          // might have token type label (because of the
-                         // colon), but it's really an identifier
+                         // colon), but it'structOrUnionSpecifier really an identifier
                          LABEL -> {
                         tokens.removeFirst();
 
@@ -1465,7 +1501,7 @@ public class Parser {
 
     private static int getPrecedence(Token t) {
         return switch (t) {
-            // case CAST -> 60; just reminding myself it's higher than these
+            // case CAST -> 60; just reminding myself it'structOrUnionSpecifier higher than these
             // others
             case IMUL, DIVIDE, REMAINDER -> 50;
             case SUB, ADD -> 45;
@@ -1539,6 +1575,7 @@ public class Parser {
 
     private record TypeAndStorageClass(Type type, StorageClass storageClass,
                                        String typeDefName,
-                                       EnumSet<TypeQualifier> typeQualifiers) {}
+                                       EnumSet<TypeQualifier> typeQualifiers,
+                                       StructOrUnionSpecifier structOrUnionSpecifier) {}
 
 }

@@ -23,9 +23,20 @@ class MccTest {
         returns("typedef", 0);
     }
 
+
+    @Test
+    void typedef_struct_no_tag() throws Exception {
+        returns("typedef_struct_no_tag", 17);
+    }
+
     @Test
     void struct() throws Exception {
         returns("struct", 0);
+    }
+
+    @Test
+    void struct_anon_struct_member() throws Exception {
+        returns("struct_inline_struct_member", 36);
     }
 
     @Test

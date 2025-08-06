@@ -65,7 +65,7 @@ public class PropagateCopies {
                                 new Load(replaceOperand(ptr, reachingCopies), dst);
                         case Store(ValIr v, VarIr dst) ->
                                 new Store(replaceOperand(v, reachingCopies), dst);
-                        case GetAddress _, LabelIr _, Jump _ -> instr;
+                        case GetAddress _, LabelIr _, Jump _, BuiltinC23VaStartIr _ -> instr;
                         case Ignore.IGNORE -> instr;
 
                         case AddPtr(VarIr ptr, ValIr index, int scale,
@@ -92,6 +92,8 @@ public class PropagateCopies {
                                 new UIntToDouble(replaceOperand(v1, reachingCopies), dst);
                         case ZeroExtendIr(ValIr v1, VarIr dst) ->
                                 new ZeroExtendIr(replaceOperand(v1, reachingCopies), dst);
+                        case BuiltinVaArgIr(VarIr v1, VarIr dst, Type type) ->
+                                new BuiltinVaArgIr((VarIr) replaceOperand(v1, reachingCopies), dst, type);
 
                         default ->
                                 throw new IllegalStateException("Unexpected value: " + instr);
@@ -170,6 +172,10 @@ public class PropagateCopies {
                 case TruncateIr(ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case AddPtr(VarIr _, ValIr _, int _, VarIr dst) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case BuiltinC23VaStartIr(VarIr dst) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case BuiltinVaArgIr(VarIr _, VarIr dst, Type _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
                      ReturnIr _, Ignore _, Compare _ -> {}

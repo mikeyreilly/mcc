@@ -8,7 +8,7 @@ public record Imm(long i) implements Operand {
     public static final Operand ONE = new Imm(1);
 
     /**
-     * It's awkward if it doesn't fit in a signed int
+     * It'structOrUnionSpecifier awkward if it doesn't fit in a signed int
      */
     public boolean isAwkward() {
         int ii = (int) i;

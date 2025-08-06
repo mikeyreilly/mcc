@@ -4,6 +4,7 @@ import com.quaxt.mcc.*;
 import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.BinaryOp;
 import com.quaxt.mcc.parser.Constant;
+import com.quaxt.mcc.parser.StorageClass;
 import com.quaxt.mcc.parser.Var;
 import com.quaxt.mcc.registerallocator.RegisterAllocator;
 import com.quaxt.mcc.semantic.*;
@@ -100,12 +101,13 @@ public class Codegen {
                                 defined && classifyReturnValueLight(((FunType) v.type()).ret()));
                 case IdentifierAttributes.LocalAttr _ ->
                         new ObjEntry(toTypeAsm(v.type()), false, false);
-                case StaticAttributes _ ->
-                        new ObjEntry(toTypeAsm(v.type()), true, false);
+                case StaticAttributes sa ->
+                        sa.storageClass()== StorageClass.TYPEDEF ? null : new ObjEntry(toTypeAsm(v.type()), true, false);
                 case ConstantAttr _ ->
                         new ObjEntry(toTypeAsm(v.type()), true, true);
             };
-            BACKEND_SYMBOL_TABLE.put(e.getKey(), entry);
+            if (entry != null)
+                BACKEND_SYMBOL_TABLE.put(e.getKey(), entry);
         }
         for (StaticConstant v : CONSTANT_TABLE.values()) {
             BACKEND_SYMBOL_TABLE.put(v.label(), new ObjEntry(DOUBLE, true,
@@ -1280,7 +1282,7 @@ public class Codegen {
                 ins.add(new Mov(QUADWORD, regSaveArea, AX));
                 ins.add(new Mov(LONGWORD, isFp ? fpOffset : gpOffset, DX));
                 ins.add(new Binary(ADD, QUADWORD, DX, AX));
-                // mov what's at address gp_offset+reg_save_area to dst
+                // mov what'structOrUnionSpecifier at address gp_offset+reg_save_area to dst
                 int offset=i*8;
 // 6. Return the fetched type.
                 ins.add(new Mov(QUADWORD, new Memory(AX, 0),
@@ -1558,7 +1560,7 @@ public class Codegen {
                 two = result[1];
             }
             return new StructureType[]{one, two};
-        } else if (type instanceof Structure s) { // s is not uniion
+        } else if (type instanceof Structure s) { // structOrUnionSpecifier is not uniion
             ArrayList<MemberEntry> members = Mcc.members(s);
             StructureType one = first, two = second;
             for (var memberEntry : members) {
@@ -1593,7 +1595,7 @@ public class Codegen {
             switch (type) {
                 case Array(Type element, Constant arraySize) ->
                         types.addAll(Collections.nCopies((int) arraySize.toLong(), element));
-                case Structure(boolean isUnion, String tag) ->
+                case Structure(boolean isUnion, String tag, StructDef _) ->
                         flattenTypes(types, Mcc.TYPE_TABLE.get(tag).members());
                 default -> types.add(type);
             }
