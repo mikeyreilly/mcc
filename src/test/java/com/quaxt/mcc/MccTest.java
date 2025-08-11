@@ -4,6 +4,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -12,9 +14,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MccTest {
 
+    public static String startProcessAndCaptureOutput(String... args) throws InterruptedException, IOException {
+        ProcessBuilder pb = new ProcessBuilder(args);
+        pb.redirectErrorStream(true);
+        Process p=pb.start();
+        int ret=pb.start().waitFor();
+        byte[] bytes;
+        try (InputStream is = p.getInputStream()) {
+            bytes = is.readAllBytes();
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+    }
+
+
     @Test
     void canReturn42() throws Exception {
-        returns("hello", 42);
+        returns("return42", 42);
+    }
+
+    @Test
+    void hello_world() throws Exception {
+        outputs("hello_world", "hello world");
     }
 
 
@@ -54,6 +74,14 @@ class MccTest {
         assertEquals(expectedExitCode,
                 Mcc.startProcess("src/test/resources/" + testProgram));
     }
+    private static void outputs(String testProgram,
+                                String expectedOutput) throws Exception {
+        assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c", "--optimize"));
+        assertEquals(expectedOutput,
+                startProcessAndCaptureOutput("src/test/resources/" + testProgram));
+    }
+
+
 
     @Test
     void varargs1()  throws Exception {
