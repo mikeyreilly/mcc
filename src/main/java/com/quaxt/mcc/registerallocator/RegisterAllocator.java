@@ -116,6 +116,10 @@ public class RegisterAllocator {
 
 
                 case Test test -> {throw new Todo();}
+                case CallIndirect(Operand operand) -> {
+                    instructions.set(copyTo++, new CallIndirect(find(operand,
+                        coalescedRegs)));
+                }
             }
         }
         int oldSize = instructions.size();
@@ -296,6 +300,7 @@ public class RegisterAllocator {
                 }
 
             } else instructions.set(copyTo++, switch (instr) {
+                case CallIndirect(Operand address) ->new CallIndirect(replaceOperand(address, registerMap));
                 case Binary(ArithmeticOperator op, TypeAsm type, Operand src,
                             Operand dst) ->
                         new Binary(op, type, replaceOperand(src, registerMap)
@@ -446,6 +451,9 @@ public class RegisterAllocator {
 
         for (var instr : instructions) {
             switch (instr) {
+                case CallIndirect(Operand operand) -> {       incrementSpillCost(interferenceGraph,
+                        interferenceGraphMmx, operand);
+                }
                 case Binary(ArithmeticOperator op, TypeAsm type, Operand src,
                             Operand dst) -> {
                     if (op == ArithmeticOperator.DIVIDE) {
@@ -671,6 +679,7 @@ public class RegisterAllocator {
                                            List<Node> inteferenceGraphMmx) {
         for (var instr : instructions) {
             switch (instr) {
+                case CallIndirect(Operand address) -> maybeAddPseudo(address, interferenceGraph, inteferenceGraphMmx);
                 case Test test -> {throw new Todo();}
                 case Binary(ArithmeticOperator _, TypeAsm _, Operand src,
                             Operand dst) -> {

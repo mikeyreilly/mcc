@@ -130,7 +130,10 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
-                case FunCall(String _, ArrayList<ValIr> args, boolean _, ValIr dst) -> {
+                case FunCall(String name, ArrayList<ValIr> args, boolean _, boolean indirect, ValIr dst) -> {
+                    if (indirect) {
+                        currentLiveVars.add(new VarIr(name));
+                    }
                     currentLiveVars.remove(dst);
                     for (var src : args) {
                         if (src instanceof VarIr v) {
@@ -479,6 +482,12 @@ See p. 606 */
             }
             case LabelIr _, Jump _, Comment _, Nullary _ -> {}
             case Test test -> throw new Todo();
+            case CallIndirect(Operand op) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(op);
+                addMemoryAndIndexedRegsToUsed(op, used);
+                return new Pair<>(used, Set.of());
+            }
         }
         return EMPTY_PAIR;
     }

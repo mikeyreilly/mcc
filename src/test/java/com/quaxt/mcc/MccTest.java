@@ -26,6 +26,10 @@ class MccTest {
         }
     }
 
+    @Test
+    void function_pointer() throws Exception {
+        returns("function_pointer", 64);
+    }
 
     @Test
     void canReturn42() throws Exception {

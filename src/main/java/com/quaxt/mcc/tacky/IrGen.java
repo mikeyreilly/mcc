@@ -572,7 +572,8 @@ public class IrGen {
                 for (Exp e : args) {
                     argVals.add(emitTackyAndConvert(e, instructions));
                 }
-                instructions.add(new FunCall(name.name(), argVals, varargs, result));
+                boolean indirect = Mcc.SYMBOL_TABLE.get(name.name()).type() instanceof Pointer;
+                instructions.add(new FunCall(name.name(), argVals, varargs,  indirect, result));
                 return new PlainOperand(result);
             }
             case Cast(Type t, Exp inner): {

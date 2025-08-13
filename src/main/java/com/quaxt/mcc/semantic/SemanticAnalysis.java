@@ -972,7 +972,11 @@ public class SemanticAnalysis {
     }
 
     private static Exp convertByAssignment(Exp e, Type targetType) {
+        if (e.type() instanceof FunType) {
+            e=typeCheckExpression(new AddrOf(e, null));
+        }
         Type t = e.type();
+
         if (t.looseEquals(targetType)) return e;
         if ((isArithmeticType(t) && isArithmeticType(targetType)) || (isNullPointerConstant(e) && targetType instanceof Pointer))
             return convertTo(e, targetType);
@@ -1224,6 +1228,9 @@ public class SemanticAnalysis {
                     new Str(s, new Array(CHAR, new IntInit(s.length() + 1)));
             case FunctionCall(Var name, List<Exp> args, boolean _, Type _) -> {
                 Type fType = SYMBOL_TABLE.get(name.name()).type();
+                if (fType instanceof Pointer(Type referenced)){
+                    fType = referenced;
+                }
                 yield switch (fType) {
                     case FunType(List<Type> params, Type ret,
                                  boolean varargs) -> {
@@ -1247,8 +1254,8 @@ public class SemanticAnalysis {
             }
             case Var(String name, Type _) -> {
                 Type t = SYMBOL_TABLE.get(name).type();
-                if (t instanceof FunType)
-                    fail("Function " + name + " used as a variable");
+//                if (t instanceof FunType)
+//                    fail("Function " + name + " used as a variable");
                 yield new Var(name, t);
             }
             case UnaryOp(UnaryOperator op, Exp e1,

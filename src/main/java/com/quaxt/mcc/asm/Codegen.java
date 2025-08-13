@@ -140,6 +140,8 @@ public class Codegen {
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
             Instruction newInst = switch (oldInst) {
+                case CallIndirect(Operand p) ->
+                        new CallIndirect(dePseudo(p, varTable, offset));
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _, Call _ ->
                         oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
@@ -441,7 +443,7 @@ public class Codegen {
             case Primitive.INT, Primitive.UINT -> LONGWORD;
             case Primitive.LONG, Primitive.ULONG -> QUADWORD;
             case Primitive.DOUBLE -> DOUBLE;
-            case Pointer _ -> QUADWORD;
+            case Pointer _, FunType _ -> QUADWORD;
             case Array _, Structure _ ->
                     new ByteArray((int) Mcc.size(type),
                             Mcc.variableAlignment(type));
@@ -473,6 +475,9 @@ public class Codegen {
                 if (t instanceof Array || t instanceof Structure)
                     yield new PseudoMem(identifier, 0);
                 var ste = SYMBOL_TABLE.get(identifier);
+                if (t instanceof FunType) {
+                    yield new LabelAddress(identifier);
+                }
                 yield new Pseudo(identifier, toTypeAsm(t),
                         switch (ste.attrs()) {
                     case StaticAttributes _, ConstantAttr _ -> true;
@@ -506,7 +511,7 @@ public class Codegen {
         long offsetFromStartOfArray;
         String identifier;
         switch (in) {
-            case Imm _, IntegerReg _, Memory _, DoubleReg _, Data _, Indexed _:
+            case Imm _, IntegerReg _, Memory _, DoubleReg _, Data _, Indexed _, LabelAddress _:
                 return in;
             case Pseudo p:
                 identifier = p.identifier;
@@ -601,7 +606,7 @@ public class Codegen {
                                        List<Instruction> instructionAsms) {
         // so for classify we can classify operands here
         if (funCall instanceof FunCall(String name, ArrayList<ValIr> args,
-                                       boolean varargs, ValIr dst)) {
+                                       boolean varargs, boolean indirect, ValIr dst)) {
 
             final boolean returnInMemory;
             List<TypedOperand> intDests = Collections.emptyList();
@@ -685,7 +690,10 @@ public class Codegen {
                 instructionAsms.add(new Mov(LONGWORD,
                         new Imm(doubleArguments.size()), AX));
             }
-            instructionAsms.add(new Call(name));
+            if (indirect) {
+                instructionAsms.add(new CallIndirect(toOperand(new VarIr(name))));
+            }
+            else instructionAsms.add(new Call(name));
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD,
@@ -991,7 +999,10 @@ public class Codegen {
                 case GetAddress(ValIr srcV, VarIr dstV) -> {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV);
-                    ins.add(new Lea(src, dst));
+                    if (src instanceof LabelAddress)
+                        ins.add(new Mov(QUADWORD, src, dst));
+                    else
+                        ins.add(new Lea(src, dst));
                 }
                 case IntToDouble(ValIr src, VarIr dst) -> {
                     Type srcType = valToType(src);

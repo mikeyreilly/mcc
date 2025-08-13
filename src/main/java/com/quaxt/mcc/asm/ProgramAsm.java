@@ -44,6 +44,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case DoubleReg reg -> reg.toString();
             case Indexed(IntegerReg base, IntegerReg index, int scale) ->
                     "(%" + base.q + ",%" + index.q + "," + scale + ")";
+            case LabelAddress(String label) -> "$" + label;
             default ->
                     throw new IllegalStateException("Unexpected value: " + o);
         };
@@ -290,6 +291,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Call(String functionName) ->
                     "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
                             functionName : functionName + "@PLT");
+            case CallIndirect(Operand address) ->
+                    "call\t*" + formatOperand(QUADWORD, instruction, address);
             case Cdq(TypeAsm t) -> instruction.format(t);
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                        Operand dst) -> {

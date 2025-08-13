@@ -113,7 +113,7 @@ public class Optimizer {
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
                 case FunCall(String _, ArrayList<ValIr> args, boolean varargs,
-                             VarIr dst) -> {
+                             boolean indirect, VarIr dst) -> {
                     for (var v1 : args) {
                         if (v1 instanceof VarIr var1 && var1.isStatic())
                             aliasedVars.add(var1);

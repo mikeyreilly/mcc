@@ -605,12 +605,15 @@ public class Parser {
                 }
                 FunType derivedType = new FunType(paramTypes, baseType,
                         varargs);
-                yield new NameDeclTypeParams(switch (d) {
-                    case Ident(String name) -> name;
-                    default ->
-                            throw new Err("Can't apply additional " +
-                                    "derivations" + " to a function type");
-                }, derivedType, paramNames);
+                if (d instanceof Ident(String name)){
+                    yield new NameDeclTypeParams(name, derivedType, paramNames);
+                } else if (d instanceof PointerDeclarator(Declarator decl)){
+                    yield processDeclarator(d, derivedType);
+                }
+
+                throw new Err("Can't apply array " +
+                        "derivations to a function type. Not implemented yet.");
+
             }
             case ArrayDeclarator(Declarator inner, Constant size) -> {
                 Array derivedType = new Array(baseType, size);
@@ -1560,7 +1563,7 @@ public class Parser {
         Exp switchExpression = parseExp(tokens, 0, true, typeAliases);
         expect(CLOSE_PAREN, tokens);
         Switch s = new Switch();
-        s.label = Mcc.makeTemporary(".Lswitch.");
+        s.label = makeTemporary(".Lswitch.");
         Statement body = parseStatement(tokens, labels, s, typeAliases);
 
         s.exp = switchExpression;

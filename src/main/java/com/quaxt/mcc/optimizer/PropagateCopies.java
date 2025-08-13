@@ -53,7 +53,7 @@ public class PropagateCopies {
                         case UnaryIr(UnaryOperator op, ValIr v1, VarIr dst) ->
                                 new UnaryIr(op, replaceOperand(v1, reachingCopies), dst);
                         case FunCall(String _, ArrayList<ValIr> args, boolean _,
-                                     ValIr _) -> {
+                                     boolean _, ValIr _) -> {
                             args.replaceAll(op -> replaceOperand(op, reachingCopies));
                             yield instr;
                         }
@@ -141,7 +141,7 @@ public class PropagateCopies {
                     if (srcT.equals(dstT) || Mcc.isSigned(srcT) == Mcc.isSigned(dstT))
                         currentReachingCopies.add((Copy) instruction);
                 }
-                case FunCall(String _, ArrayList<ValIr> _, boolean _, ValIr dst) ->
+                case FunCall(String _, ArrayList<ValIr> _, boolean _, boolean _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()) || ((copy.src().equals(dst) || copy.dst().equals(dst))));
                 case Store(ValIr _, ValIr _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()));

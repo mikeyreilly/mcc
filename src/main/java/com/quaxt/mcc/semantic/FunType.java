@@ -6,6 +6,6 @@ public record FunType(List<Type> params, Type ret, boolean varargs) implements T
 
     @Override
     public boolean looseEquals(Type other) {
-        throw new UnsupportedOperationException();
+        return this.equals(other);
     }
 }
