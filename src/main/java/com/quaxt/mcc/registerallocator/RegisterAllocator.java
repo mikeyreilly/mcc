@@ -66,6 +66,10 @@ public class RegisterAllocator {
                 }
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _, Call _,
                      Comment _ -> instructions.set(copyTo++, oldInst);
+                case CallIndirect(Operand operand) -> {
+                     instructions.set(copyTo++, new CallIndirect(find(operand,
+                         coalescedRegs)));
+                }
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
                            Operand operand) ->
                         instructions.set(copyTo++, new Unary(op, typeAsm,
@@ -116,10 +120,7 @@ public class RegisterAllocator {
 
 
                 case Test test -> {throw new Todo();}
-                case CallIndirect(Operand operand) -> {
-                    instructions.set(copyTo++, new CallIndirect(find(operand,
-                        coalescedRegs)));
-                }
+                
             }
         }
         int oldSize = instructions.size();
@@ -451,7 +452,8 @@ public class RegisterAllocator {
 
         for (var instr : instructions) {
             switch (instr) {
-                case CallIndirect(Operand operand) -> {       incrementSpillCost(interferenceGraph,
+                case CallIndirect(Operand operand) -> {
+                    incrementSpillCost(interferenceGraph,
                         interferenceGraphMmx, operand);
                 }
                 case Binary(ArithmeticOperator op, TypeAsm type, Operand src,

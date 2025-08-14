@@ -388,6 +388,21 @@ See p. 606 */
                         XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8,
                         XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15));
             }
+            case CallIndirect(Operand address)-> {
+                // MR-TODO figure out the type of function we're calling and do proper parameter classification
+                Set<Operand> used = new HashSet<>();
+                used.add(address);
+                addMemoryAndIndexedRegsToUsed(address, used);
+                for (int i = 0; i < Codegen.INTEGER_REGISTERS.length; i++) {
+                    used.add(Codegen.INTEGER_REGISTERS[i]);
+                }
+                for (int i = 0; i < DOUBLE_REGISTERS.length; i++) {
+                    used.add(DOUBLE_REGISTERS[i]);
+                }
+                return new Pair<>(used, Set.of(DI, SI, DX, CX, R8, R9, AX,
+                        XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8,
+                        XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15));
+            }
             case Cdq cdq -> {
                 return new Pair<>(EnumSet.of(AX), EnumSet.of(DX));
 
@@ -482,12 +497,6 @@ See p. 606 */
             }
             case LabelIr _, Jump _, Comment _, Nullary _ -> {}
             case Test test -> throw new Todo();
-            case CallIndirect(Operand op) -> {
-                Set<Operand> used = new HashSet<>();
-                used.add(op);
-                addMemoryAndIndexedRegsToUsed(op, used);
-                return new Pair<>(used, Set.of());
-            }
         }
         return EMPTY_PAIR;
     }

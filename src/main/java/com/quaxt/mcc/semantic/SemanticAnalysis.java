@@ -1238,14 +1238,16 @@ public class SemanticAnalysis {
                                 params.size() != args.size())
                             fail("Function called with wrong number of " +
                                     "arguments");
-                        for (int i = 0; i < params.size(); i++) {
+                        for (int i = 0; i < args.size(); i++) {
                             Exp arg = args.get(i);
-                            Type paramType = params.get(i);
-                            Exp typedArg = typeCheckAndConvert(arg);
-                            args.set(i, convertByAssignment(typedArg,
-                                    paramType));
+                            if (i < params.size()) {
+                                Type paramType = params.get(i);
+                                Exp typedArg = typeCheckAndConvert(arg);
+                                args.set(i, convertByAssignment(typedArg, paramType));
+                            } else
+                                args.set(i, typeCheckExpression(arg));
                         }
-                        yield new FunctionCall(name, args, varargs, ret);
+                        yield new FunctionCall((Var) typeCheckExpression(name), args, varargs, ret);
                     }
                     default ->
                             fail("variable " + name.name() + " used as " +

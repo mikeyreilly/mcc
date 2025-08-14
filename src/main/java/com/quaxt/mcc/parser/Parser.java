@@ -945,7 +945,8 @@ public class Parser {
                             else foundShort = true;
                         }
                         case LONG -> {
-                            if (foundLong || foundShort || foundChar || foundDouble || foundVoid)
+                            // Note this compiler treats long long the same as long
+                            if (foundShort || foundChar || foundDouble || foundVoid)
                                 fail("invalid type specifier");
                             else foundLong = true;
                         }

@@ -139,6 +139,7 @@ public class Lexer {
                                 case "restrict" -> RESTRICT;
                                 case "__restrict__" -> RESTRICT;
                                 case "__restrict" -> RESTRICT;
+                                case "__extension__" -> RESTRICT;
                                 case "_Atomic" -> ATOMIC;
                                 default -> new TokenWithValue(tokenType, value);
                             };

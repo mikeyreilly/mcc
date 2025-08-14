@@ -144,7 +144,7 @@ public class Mcc {
     public static int preprocess(Path cFile,
                                  Path iFile) throws IOException,
             InterruptedException {
-        return startProcess("gcc", "-E", //"-P",
+        return startProcess("gcc", "-E", "-std=c23",
                 cFile.toString(), "-o", iFile.toString());
     }
 
