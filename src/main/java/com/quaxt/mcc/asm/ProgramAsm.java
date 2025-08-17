@@ -306,7 +306,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 String dstF = formatOperand(dstType, instruction, dst);
                 yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
-            case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
+            case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                 if (srcType.isInteger()){
                     String srcF = formatOperand(srcType, instruction, src);
                     String dstF = formatOperand(DOUBLE, instruction, dst);

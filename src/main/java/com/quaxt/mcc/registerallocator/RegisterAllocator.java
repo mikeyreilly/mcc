@@ -106,8 +106,8 @@ public class RegisterAllocator {
                         instructions.set(copyTo++, new MovZeroExtend(srcType,
                                 dstType, find(src, coalescedRegs), find(dst,
                                 coalescedRegs)));
-                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
-                        instructions.set(copyTo++, new Cvttsd2si(srcType, dstType,
+                case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                        instructions.set(copyTo++, new Cvt(srcType, dstType,
                                 find(src, coalescedRegs), find(dst,
                                 coalescedRegs)));
                 case Lea(Operand src, Operand dst) ->
@@ -305,8 +305,8 @@ public class RegisterAllocator {
                 case Cmp(TypeAsm type, Operand subtrahend, Operand minuend) ->
                         new Cmp(type, replaceOperand(subtrahend, registerMap)
                                 , replaceOperand(minuend, registerMap));
-                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
-                        new Cvttsd2si(srcType, dstType, replaceOperand(src,
+                case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                        new Cvt(srcType, dstType, replaceOperand(src,
                                 registerMap), replaceOperand(dst, registerMap));
                 case Lea(Operand src, Operand dst) ->
                         new Lea(replaceOperand(src, registerMap),
@@ -465,7 +465,7 @@ public class RegisterAllocator {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, subtrahend, minuend);
                 }
-                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
+                case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, src, dst);
                 }
@@ -685,7 +685,7 @@ public class RegisterAllocator {
                     maybeAddPseudo(minuend, interferenceGraph,
                             inteferenceGraphMmx);
                 }
-                case Cvttsd2si(TypeAsm _, TypeAsm _, Operand src, Operand dst) -> {
+                case Cvt(TypeAsm _, TypeAsm _, Operand src, Operand dst) -> {
                     maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);
                     maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
                 }

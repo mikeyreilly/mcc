@@ -2,7 +2,6 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.optimizer.Optimizer;
-import com.quaxt.mcc.parser.BinaryOp;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.StorageClass;
 import com.quaxt.mcc.parser.Var;
@@ -175,8 +174,8 @@ public class Codegen {
                         new MovZeroExtend(srcType, dstType, dePseudo(src,
                                 varTable, offset), dePseudo(dst, varTable,
                                 offset));
-                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
-                        new Cvttsd2si(srcType, dstType, dePseudo(src, varTable,
+                case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                        new Cvt(srcType, dstType, dePseudo(src, varTable,
                                 offset), dePseudo(dst, varTable, offset));
                 case Lea(Operand src, Operand dst) ->
                         new Lea(dePseudo(src, varTable, offset), dePseudo(dst
@@ -391,24 +390,24 @@ public class Codegen {
                         }
                     }
                 }
-                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
+                case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                     if (srcType.isInteger()) {
                         if (src instanceof Imm) {
                             instructions.set(i, new Mov(dstType, src, R10));
                             if (isRam(dst)) {
-                                instructions.add(i + 1, new Cvttsd2si(srcType, dstType, R10
+                                instructions.add(i + 1, new Cvt(srcType, dstType, R10
                                         , XMM15));
                                 instructions.add(i + 2, new Mov(QUADWORD, XMM15,
                                         dst));
                             } else {
-                                instructions.add(i + 1, new Cvttsd2si(srcType, dstType, R10, dst));
+                                instructions.add(i + 1, new Cvt(srcType, dstType, R10, dst));
                             }
                         } else if (isRam(dst)) {
-                            instructions.set(i, new Cvttsd2si(srcType, dstType, src, XMM15));
+                            instructions.set(i, new Cvt(srcType, dstType, src, XMM15));
                             instructions.add(i + 1, new Mov(QUADWORD, XMM15, dst));
                         }
                     }else if (isRam(dst)) {
-                        instructions.set(i, new Cvttsd2si(srcType, dstType, src, R11));
+                        instructions.set(i, new Cvt(srcType, dstType, src, R11));
                         instructions.add(i + 1, new Mov(dstType, R11, dst));
                     }
                 }
@@ -953,19 +952,19 @@ public class Codegen {
                     var dstType = valToType(dst);
                     var dstTypeAsm = toTypeAsm(dstType);
                     if (dstType == Primitive.CHAR || dstType == Primitive.SCHAR) {
-                        ins.add(new Cvttsd2si(valToAsmType(src), LONGWORD, toOperand(src), AX));
+                        ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
                         ins.add(new Mov(BYTE, AX, toOperand(dst)));
                     } else
-                        ins.add(new Cvttsd2si(valToAsmType(src), dstTypeAsm, toOperand(src),
+                        ins.add(new Cvt(valToAsmType(src), dstTypeAsm, toOperand(src),
                                 toOperand(dst)));
                 }
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
                     Type dstType = valToType(dst);
                     if (dstType == UCHAR) {
-                        ins.add(new Cvttsd2si(valToAsmType(src), LONGWORD, toOperand(src), AX));
+                        ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
                         ins.add(new Mov(BYTE, AX, toOperand(dst)));
                     } else if (dstType == Primitive.INT) {
-                        ins.add(new Cvttsd2si(valToAsmType(src), QUADWORD, toOperand(src), AX));
+                        ins.add(new Cvt(valToAsmType(src), QUADWORD, toOperand(src), AX));
                         ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
                     } else {
                         TypeAsm srcAsmType = valToAsmType(src);
@@ -976,14 +975,14 @@ public class Codegen {
                         ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
                         ins.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,
                                 true, label1.label()));
-                        ins.add(new Cvttsd2si(srcAsmType, QUADWORD, toOperand(src),
+                        ins.add(new Cvt(srcAsmType, QUADWORD, toOperand(src),
                                 toOperand(dst)));
                         ins.add(new Jump(label2.label()));
                         ins.add(label1);
                         ins.add(new Mov(DOUBLE, toOperand(src), XMM0));
                         ins.add(new Binary(DOUBLE_SUB, DOUBLE, UPPER_BOUND,
                                 XMM0));
-                        ins.add(new Cvttsd2si(srcAsmType, QUADWORD, XMM0, toOperand(dst)));
+                        ins.add(new Cvt(srcAsmType, QUADWORD, XMM0, toOperand(dst)));
                         ins.add(new Mov(QUADWORD, UPPER_BOUND_LONG_IMMEDIATE,
                                 AX));
                         ins.add(new Binary(ADD, QUADWORD, AX, toOperand(dst)));
@@ -1005,9 +1004,9 @@ public class Codegen {
                     var dstTypeAsm = valToAsmType(dst);
                     if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
                         ins.add(new Movsx(BYTE, LONGWORD, toOperand(src), AX));
-                        ins.add(new Cvttsd2si(LONGWORD, dstTypeAsm, AX, toOperand(dst)));
+                        ins.add(new Cvt(LONGWORD, dstTypeAsm, AX, toOperand(dst)));
                     } else
-                        ins.add(new Cvttsd2si(srcTypeAsm, dstTypeAsm,
+                        ins.add(new Cvt(srcTypeAsm, dstTypeAsm,
                                 toOperand(src), toOperand(dst)));
                 }
                 case Jump jump -> ins.add(jump);
@@ -1100,18 +1099,18 @@ public class Codegen {
                     TypeAsm dstType = valToAsmType(dstV);
                     if (srcType == UCHAR) {
                         ins.add(new MovZeroExtend(BYTE, LONGWORD, src, AX));
-                        ins.add(new Cvttsd2si(LONGWORD, dstType, AX, dst));
+                        ins.add(new Cvt(LONGWORD, dstType, AX, dst));
                     } else if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
                         ins.add(new Movsx(BYTE, LONGWORD, src, AX));
-                        ins.add(new Cvttsd2si(LONGWORD, dstType, AX, dst));
+                        ins.add(new Cvt(LONGWORD, dstType, AX, dst));
                     } else if (srcType == Primitive.INT) {
                         ins.add(new MovZeroExtend(valToAsmType(srcV),
                                 valToAsmType(dstV), src, AX));
-                        ins.add(new Cvttsd2si(QUADWORD, dstType, AX, dst));
+                        ins.add(new Cvt(QUADWORD, dstType, AX, dst));
                     } else if (srcType == Primitive.UINT) {
                         ins.add(new MovZeroExtend(valToAsmType(srcV),
                                 valToAsmType(dstV), src, AX));
-                        ins.add(new Cvttsd2si(QUADWORD, dstType, AX, dst));
+                        ins.add(new Cvt(QUADWORD, dstType, AX, dst));
                     } else {
                         // see description on p. 320
                         LabelIr label1 = newLabel(Mcc.makeTemporary(
@@ -1122,7 +1121,7 @@ public class Codegen {
                         ins.add(new Cmp(QUADWORD, new Imm(0), src));
                         ins.add(new JmpCC(CmpOperator.LESS_THAN, false,
                                 label1.label()));
-                        ins.add(new Cvttsd2si(asmSrcType, dstType, src, dst));
+                        ins.add(new Cvt(asmSrcType, dstType, src, dst));
                         ins.add(new Jump(label2.label()));
                         ins.add(label1);
                         ins.add(new Mov(asmSrcType, src, AX));
@@ -1130,7 +1129,7 @@ public class Codegen {
                         ins.add(new Unary(UNARY_SHR, QUADWORD, DX));
                         ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));
                         ins.add(new Binary(OR, QUADWORD, AX, DX));
-                        ins.add(new Cvttsd2si(QUADWORD, dstType, DX, dst));
+                        ins.add(new Cvt(QUADWORD, dstType, DX, dst));
                         ins.add(new Binary(DOUBLE_ADD, DOUBLE, dst, dst));
                         ins.add(label2);
                     }
