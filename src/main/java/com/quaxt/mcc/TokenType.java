@@ -6,13 +6,18 @@ public enum TokenType implements Token {
     LABEL("([a-zA-Z_]\\w*)\\s*:", 1),
     IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), CHAR_LITERAL("'([^'\\\\\n" +
-            "]|\\\\['\"\\\\?abfnrtv])'"), STRING_LITERAL("\"([^\"\\\\\n" +
-            "]|\\\\['\"\\\\?abfnrtv])*\""), DOUBLE_LITERAL("(([0-9]*\\" +
+            "]|\\\\['\"\\\\?abfnrtv0])'"),
+    STRING_LITERAL("\"([^\"\\\\\n]|\\\\['\"\\\\?abfnrtvox]|\\\\[0-7]{1,3})*\""),
+    DOUBLE_LITERAL("(([0-9]*\\" +
             ".[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)" +
-            "[^\\w.]", 1), UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]))" +
+            "[^\\w.]", 1), UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
             "[^\\w.]", 1), UNSIGNED_INT_LITERAL("([0-9]+[uU])[^\\w.]", 1),
-    LONG_LITERAL("([0-9]+[lL])[^\\w.]", 1), HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
-    , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*"),
+    UNSIGNED_HEX_INT_LITERAL("0x([a-fA-F0-9]+[uU])"),
+    LONG_LITERAL("([0-9]+[lL][lL]?)[^\\w.]", 1),
+    UNSIGNED_HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))"),
+    HEX_LONG_LITERAL("0x([a-fA-F0-9]+)([lL]|[lL][lL])"),
+    HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
+    , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*|#\\s*pragma\\b.*"),
     MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0),
     ASM(),
     GCC_ATTRIBUTE(),
@@ -85,6 +90,9 @@ public enum TokenType implements Token {
             case INT -> "int";
             case INT_LITERAL -> "int_literal";
             case HEX_INT_LITERAL -> "hex_int_literal";
+            case UNSIGNED_HEX_INT_LITERAL -> "unsigned_hex_int_literal";
+            case UNSIGNED_HEX_LONG_LITERAL -> "unsigned_hex_long_literal";
+            case HEX_LONG_LITERAL -> "hex_long_literal";
             case LABEL -> "label";
             case LONG -> "long";
             case LONG_LITERAL -> "long_literal";
@@ -120,5 +128,9 @@ public enum TokenType implements Token {
             case WHILE -> "while";
             case GCC_ATTRIBUTE -> "__attribute__";
         };
+    }
+
+    public static void main(String[] args) {
+        System.out.println("\"([^\"\\\\\n]|\\\\['\"\\\\?abfnrtvo]|\\\\[0-7]{1,3})*\"");
     }
 }

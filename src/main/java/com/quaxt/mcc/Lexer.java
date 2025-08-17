@@ -16,8 +16,8 @@ public class Lexer {
             SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ,
             BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ,
             SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE, CHAR_LITERAL,
-            STRING_LITERAL, DOUBLE_LITERAL, UNSIGNED_LONG_LITERAL,
-            HEX_INT_LITERAL, UNSIGNED_INT_LITERAL, CLOSE_BRACE, LONG_LITERAL,
+            STRING_LITERAL, DOUBLE_LITERAL, UNSIGNED_LONG_LITERAL, UNSIGNED_HEX_LONG_LITERAL,
+            HEX_LONG_LITERAL, UNSIGNED_HEX_INT_LITERAL, HEX_INT_LITERAL, UNSIGNED_INT_LITERAL, CLOSE_BRACE, LONG_LITERAL,
             INT_LITERAL, SEMICOLON, SINGLE_LINE_COMMENT, MULTILINE_COMMENT,
             DECREMENT, INCREMENT, BITWISE_NOT, ARROW, SUB, ADD, IMUL, DIVIDE,
             BITWISE_XOR, REMAINDER, AND, OR, EQUALS, NOT_EQUALS, SHL,
@@ -97,7 +97,11 @@ public class Lexer {
                             String value = src.substring(start, end - 1);
                             Token token = new TokenWithValue(tokenType, value);
                             tokens.add(token, filename,lineNumber);
-                        } else if (tokenType == LABEL || tokenType == IDENTIFIER || tokenType == DOUBLE_LITERAL || tokenType == HEX_INT_LITERAL || tokenType == INT_LITERAL || tokenType == LONG_LITERAL || tokenType == UNSIGNED_INT_LITERAL || tokenType == UNSIGNED_LONG_LITERAL) {
+                        } else if (tokenType == LABEL || tokenType == IDENTIFIER || tokenType == DOUBLE_LITERAL
+                                || tokenType == UNSIGNED_HEX_LONG_LITERAL
+                                || tokenType == HEX_LONG_LITERAL
+                                || tokenType == UNSIGNED_HEX_INT_LITERAL
+                                || tokenType == HEX_INT_LITERAL || tokenType == INT_LITERAL || tokenType == LONG_LITERAL || tokenType == UNSIGNED_INT_LITERAL || tokenType == UNSIGNED_LONG_LITERAL) {
 
                             int start = matcher.start();
                             String value = src.substring(start, end);
@@ -153,7 +157,8 @@ public class Lexer {
                     continue outer;
                 }
             }
-            throw new IllegalArgumentException("can't handle token at " + src.substring(i));
+            throw new IllegalArgumentException("can't handle token in " + filename+":"+lineNumber +
+                    " at " + src.substring(i));
         }
         return tokens;
     }

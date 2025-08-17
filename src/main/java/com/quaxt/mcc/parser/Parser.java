@@ -510,7 +510,7 @@ public class Parser {
                     List<DeclarationSpecifier> specifiers =
                             parseDeclarationSpecifiers(tokens, typeAliases);
                     TypeAndStorageClass typeAndStorageClass =
-                            parseTypeAndStorageClass(specifiers, typeAliases);
+                            parseTypeAndStorageClass(specifiers, typeAliases, tokens);
                     if (typeAndStorageClass.storageClass() != null)
                         fail("error: storage class specified for parameter");
                     ParameterDeclaration paramDeclarator = parseParameterDeclaration(tokens, typeAliases);
@@ -629,7 +629,7 @@ public class Parser {
         List<DeclarationSpecifier> specifiers =
                 parseDeclarationSpecifiers(tokens, typeAliases);
         TypeAndStorageClass typeAndStorageClass =
-                parseTypeAndStorageClass(specifiers, typeAliases);
+                parseTypeAndStorageClass(specifiers, typeAliases, tokens);
         if (typeAndStorageClass.storageClass() != null)
             fail("error: storage class specified for struct member");
         Declarator paramDeclarator = parseDeclarator(tokens, typeAliases);
@@ -812,7 +812,7 @@ public class Parser {
         List<DeclarationSpecifier> specifiers =
                 parseDeclarationSpecifiers(tokens, typeAliases);
         TypeAndStorageClass typeAndStorageClass =
-                parseTypeAndStorageClass(specifiers, typeAliases);
+                parseTypeAndStorageClass(specifiers, typeAliases, tokens);
         if (typeAndStorageClass == null) return null;
         if (tokens.getFirst() == SEMICOLON) {
             tokens.removeFirst();
@@ -893,7 +893,8 @@ public class Parser {
 
     private static TypeAndStorageClass parseTypeAndStorageClass(
             List<DeclarationSpecifier> specifiers,
-            ArrayList<Map<String, Type>> typeAliases) {
+            ArrayList<Map<String, Type>> typeAliases,
+            TokenList tokens) {
         if (specifiers.isEmpty()) return null;
         StorageClass storageClass = null;
         boolean foundChar = false;
@@ -1003,7 +1004,7 @@ public class Parser {
                     type = foundSigned ? Primitive.SCHAR : Primitive.CHAR;
                 else if (foundVoid) type = Primitive.VOID;
                 else if (foundInt || foundSigned) type = Primitive.INT;
-                else throw new Err("Missing type specifier");
+                else throw makeErr("Missing type specifier", tokens);
             }
         }
 
@@ -1240,14 +1241,21 @@ public class Parser {
         if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
             tokens.removeFirst();
-            boolean isHex = HEX_INT_LITERAL == token.type();
+            boolean isHex = UNSIGNED_HEX_INT_LITERAL == token.type() ||
+                    UNSIGNED_HEX_LONG_LITERAL == token.type() ||
+                    HEX_LONG_LITERAL == token.type() ||
+                    HEX_INT_LITERAL == token.type();
+
             switch (token.type()) {
-                case HEX_INT_LITERAL:
-                case INT_LITERAL:
                 case DOUBLE_LITERAL:
-                case LONG_LITERAL:
                 case UNSIGNED_LONG_LITERAL:
-                case UNSIGNED_INT_LITERAL: {
+                case UNSIGNED_INT_LITERAL:
+                case UNSIGNED_HEX_INT_LITERAL:
+                case LONG_LITERAL:
+                case UNSIGNED_HEX_LONG_LITERAL:
+                case HEX_LONG_LITERAL:
+                case HEX_INT_LITERAL:
+                case INT_LITERAL: {
                     Type t = Primitive.fromTokenType((TokenType) tokenType);
                     int len = value.length() - (t == null ? 0 : switch (t) {
                         case Primitive.LONG, Primitive.UINT -> 1;

@@ -13,6 +13,8 @@ public sealed interface TypeAsm permits PrimitiveTypeAsm, ByteArray {
     String suffix();
 
     boolean isScalar();
+
+    boolean isInteger();
 }
 
 

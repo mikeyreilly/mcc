@@ -106,12 +106,8 @@ public class RegisterAllocator {
                         instructions.set(copyTo++, new MovZeroExtend(srcType,
                                 dstType, find(src, coalescedRegs), find(dst,
                                 coalescedRegs)));
-                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) ->
-                        instructions.set(copyTo++, new Cvttsd2si(dstType,
-                                find(src, coalescedRegs), find(dst,
-                                coalescedRegs)));
-                case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) ->
-                        instructions.set(copyTo++, new Cvtsi2sd(dstType,
+                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                        instructions.set(copyTo++, new Cvttsd2si(srcType, dstType,
                                 find(src, coalescedRegs), find(dst,
                                 coalescedRegs)));
                 case Lea(Operand src, Operand dst) ->
@@ -309,11 +305,8 @@ public class RegisterAllocator {
                 case Cmp(TypeAsm type, Operand subtrahend, Operand minuend) ->
                         new Cmp(type, replaceOperand(subtrahend, registerMap)
                                 , replaceOperand(minuend, registerMap));
-                case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) ->
-                        new Cvtsi2sd(srcType, replaceOperand(src,
-                                registerMap), replaceOperand(dst, registerMap));
-                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) ->
-                        new Cvttsd2si(dstType, replaceOperand(src,
+                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                        new Cvttsd2si(srcType, dstType, replaceOperand(src,
                                 registerMap), replaceOperand(dst, registerMap));
                 case Lea(Operand src, Operand dst) ->
                         new Lea(replaceOperand(src, registerMap),
@@ -472,11 +465,7 @@ public class RegisterAllocator {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, subtrahend, minuend);
                 }
-                case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
-                    incrementSpillCost(interferenceGraph,
-                            interferenceGraphMmx, src, dst);
-                }
-                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
+                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, src, dst);
                 }
@@ -696,11 +685,7 @@ public class RegisterAllocator {
                     maybeAddPseudo(minuend, interferenceGraph,
                             inteferenceGraphMmx);
                 }
-                case Cvtsi2sd(TypeAsm _, Operand src, Operand dst) -> {
-                    maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);
-                    maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
-                }
-                case Cvttsd2si(TypeAsm _, Operand src, Operand dst) -> {
+                case Cvttsd2si(TypeAsm _, TypeAsm _, Operand src, Operand dst) -> {
                     maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);
                     maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
                 }

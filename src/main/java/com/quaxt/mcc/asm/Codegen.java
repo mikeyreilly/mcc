@@ -175,12 +175,9 @@ public class Codegen {
                         new MovZeroExtend(srcType, dstType, dePseudo(src,
                                 varTable, offset), dePseudo(dst, varTable,
                                 offset));
-                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) ->
-                        new Cvttsd2si(dstType, dePseudo(src, varTable,
+                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                        new Cvttsd2si(srcType, dstType, dePseudo(src, varTable,
                                 offset), dePseudo(dst, varTable, offset));
-                case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) ->
-                        new Cvtsi2sd(dstType, dePseudo(src, varTable, offset)
-                                , dePseudo(dst, varTable, offset));
                 case Lea(Operand src, Operand dst) ->
                         new Lea(dePseudo(src, varTable, offset), dePseudo(dst
                                 , varTable, offset));
@@ -394,28 +391,25 @@ public class Codegen {
                         }
                     }
                 }
-                case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
-                    if (isRam(dst)) {
-                        instructions.set(i, new Cvttsd2si(dstType, src, R11));
-                        instructions.add(i + 1, new Mov(dstType, R11, dst));
-                    }
-                }
-                case Cvtsi2sd(TypeAsm dstType, Operand src, Operand dst) -> {
-
-                    if (src instanceof Imm) {
-                        instructions.set(i, new Mov(dstType, src, R10));
-                        if (isRam(dst)) {
-                            instructions.add(i + 1, new Cvtsi2sd(dstType, R10
-                                    , XMM15));
-                            instructions.add(i + 2, new Mov(QUADWORD, XMM15,
-                                    dst));
-                        } else {
-                            instructions.add(i + 1, new Cvtsi2sd(dstType, R10
-                                    , dst));
+                case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
+                    if (srcType.isInteger()) {
+                        if (src instanceof Imm) {
+                            instructions.set(i, new Mov(dstType, src, R10));
+                            if (isRam(dst)) {
+                                instructions.add(i + 1, new Cvttsd2si(srcType, dstType, R10
+                                        , XMM15));
+                                instructions.add(i + 2, new Mov(QUADWORD, XMM15,
+                                        dst));
+                            } else {
+                                instructions.add(i + 1, new Cvttsd2si(srcType, dstType, R10, dst));
+                            }
+                        } else if (isRam(dst)) {
+                            instructions.set(i, new Cvttsd2si(srcType, dstType, src, XMM15));
+                            instructions.add(i + 1, new Mov(QUADWORD, XMM15, dst));
                         }
-                    } else if (isRam(dst)) {
-                        instructions.set(i, new Cvtsi2sd(dstType, src, XMM15));
-                        instructions.add(i + 1, new Mov(QUADWORD, XMM15, dst));
+                    }else if (isRam(dst)) {
+                        instructions.set(i, new Cvttsd2si(srcType, dstType, src, R11));
+                        instructions.add(i + 1, new Mov(dstType, R11, dst));
                     }
                 }
                 default -> {
@@ -959,21 +953,22 @@ public class Codegen {
                     var dstType = valToType(dst);
                     var dstTypeAsm = toTypeAsm(dstType);
                     if (dstType == Primitive.CHAR || dstType == Primitive.SCHAR) {
-                        ins.add(new Cvttsd2si(LONGWORD, toOperand(src), AX));
+                        ins.add(new Cvttsd2si(valToAsmType(src), LONGWORD, toOperand(src), AX));
                         ins.add(new Mov(BYTE, AX, toOperand(dst)));
                     } else
-                        ins.add(new Cvttsd2si(dstTypeAsm, toOperand(src),
+                        ins.add(new Cvttsd2si(valToAsmType(src), dstTypeAsm, toOperand(src),
                                 toOperand(dst)));
                 }
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
                     Type dstType = valToType(dst);
                     if (dstType == UCHAR) {
-                        ins.add(new Cvttsd2si(LONGWORD, toOperand(src), AX));
+                        ins.add(new Cvttsd2si(valToAsmType(src), LONGWORD, toOperand(src), AX));
                         ins.add(new Mov(BYTE, AX, toOperand(dst)));
                     } else if (dstType == Primitive.INT) {
-                        ins.add(new Cvttsd2si(QUADWORD, toOperand(src), AX));
+                        ins.add(new Cvttsd2si(valToAsmType(src), QUADWORD, toOperand(src), AX));
                         ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
                     } else {
+                        TypeAsm srcAsmType = valToAsmType(src);
                         //p.335
                         LabelIr label1 = newLabel(Mcc.makeTemporary(".Laub."));
                         LabelIr label2 = newLabel(Mcc.makeTemporary(".LendCmp"
@@ -981,14 +976,14 @@ public class Codegen {
                         ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
                         ins.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,
                                 true, label1.label()));
-                        ins.add(new Cvttsd2si(QUADWORD, toOperand(src),
+                        ins.add(new Cvttsd2si(srcAsmType, QUADWORD, toOperand(src),
                                 toOperand(dst)));
                         ins.add(new Jump(label2.label()));
                         ins.add(label1);
                         ins.add(new Mov(DOUBLE, toOperand(src), XMM0));
                         ins.add(new Binary(DOUBLE_SUB, DOUBLE, UPPER_BOUND,
                                 XMM0));
-                        ins.add(new Cvttsd2si(QUADWORD, XMM0, toOperand(dst)));
+                        ins.add(new Cvttsd2si(srcAsmType, QUADWORD, XMM0, toOperand(dst)));
                         ins.add(new Mov(QUADWORD, UPPER_BOUND_LONG_IMMEDIATE,
                                 AX));
                         ins.add(new Binary(ADD, QUADWORD, AX, toOperand(dst)));
@@ -1006,11 +1001,13 @@ public class Codegen {
                 }
                 case IntToDouble(ValIr src, VarIr dst) -> {
                     Type srcType = valToType(src);
+                    var srcTypeAsm = toTypeAsm(srcType);
+                    var dstTypeAsm = valToAsmType(dst);
                     if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
                         ins.add(new Movsx(BYTE, LONGWORD, toOperand(src), AX));
-                        ins.add(new Cvtsi2sd(LONGWORD, AX, toOperand(dst)));
+                        ins.add(new Cvttsd2si(LONGWORD, dstTypeAsm, AX, toOperand(dst)));
                     } else
-                        ins.add(new Cvtsi2sd(toTypeAsm(valToType(src)),
+                        ins.add(new Cvttsd2si(srcTypeAsm, dstTypeAsm,
                                 toOperand(src), toOperand(dst)));
                 }
                 case Jump jump -> ins.add(jump);
@@ -1100,20 +1097,21 @@ public class Codegen {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);
                     Type srcType = valToType(srcV);
+                    TypeAsm dstType = valToAsmType(dstV);
                     if (srcType == UCHAR) {
                         ins.add(new MovZeroExtend(BYTE, LONGWORD, src, AX));
-                        ins.add(new Cvtsi2sd(LONGWORD, AX, dst));
+                        ins.add(new Cvttsd2si(LONGWORD, dstType, AX, dst));
                     } else if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
                         ins.add(new Movsx(BYTE, LONGWORD, src, AX));
-                        ins.add(new Cvtsi2sd(LONGWORD, AX, dst));
+                        ins.add(new Cvttsd2si(LONGWORD, dstType, AX, dst));
                     } else if (srcType == Primitive.INT) {
                         ins.add(new MovZeroExtend(valToAsmType(srcV),
                                 valToAsmType(dstV), src, AX));
-                        ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
+                        ins.add(new Cvttsd2si(QUADWORD, dstType, AX, dst));
                     } else if (srcType == Primitive.UINT) {
                         ins.add(new MovZeroExtend(valToAsmType(srcV),
                                 valToAsmType(dstV), src, AX));
-                        ins.add(new Cvtsi2sd(QUADWORD, AX, dst));
+                        ins.add(new Cvttsd2si(QUADWORD, dstType, AX, dst));
                     } else {
                         // see description on p. 320
                         LabelIr label1 = newLabel(Mcc.makeTemporary(
@@ -1124,7 +1122,7 @@ public class Codegen {
                         ins.add(new Cmp(QUADWORD, new Imm(0), src));
                         ins.add(new JmpCC(CmpOperator.LESS_THAN, false,
                                 label1.label()));
-                        ins.add(new Cvtsi2sd(asmSrcType, src, dst));
+                        ins.add(new Cvttsd2si(asmSrcType, dstType, src, dst));
                         ins.add(new Jump(label2.label()));
                         ins.add(label1);
                         ins.add(new Mov(asmSrcType, src, AX));
@@ -1132,7 +1130,7 @@ public class Codegen {
                         ins.add(new Unary(UNARY_SHR, QUADWORD, DX));
                         ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));
                         ins.add(new Binary(OR, QUADWORD, AX, DX));
-                        ins.add(new Cvtsi2sd(QUADWORD, DX, dst));
+                        ins.add(new Cvttsd2si(QUADWORD, dstType, DX, dst));
                         ins.add(new Binary(DOUBLE_ADD, DOUBLE, dst, dst));
                         ins.add(label2);
                     }

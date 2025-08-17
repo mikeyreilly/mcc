@@ -3,14 +3,16 @@ package com.quaxt.mcc.asm;
 import com.quaxt.mcc.Err;
 
 public enum PrimitiveTypeAsm implements TypeAsm {
-    BYTE(1, "b"), WORD(2, "w"), LONGWORD(4, "l"), QUADWORD(8, "q"), DOUBLE(8, "sd");
+    BYTE(1, "b", true), WORD(2, "w", true), LONGWORD(4, "l", true), QUADWORD(8, "q", true), DOUBLE(8, "sd", false);
 
     private final int size;
     private final String suffix;
+    private final boolean isInteger;
 
-    PrimitiveTypeAsm(int size, String suffix) {
+    PrimitiveTypeAsm(int size, String suffix, boolean isInteger) {
         this.size = size;
         this.suffix = suffix;
+        this.isInteger = isInteger;
     }
 
     public long size() {
@@ -24,5 +26,10 @@ public enum PrimitiveTypeAsm implements TypeAsm {
     @Override
     public boolean isScalar() {
         return true;
+    }
+
+    @Override
+    public boolean isInteger() {
+        return isInteger;
     }
 }

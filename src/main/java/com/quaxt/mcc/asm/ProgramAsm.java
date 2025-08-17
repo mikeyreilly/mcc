@@ -306,15 +306,18 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 String dstF = formatOperand(dstType, instruction, dst);
                 yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
-            case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
-                String srcF = formatOperand(DOUBLE, instruction, src);
-                String dstF = formatOperand(dstType, instruction, dst);
-                yield (dstType == QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF + ", " + dstF;
-            }
-            case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
-                String srcF = formatOperand(srcType, instruction, src);
-                String dstF = formatOperand(DOUBLE, instruction, dst);
-                yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
+            case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
+                if (srcType.isInteger()){
+                    String srcF = formatOperand(srcType, instruction, src);
+                    String dstF = formatOperand(DOUBLE, instruction, dst);
+                    yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
+                }else {
+                    String srcF = formatOperand(srcType, instruction, src);
+                    String dstF = formatOperand(dstType, instruction, dst);
+                    yield (dstType ==
+                            QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF +
+                            ", " + dstF;
+                }
             }
             case Comment(String comment) -> "# " + comment;
             case Pop(IntegerReg arg) ->

@@ -415,14 +415,7 @@ See p. 606 */
                 addMemoryAndIndexedRegsToUsed(minuend, used);
                 return new Pair<>(used, Set.of());
             }
-            case Cvtsi2sd(TypeAsm srcType, Operand src, Operand dst) -> {
-                Set<Operand> used = new HashSet<>();
-                used.add(src);
-                addMemoryAndIndexedRegsToUsed(src, used);
-                addMemoryAndIndexedRegsToUsed(dst, used);
-                return new Pair<>(used, Set.of(dst));
-            }
-            case Cvttsd2si(TypeAsm dstType, Operand src, Operand dst) -> {
+            case Cvttsd2si(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                 Set<Operand> used = new HashSet<>();
                 used.add(src);
                 addMemoryAndIndexedRegsToUsed(src, used);

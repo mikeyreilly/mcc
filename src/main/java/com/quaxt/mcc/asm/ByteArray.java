@@ -9,4 +9,9 @@ public record ByteArray(long size, long alignment) implements TypeAsm {
     public boolean isScalar() {
         return false;
     }
+
+    @Override
+    public boolean isInteger() {
+        return false;
+    }
 }
