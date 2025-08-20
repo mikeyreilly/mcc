@@ -122,6 +122,11 @@ class MccTest {
         returns("short", 5);
     }
 
+    @Test
+    void float_test()  throws Exception {
+        returns("float", 30);
+    }
+
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {

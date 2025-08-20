@@ -518,8 +518,8 @@ public class RegisterAllocator {
             switch (op) {
                 case Pseudo p -> {
                     if (p.isStatic || p.isAliased) continue;
-                    Node n = findNodeForOperand(p.type == DOUBLE ?
-                            interferenceGraphMmx : interferenceGraph, op);
+                    Node n = findNodeForOperand(p.type.isInteger() ?
+                            interferenceGraph : interferenceGraphMmx, op);
                     n.spillCost += 1;
                 }
                 case DoubleReg _ -> {
@@ -601,7 +601,7 @@ public class RegisterAllocator {
                         }
                         for (Operand u : updated) {
                             var interferenceGraph =
-                                    u instanceof DoubleReg || (u instanceof Pseudo p && p.type == DOUBLE) ? interferenceGraphMmx : interferenceGraphGpr;
+                                    u instanceof DoubleReg || (u instanceof Pseudo p && !(p.type.isInteger())) ? interferenceGraphMmx : interferenceGraphGpr;
                             Node nodeForU =
                                     findNodeForOperand(interferenceGraph, u);
                             if (nodeForU != null && graphContains(interferenceGraph, l) && !Objects.equals(l, u)) {
@@ -737,8 +737,7 @@ public class RegisterAllocator {
                                        List<Node> interferenceGraphMmx) {
         if (op instanceof Pseudo p) {
             if (!p.isStatic && !p.isAliased) {
-                add(op, p.type == DOUBLE ? interferenceGraphMmx :
-                        interferenceGraphGpr);
+                add(op, p.type.isInteger() ? interferenceGraphGpr : interferenceGraphMmx);
             }
         }
 

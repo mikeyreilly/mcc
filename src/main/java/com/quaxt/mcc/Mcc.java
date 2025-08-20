@@ -27,7 +27,11 @@ import java.util.logging.*;
 public class Mcc {
     private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
-    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>();
+    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>(){
+        public SymbolTableEntry put(String key, SymbolTableEntry value) {
+            return super.put(key, value);
+        }
+    };
     public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>(){
         @Override
         public StructDef put(String key, StructDef value) {
@@ -59,6 +63,7 @@ public class Mcc {
             case SHORT -> 2;
             case USHORT -> 2;
             case INT -> 4;
+            case FLOAT -> 4;
             case UINT -> 4;
             case LONG -> 8;
             case ULONG -> 8;
@@ -83,6 +88,7 @@ public class Mcc {
             case USHORT -> 2;
             case INT -> 4;
             case UINT -> 4;
+            case FLOAT -> 4;
             case LONG -> 8;
             case ULONG -> 8;
             case DOUBLE -> 8;
@@ -105,6 +111,7 @@ public class Mcc {
             case USHORT -> 2;
             case INT -> 4;
             case UINT -> 4;
+            case FLOAT -> 4;
             case LONG -> 8;
             case ULONG -> 8;
             case DOUBLE -> 8;

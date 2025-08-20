@@ -56,6 +56,14 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case BITWISE_XOR -> "xorpd	";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
+        } : t == FLOAT ? switch (op) {
+            case DOUBLE_SUB -> "subss	";
+            case DOUBLE_ADD -> "addss	";
+            case DOUBLE_MUL -> "mulss	";
+            case DOUBLE_DIVIDE -> "divss	";
+            case BITWISE_XOR -> "xorps	";
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + op);
         } : switch (op) {
             case SUB -> "subb	";
             case ADD -> "addb	";

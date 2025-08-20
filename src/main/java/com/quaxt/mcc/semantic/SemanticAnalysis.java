@@ -478,10 +478,29 @@ public class SemanticAnalysis {
         if (init instanceof DoubleInit(double d)) {
             return switch (type) {
                 case DOUBLE -> init;
+                case FLOAT -> new FloatInit((float) d);
                 case LONG -> new LongInit((long) d);
                 case INT -> new IntInit((int) d);
                 case ULONG -> new ULongInit(doubleToUnsignedLong(d));
                 // casting directly to int would be wrong result for doubles
+                // > 2^31
+                case UINT -> new UIntInit((int) (long) d);
+                case CHAR, SCHAR -> new CharInit((byte) (long) d);
+                case SHORT -> new ShortInit((short) (long) d);
+                case UCHAR -> new UCharInit((byte) doubleToUnsignedLong(d));
+                case USHORT -> new UShortInit((short) doubleToUnsignedLong(d));
+                default ->
+                        throw new IllegalArgumentException("not a const:" + init);
+            };
+        }
+        if (init instanceof FloatInit(float d)) {
+            return switch (type) {
+                case DOUBLE -> new DoubleInit(d);
+                case FLOAT -> init;
+                case LONG -> new LongInit((long) d);
+                case INT -> new IntInit((int) d);
+                case ULONG -> new ULongInit(doubleToUnsignedLong(d));
+                // casting directly to int would be wrong result for floats
                 // > 2^31
                 case UINT -> new UIntInit((int) (long) d);
                 case CHAR, SCHAR -> new CharInit((byte) (long) d);

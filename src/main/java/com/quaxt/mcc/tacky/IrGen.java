@@ -708,10 +708,10 @@ public class IrGen {
 
     private static void emitCast(List<InstructionIr> instructions, Type to,
                                  Type innerType, ValIr src, VarIr dst) {
-        if (to == DOUBLE) {
+        if (to == DOUBLE || to == FLOAT) {
             instructions.add(innerType.isSigned() ?
                     new IntToDouble(src, dst) : new UIntToDouble(src, dst));
-        } else if (innerType == DOUBLE) {
+        } else if (innerType == DOUBLE || innerType == FLOAT) {
             instructions.add(to.isSigned() ? new DoubleToInt(src, dst) :
                     new DoubleToUInt(src, dst));
         } else if (Mcc.size(to) == Mcc.size(innerType)) {

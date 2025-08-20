@@ -15,6 +15,7 @@ public sealed interface Instruction extends AbstractInstruction permits Binary, 
             case LONGWORD -> "l";
             case QUADWORD -> "q";
             case DOUBLE -> "sd";
+            case FLOAT -> "ss";
         } + "\t";
     }
 

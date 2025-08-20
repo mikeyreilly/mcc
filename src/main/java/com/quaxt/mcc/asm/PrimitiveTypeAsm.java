@@ -3,7 +3,7 @@ package com.quaxt.mcc.asm;
 import com.quaxt.mcc.Err;
 
 public enum PrimitiveTypeAsm implements TypeAsm {
-    BYTE(1, "b", true), WORD(2, "w", true), LONGWORD(4, "l", true), QUADWORD(8, "q", true), DOUBLE(8, "sd", false);
+    BYTE(1, "b", true), WORD(2, "w", true), LONGWORD(4, "l", true), QUADWORD(8, "q", true), FLOAT(4, "ss", false), DOUBLE(8, "sd", false);
 
     private final int size;
     private final String suffix;

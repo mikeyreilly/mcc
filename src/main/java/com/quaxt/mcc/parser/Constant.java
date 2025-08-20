@@ -2,7 +2,7 @@ package com.quaxt.mcc.parser;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.tacky.ValIr;
 
-sealed public interface Constant<C extends Constant<C>> extends Exp, ValIr permits CharInit, DoubleInit, IntInit, LongInit, ShortInit, UCharInit, UIntInit, ULongInit, UShortInit {
+sealed public interface Constant<C extends Constant<C>> extends Exp, ValIr permits CharInit, DoubleInit, FloatInit, IntInit, LongInit, ShortInit, UCharInit, UIntInit, ULongInit, UShortInit {
     long toLong();
 
     // try to apply op to these constants if it'structOrUnionSpecifier supported

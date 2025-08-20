@@ -10,7 +10,10 @@ public enum TokenType implements Token {
     STRING_LITERAL("\"([^\"\\\\\n]|\\\\['\"\\\\?abfnrtvox]|\\\\[0-7]{1,3})*\""),
     DOUBLE_LITERAL("(([0-9]*\\" +
             ".[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)" +
-            "[^\\w.]", 1), UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
+            "[^\\w.]", 1),
+    FLOAT_LITERAL(
+            "((([0-9]*\\.[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)[fF])[^\\w.]", 1),
+    UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
             "[^\\w.]", 1), UNSIGNED_INT_LITERAL("([0-9]+[uU])[^\\w.]", 1),
     UNSIGNED_HEX_INT_LITERAL("0x([a-fA-F0-9]+[uU])"),
     LONG_LITERAL("([0-9]+[lL][lL]?)[^\\w.]", 1),
@@ -22,7 +25,7 @@ public enum TokenType implements Token {
     ASM(),
     GCC_ATTRIBUTE(),
     BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
-    UNSIGNED(), SIGNED(), GOTO(), CHAR(), SHORT(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),
+    UNSIGNED(), SIGNED(), GOTO(), CHAR(), SHORT(), FLOAT(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),
     TYPEDEF(), CASE(),DEFAULT(),
     CONST(), VOLATILE(), RESTRICT(), ATOMIC(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
@@ -78,6 +81,7 @@ public enum TokenType implements Token {
             case DO -> "do";
             case DOT -> ".";
             case DOUBLE -> "double";
+            case FLOAT -> "float";
             case DOUBLE_LITERAL -> "double_literal";
             case ELLIPSIS -> "ellipsis";
             case ELSE -> "else";
@@ -119,6 +123,7 @@ public enum TokenType implements Token {
             case UNION -> "union";
             case UNSIGNED -> "unsigned";
             case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";
+            case FLOAT_LITERAL -> "float_literal";
             case UNSIGNED_LONG_LITERAL -> "unsigned_long_literal";
             case CONST -> "const";
             case VOLATILE -> "volatile";

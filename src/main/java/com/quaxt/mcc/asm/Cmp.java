@@ -18,6 +18,7 @@ public record Cmp(TypeAsm type, Operand subtrahend,
             case LONGWORD -> "cmpl	";
             case QUADWORD -> "cmpq	";
             case DOUBLE -> "comisd	";
+            case FLOAT -> "comiss	";
             case ByteArray byteArray ->
                     throw new IllegalArgumentException("Can't handle " + byteArray);
         };

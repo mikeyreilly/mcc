@@ -26,7 +26,7 @@ import static com.quaxt.mcc.semantic.Primitive.UCHAR;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
 public class Codegen {
-    static HashMap<Double, StaticConstant> CONSTANT_TABLE = new HashMap<>();
+    static HashMap<Number, StaticConstant> CONSTANT_TABLE = new HashMap<>();
     private static final Data NEGATIVE_ZERO;
     private static final Data UPPER_BOUND;
 
@@ -46,14 +46,18 @@ public class Codegen {
         double negative_zero = -0.0;
         // can't just call resolve constant because 16-byte alignment
         CONSTANT_TABLE.put(negative_zero,
-                new StaticConstant("c." + toHexString(negative_zero), 16,
+                new StaticConstant("c." + doubleToHexString(negative_zero), 16,
                         new DoubleInit(negative_zero)));
-        NEGATIVE_ZERO = resolveConstant(-0.0d);
-        UPPER_BOUND = resolveConstant(0x1.0p63);
+        NEGATIVE_ZERO = resolveConstantDouble(-0.0d);
+        UPPER_BOUND = resolveConstantDouble(0x1.0p63);
     }
 
-    private static String toHexString(double d) {
+    private static String doubleToHexString(double d) {
         return Double.toHexString(d).replaceAll("-", "_");
+    }
+
+    private static String floatToHexString(float d) {
+        return Float.toHexString(d).replaceAll("-", "_");
     }
 
 
@@ -116,7 +120,7 @@ public class Codegen {
 
     private static ArithmeticOperator convertOp(ArithmeticOperator op1,
                                                 TypeAsm typeAsm) {
-        return typeAsm == DOUBLE ? switch (op1) {
+        return typeAsm == DOUBLE || typeAsm == FLOAT ? switch (op1) {
             case SUB -> DOUBLE_SUB;
             case ADD -> DOUBLE_ADD;
             case IMUL -> DOUBLE_MUL;
@@ -436,6 +440,7 @@ public class Codegen {
             case Primitive.INT, Primitive.UINT -> LONGWORD;
             case Primitive.LONG, Primitive.ULONG -> QUADWORD;
             case Primitive.DOUBLE -> DOUBLE;
+            case Primitive.FLOAT -> FLOAT;
             case Pointer _, FunType _ -> QUADWORD;
             case Array _, Structure _ ->
                     new ByteArray((int) Mcc.size(type),
@@ -449,10 +454,17 @@ public class Codegen {
         return src instanceof Memory || src instanceof Indexed || src instanceof Data;
     }
 
-    public static Data resolveConstant(double d) {
+    public static Data resolveConstantDouble(double d) {
         StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d,
-                _ -> new StaticConstant("c." + toHexString(d), 8,
+                _ -> new StaticConstant("c." + doubleToHexString(d), 8,
                         new DoubleInit(d)));
+        return new Data(c.label(), 0);
+    }
+
+    public static Data resolveConstantFloat(float d) {
+        StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d,
+                _ -> new StaticConstant("f." + floatToHexString(d), 8,
+                        new FloatInit(d)));
         return new Data(c.label(), 0);
     }
 
@@ -480,7 +492,8 @@ public class Codegen {
             case LongInit(long l) -> new Imm(l);
             case UIntInit(int i) -> new Imm(Integer.toUnsignedLong(i));
             case ULongInit(long l) -> new Imm(l);
-            case DoubleInit(double d) -> resolveConstant(d);
+            case DoubleInit(double d) -> resolveConstantDouble(d);
+            case FloatInit(float d) -> resolveConstantFloat(d);
         };
     }
 
@@ -843,7 +856,7 @@ public class Codegen {
                               VarIr dstName) -> {
                     Type type = valToType(v1);
                     TypeAsm typeAsm = toTypeAsm(type);
-                    if (typeAsm == DOUBLE) {
+                    if (typeAsm == DOUBLE || typeAsm == FLOAT) {
                         if (op1 == COMMA) {
                             ins.add(new Mov(typeAsm, toOperand(v2),
                                     toOperand(dstName)));

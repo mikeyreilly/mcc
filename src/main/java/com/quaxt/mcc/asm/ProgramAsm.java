@@ -65,7 +65,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         }
         if (o instanceof DoubleReg reg) {
             return "%" + switch (t) {
-                case DOUBLE, QUADWORD -> reg.toString();
+                case DOUBLE, FLOAT, QUADWORD -> reg.toString();
                 default ->
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
             };
@@ -106,6 +106,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private static void writeValue(PrintWriter out, StaticInit init) {
         out.println("                " + switch (init) {
             case DoubleInit(double d) -> ".quad " + Double.doubleToLongBits(d);
+            case FloatInit(float d) -> ".long " + Float.floatToIntBits(d);
             case ShortInit(short l) -> ".value " + l;
             case UShortInit(short l) -> ".value " + Integer.toUnsignedString(l & 0xffff);
             case IntInit(int l) -> ".long " + l;
@@ -314,9 +315,14 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 }else {
                     String srcF = formatOperand(srcType, instruction, src);
                     String dstF = formatOperand(dstType, instruction, dst);
-                    yield (dstType ==
-                            QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF +
+                    if (srcType==DOUBLE)
+                        yield (dstType ==
+                                QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF +
+                                ", " + dstF;
+                    else yield (dstType ==
+                            QUADWORD ? "cvttss2siq\t" : "cvttss2sil\t") + srcF +
                             ", " + dstF;
+
                 }
             }
             case Comment(String comment) -> "# " + comment;
