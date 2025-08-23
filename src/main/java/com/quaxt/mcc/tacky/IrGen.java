@@ -76,6 +76,7 @@ public class IrGen {
     private static void compileDeclaration(Declaration d,
                                            List<InstructionIr> instructions) {
         switch (d) {
+            case EnumSpecifier enumSpecifier -> throw new Todo();
             case Function function -> {
                 if (function.body != null) compileFunction(function);
             }
@@ -335,7 +336,7 @@ public class IrGen {
         for (Constant c : switchStatement.entries) {
             if (c != null) {
                 Constant<?> converted =
-                        (Constant<?>) convertConst((StaticInit) c, type);
+                        (Constant<?>) convertConst(c, type);
                 instructions.add(new Compare(type, converted, switchVal));
                 instructions.add(new JumpIfZero(null,
                         switchStatement.labelFor(c)));

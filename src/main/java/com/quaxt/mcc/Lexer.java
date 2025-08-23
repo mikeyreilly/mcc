@@ -122,6 +122,7 @@ public class Lexer {
                                 case "extern" -> EXTERN;
                                 case "for" -> FOR;
                                 case "float" -> FLOAT;
+                                case "enum" -> ENUM;
                                 case "goto" -> GOTO;
                                 case "if" -> IF;
                                 case "int" -> INT;

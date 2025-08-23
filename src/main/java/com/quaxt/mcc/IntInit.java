@@ -79,6 +79,7 @@ public record IntInit(int i) implements StaticInit, Constant<IntInit> {
             case UNARY_MINUS -> c = -a;
             case NOT -> c = a == 0 ? 1 : 0;
             case UNARY_SHR -> c = a >> 1;
+            case POST_INCREMENT -> c = a + 1;
             default -> {
                 return null;
             }

@@ -415,30 +415,30 @@ public class Optimizer {
                              VarIr dstName) when v1 instanceof Constant c1 -> {
                     Constant co = c1.apply(op);
                     if (co == null) yield null;
-                    yield new Copy((ValIr) convertConst((StaticInit) co,
+                    yield new Copy((ValIr) convertConst(co,
                             valToType(dstName)), dstName);
                 }
 
                 case DoubleToInt(ValIr src,
-                                 VarIr dst) when src instanceof StaticInit c1 ->
+                                 VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
                 case DoubleToUInt(ValIr src,
-                                  VarIr dst) when src instanceof StaticInit c1 ->
+                                  VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
                 case IntToDouble(ValIr src,
-                                 VarIr dst) when src instanceof StaticInit c1 ->
+                                 VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, DOUBLE), dst);
                 case SignExtendIr(ValIr src,
-                                  VarIr dst) when src instanceof StaticInit c1 ->
+                                  VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
                 case ZeroExtendIr(ValIr src,
-                                  VarIr dst) when src instanceof StaticInit c1 ->
+                                  VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
                 case TruncateIr(ValIr src,
-                                VarIr dst) when src instanceof StaticInit c1 ->
+                                VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
                 case UIntToDouble(ValIr src,
-                                  VarIr dst) when src instanceof StaticInit c1 ->
+                                  VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, DOUBLE), dst);
                 case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
                               VarIr dstName) when v1 instanceof Constant c1 && v2 instanceof Constant c2 -> {
@@ -448,7 +448,7 @@ public class Optimizer {
                         throw new Todo();
                         //yield null;
                     }
-                    yield new Copy((ValIr) convertConst((StaticInit) co,
+                    yield new Copy((ValIr) convertConst(co,
                             valToType(dstName)), dstName);
                 }
                 case JumpIfZero(ValIr v,
@@ -467,7 +467,7 @@ public class Optimizer {
                 }
 
                 case Copy(ValIr src,
-                          VarIr dst) when src instanceof StaticInit c1 -> {
+                          VarIr dst) when src instanceof Constant c1 -> {
                     var dstT = valToType(dst);
                     var srcT = valToType(src);
                     if (srcT.equals(dstT) || (srcT.isSigned() == dstT.isSigned()))

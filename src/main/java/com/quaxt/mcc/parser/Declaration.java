@@ -1,4 +1,4 @@
 package com.quaxt.mcc.parser;
 
-public sealed interface Declaration extends BlockItem permits Function, StructOrUnionSpecifier, VarDecl {
+public sealed interface Declaration extends BlockItem permits EnumSpecifier, Function, StructOrUnionSpecifier, VarDecl {
 }

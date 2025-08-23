@@ -23,6 +23,7 @@ import static com.quaxt.mcc.UnaryOperator.POST_DECREMENT;
 import static com.quaxt.mcc.UnaryOperator.POST_INCREMENT;
 import static com.quaxt.mcc.optimizer.Optimizer.optimizeInstructions;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
+import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.typeCheckAndConvert;
 
 public class Parser {
@@ -87,6 +88,9 @@ public class Parser {
             case DOUBLE -> ts = PrimitiveTypeSpecifier.DOUBLE;
             case SIGNED -> ts = PrimitiveTypeSpecifier.SIGNED;
             case UNSIGNED -> ts = PrimitiveTypeSpecifier.UNSIGNED;
+            case ENUM -> {
+                return parseEnumSpecifier(tokens, typeAliases);
+            }
             default -> ts = null;
         }
         if (ts != null) tokens.removeFirst();
@@ -96,6 +100,90 @@ public class Parser {
                 ts = parseTypedefName(tokens, typeAliases);
         }
         return ts;
+    }
+
+    private static EnumSpecifier parseEnumSpecifier(TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
+        expect(ENUM, tokens);
+// enum-specifier:
+//    enum  identifier opt  enum-type-specifier opt  { enumerator-list }
+//    enum  identifier opt  enum-type-specifier opt  { enumerator-list , }
+//   enum identifier enum-type-specifier opt
+
+// enumerator-list:
+//   enumerator
+//   enumerator-list , enumerator
+
+// enumerator:
+//   enumeration-constant
+//   enumeration-constant  = constant-expression
+
+// enum-type-specifier:
+//    : specifier-qualifier-list
+        String enumName =null;
+        Token token = tokens.getFirst();
+        Type type = null;
+        if (token instanceof TokenWithValue(Token tokentype,
+                                            String value) ) {
+           tokens.removeFirst(); // enumName
+           if (tokentype == IDENTIFIER || tokentype == LABEL) enumName = value;
+           if (tokentype == LABEL) {
+               tokens.removeFirst(); // COLON
+               TypeName typeName = parseTypeName(tokens, typeAliases);
+               type = typeNameToType(typeName, typeAliases);
+           }
+        }
+        if (tokens.getFirst() != OPEN_BRACE)
+            return new EnumSpecifier(type, enumName, null);
+        tokens.removeFirst();
+        Constant current = IntInit.ZERO;
+        ArrayList<Enumerator> enumerators = new ArrayList<>();
+        Type effectiveType = Primitive.INT;
+        var ret= new EnumSpecifier(type, enumName, enumerators);
+        SemanticAnalysis.resolveEnumSpecifier(ret, null);
+        while(true) {
+            Token t = tokens.getFirst();
+            if (t instanceof TokenWithValue(Token tokenType,
+                                            String enumeratorName) && tokenType == IDENTIFIER) {
+                tokens.removeFirst();
+                Token next = tokens.getFirst();
+                if (next == BECOMES) {
+                    tokens.removeFirst();
+                    current = parseConstExp(tokens, typeAliases);
+                    if (!current.type().isInteger()) {
+                        throw makeErr("Only integer types are allowed for enum constants", tokens);
+                    }
+                }
+                if (current.type() != effectiveType){
+                    effectiveType = SemanticAnalysis.getCommonType(current.type(), effectiveType);
+                }
+                enumerators.add(new Enumerator(enumeratorName, current));
+                current = current.apply(POST_INCREMENT);
+                t = tokens.getFirst();
+                if (t == CLOSE_BRACE) {
+                    tokens.removeFirst();
+                    break;
+                }
+                if (t == COMMA) {
+                    tokens.removeFirst();
+                } else {
+                    throw makeErr("Expected ',' or '}' but found "+t, tokens);
+                }
+
+            } else if (t == CLOSE_BRACE) {
+                tokens.removeFirst();
+                break;
+            }
+            else {
+                throw makeErr("Expected IDENTIFER but found " + t, tokens);
+            }
+
+        }
+        if (type != null) effectiveType = type;
+        for (int i = 0; i < enumerators.size(); i++){
+            var e = enumerators.get(i);
+            enumerators.set(i,new Enumerator(e.name(), convertConst(e.value(), effectiveType)));
+        }
+        return ret;
     }
 
     private static TypeSpecifier parseTypedefName(TokenList tokens,
@@ -535,12 +623,18 @@ public class Parser {
         } else {
             while (tokens.getFirst() == OPEN_BRACKET) {
                 tokens.removeFirst();
-                Constant c = parseConstExp(tokens, typeAliases);
-                if (c instanceof DoubleInit) {
-                    throw new Err("illegal non-integer array size");
+                Constant c;
+                if (tokens.getFirst() == CLOSE_BRACKET) {
+                    c = null;
                 }
-                if (c.toLong() < 0L)
-                    throw new Err("illegal negative array size");
+                else {
+                    c = parseConstExp(tokens, typeAliases);
+                    if (c.isFloatingPointType()) {
+                        throw new Err("illegal non-integer array size");
+                    }
+                    if (c.toLong() < 0L)
+                        throw new Err("illegal negative array size");
+                }
                 d = new ArrayDeclarator(d, c);
                 expect(CLOSE_BRACKET, tokens);
             }
@@ -787,6 +881,8 @@ public class Parser {
             // create __builtin_va_list. So during that parsing e will be null.
             addTypedefToCurrentScope(typeAliases, "__builtin_va_list",
                     e.type());
+
+            addTypedefToCurrentScope(typeAliases, "_Float128", Primitive.DOUBLE);
         }
         DeclarationList declarationList;
         while ((declarationList = parseDeclarationList(tokens, true,
@@ -817,13 +913,15 @@ public class Parser {
         if (typeAndStorageClass == null) return null;
         if (tokens.getFirst() == SEMICOLON) {
             tokens.removeFirst();
-            // just struct
-            if (typeAndStorageClass.type() instanceof Structure) {
-                for (var x : specifiers) {
-                    if (x instanceof StructOrUnionSpecifier su)
-                        return new DeclarationList(Collections.singletonList(su));
+
+            for (var x : specifiers) {
+                if (x instanceof StructOrUnionSpecifier su)
+                    return new DeclarationList(Collections.singletonList(su));
+                if (x instanceof EnumSpecifier es) {
+                    return new DeclarationList(Collections.singletonList(es));
                 }
             }
+
             throw new Todo();
         }
         List<Declaration> l = new ArrayList<>();
@@ -996,6 +1094,10 @@ public class Parser {
                 case TypeQualifier typeQualifier -> {
                     typeQualifiers.add(typeQualifier);
                 }
+                case EnumSpecifier es -> {
+                    type=es.type();
+                }
+                default -> throw new Todo();
             }
         }
         if (type == null) {
@@ -1026,7 +1128,7 @@ public class Parser {
     private static boolean isTypeSpecifier(TokenList tokens, int start,
                                            ArrayList<Map<String, Type>> typeAliases) {
         Token first = tokens.get(start);
-        if (CHAR == first || INT == first || SHORT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first|| FLOAT == first || VOID == first || STRUCT == first || UNION == first)
+        if (CHAR == first || INT == first || SHORT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first|| FLOAT == first || VOID == first || STRUCT == first || UNION == first || ENUM == first)
             return true;
         return typeAliases != null && first instanceof TokenWithValue(
                 Token type,
@@ -1344,7 +1446,7 @@ public class Parser {
                     case IDENTIFIER,
                          // if we're in the middle of a ?: expression we
                          // might have token type label (because of the
-                         // colon), but it'structOrUnionSpecifier really an identifier
+                         // colon), but it's really an identifier
                          LABEL -> {
                         tokens.removeFirst();
 
@@ -1392,8 +1494,8 @@ public class Parser {
                 yield exp;
             }
             default ->
-                    throw new Err("Expected either identifier, constant or (,"
-                            + " found:" + tokens.getFirst());
+                    throw makeErr("Expected either identifier, constant or (,"
+                            + " found:" + tokens.getFirst(), tokens);
         };
     }
 

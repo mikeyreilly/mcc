@@ -3,10 +3,7 @@ package com.quaxt.mcc;
 import com.quaxt.mcc.asm.Codegen;
 import com.quaxt.mcc.asm.ProgramAsm;
 import com.quaxt.mcc.optimizer.Optimizer;
-import com.quaxt.mcc.parser.Constant;
-import com.quaxt.mcc.parser.Parser;
-import com.quaxt.mcc.parser.Program;
-import com.quaxt.mcc.parser.TokenList;
+import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.IrGen;
 import com.quaxt.mcc.tacky.ProgramIr;
@@ -32,12 +29,8 @@ public class Mcc {
             return super.put(key, value);
         }
     };
-    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>(){
-        @Override
-        public StructDef put(String key, StructDef value) {
-            return super.put(key, value);
-        }
-    };
+    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>();
+    public static final HashMap<String, EnumSpecifier> ENUM_MAP = new HashMap<>();
 
     public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
 
@@ -142,6 +135,17 @@ public class Mcc {
     public static ArrayList<MemberEntry> members(Structure s) {
         StructDef structDef = Mcc.TYPE_TABLE.get(s.tag());
         return structDef.members();
+    }
+
+    public static Constant lookupEnumConstant(String name) {
+        for (EnumSpecifier es : Mcc.ENUM_MAP.values()){
+            for (var e : es.enumerators()){
+                if (e.name().equals(name)){
+                    return e.value();
+                }
+            }
+        }
+        return null;
     }
 
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}

@@ -5,7 +5,7 @@ import com.quaxt.mcc.tacky.ValIr;
 sealed public interface Constant<C extends Constant<C>> extends Exp, ValIr permits CharInit, DoubleInit, FloatInit, IntInit, LongInit, ShortInit, UCharInit, UIntInit, ULongInit, UShortInit {
     long toLong();
 
-    // try to apply op to these constants if it'structOrUnionSpecifier supported
+    // try to apply op to these constants if it's supported
     Constant<?> apply(BinaryOperator op, C v2);
 
     boolean isZero();
@@ -18,6 +18,9 @@ sealed public interface Constant<C extends Constant<C>> extends Exp, ValIr permi
 
     Constant<?> apply1(BinaryOperator op, Constant c2);
 
+    default boolean isFloatingPointType(){
+        return false;
+    }
 }
 
 

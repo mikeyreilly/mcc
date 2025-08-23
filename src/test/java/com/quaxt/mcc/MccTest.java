@@ -127,6 +127,16 @@ class MccTest {
         returns("float", 30);
     }
 
+    @Test
+    void enum_test()  throws Exception {
+        returns("enum", 221);
+    }
+
+    @Test
+    void extern_test()  throws Exception {
+        outputs("extern", "a.b.c\n");
+    }
+
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {

@@ -85,4 +85,8 @@ public record DoubleInit(double d) implements StaticInit, Constant<DoubleInit> {
         }
         return this.apply(op, new DoubleInit((double)c2.toLong()));
     }
+
+    public boolean isFloatingPointType(){
+        return true;
+    }
 }

@@ -84,4 +84,8 @@ public record FloatInit(float d) implements StaticInit, Constant<FloatInit> {
         }
         return this.apply(op, new FloatInit((float)c2.toLong()));
     }
+
+    public boolean isFloatingPointType(){
+        return true;
+    }
 }

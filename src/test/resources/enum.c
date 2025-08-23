@@ -1,0 +1,6 @@
+enum DAY : unsigned long {MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY= THURSDAY + 10, SATURDAY=100, SUNDAY};
+
+int main(void) {
+    enum DAY today = TUESDAY;
+    return today + MONDAY + TUESDAY + WEDNESDAY + THURSDAY + FRIDAY + SATURDAY + SUNDAY;
+}
