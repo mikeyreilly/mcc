@@ -15,8 +15,7 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.*;
 import static com.quaxt.mcc.CompoundAssignmentOperator.SAR_EQ;
-import static com.quaxt.mcc.Mcc.makeErr;
-import static com.quaxt.mcc.Mcc.makeTemporary;
+import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.TokenType.*;
 import static com.quaxt.mcc.TokenType.VOID;
 import static com.quaxt.mcc.UnaryOperator.POST_DECREMENT;
@@ -28,7 +27,7 @@ import static com.quaxt.mcc.semantic.SemanticAnalysis.typeCheckAndConvert;
 
 public class Parser {
 
-    private static List<DeclarationSpecifier> parseDeclarationSpecifiers(
+    public static List<DeclarationSpecifier> parseDeclarationSpecifiers(
             TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
         // declaration-specifiers:
         //        storage-class-specifier declaration-specifiers(opt)
@@ -51,14 +50,22 @@ public class Parser {
                 typeAliases = null; // we only want to recognize a typedef
                 // name as a typedef name if it is the first typeSpecifier
                 l.add(typeSpecifier);
-            } else break;
+            }
+            else break;
         }
         return l;
+    }
 
-
+    public static void skipRestrict(TokenList tokens) {
+        while (true) {
+            if (tokens.isEmpty()) return;
+            if (tokens.getFirst() == RESTRICT) tokens.removeFirst();
+            else break;
+        }
     }
 
     private static TypeQualifier parseTypeQualifier(TokenList tokens) {
+        skipRestrict(tokens);
         TypeQualifier tq;
         switch (tokens.getFirst()) {
             case CONST -> tq = TypeQualifier.CONST;
@@ -77,6 +84,7 @@ public class Parser {
     private static TypeSpecifier parseTypeSpecifier(TokenList tokens,
                                                     ArrayList<Map<String,
                                                             Type>> typeAliases) {
+        skipRestrict(tokens);
         TypeSpecifier ts;
         switch (tokens.getFirst()) {
             case VOID -> ts = PrimitiveTypeSpecifier.VOID;
@@ -247,9 +255,9 @@ public class Parser {
     private static String generateTagForAnonymousStructOrUnion() {
         return makeTemporary("tag.");
     }
-
-
+    
     private static StorageClass parseStorageClassSpecifier(TokenList tokens) {
+        skipRestrict(tokens);
         StorageClass sc;
         switch (tokens.getFirst()) {
             case TYPEDEF -> sc = StorageClass.TYPEDEF;
@@ -278,7 +286,7 @@ public class Parser {
         return null;
     }
 
-    private static Token expect(Token expected, TokenList tokens) {
+    public static Token expect(Token expected, TokenList tokens) {
         Token token = tokens.getFirst();
         if (expected != token.type()) {
             if (token == GCC_ATTRIBUTE) {
@@ -296,7 +304,7 @@ public class Parser {
         return token;
     }
 
-    private static void stripGccAttribute(TokenList tokens) {
+    public static void stripGccAttribute(TokenList tokens) {
         int cursorAtStart = tokens.cursor;
         tokens.removeFirst();
 
@@ -481,34 +489,15 @@ public class Parser {
         return new DoWhile(body, condition, null);
     }
 
-    sealed interface ParameterDeclaration permits Declarator, AbstractDeclarator {}
 
-    sealed interface Declarator extends ParameterDeclaration permits ArrayDeclarator, FunDeclarator, Ident
-            , PointerDeclarator {}
-
-    record Ident(String identifier) implements Declarator {}
-
-    record PointerDeclarator(Declarator declarator) implements Declarator {}
-
-    record ArrayDeclarator(Declarator declarator,
-                           Constant size) implements Declarator {}
-
-    record FunDeclarator(List<ParamInfo> params, Declarator declarator,
-                         boolean varargs) implements Declarator {}
-
-    record ParamInfo(Type type, ParameterDeclaration declarator) {}
-
+    record AbstractArrayDeclarator(AbstractDeclarator abstractDeclarator,
+                                   Constant arraySize) implements AbstractDeclarator {}
 
     record NameDeclTypeParams(String name, Type type,
                               ArrayList<String> paramNames) {}
-
-    sealed interface AbstractDeclarator extends ParameterDeclaration permits AbstractArrayDeclarator,
-            AbstractBase, AbstractPointer, DirectAbstractDeclarator {}
+    sealed interface AbstractDeclarator{};
 
     record AbstractBase() implements AbstractDeclarator {}
-
-    record DirectAbstractDeclarator(
-            AbstractDeclarator declarator) implements AbstractDeclarator {}
 
     record AbstractPointer(
             AbstractDeclarator declarator) implements AbstractDeclarator {}
@@ -551,111 +540,12 @@ public class Parser {
 
     }
 
-    record AbstractArrayDeclarator(AbstractDeclarator abstractDeclarator,
-                                   Constant arraySize) implements AbstractDeclarator {}
 
     private static String debugTokens(TokenList tokens) {
         return tokens.stream().map(Object::toString).collect(Collectors.joining(" "));
     }
 
-    private static Declarator parseDeclarator(TokenList tokens,
-                                              ArrayList<Map<String, Type>> typeAliases) {
-        Token t = tokens.removeFirst();
-        if (t==RESTRICT) t=tokens.removeFirst();
-        Declarator d = switch (t) {
-            case OPEN_PAREN -> {
-                Declarator inner = parseDeclarator(tokens, typeAliases);
-                expect(CLOSE_PAREN, tokens);
-                yield inner;
-            }
-            case IMUL ->
-                    new PointerDeclarator(parseDeclarator(tokens, typeAliases));
-            case TokenWithValue(Token type,
-                                String name) when type == IDENTIFIER ->
-                    new Ident(name);
-            default ->
-                    throw makeErr("while parsing declarator found unexpected "
-                            + "token :" + t, tokens);
-        };
-        if (tokens.getFirst() == OPEN_PAREN) {
-            tokens.removeFirst();
-            Token firstParam = tokens.getFirst();
-            List<ParamInfo> params;
-            boolean varargs = false;
-            if (VOID == firstParam.type() && tokens.get(1) == CLOSE_PAREN) {
-                tokens.removeFirst();
-                expect(CLOSE_PAREN, tokens);
-                params = Collections.emptyList();
-            } else {
-                params = new ArrayList<>();
-
-                while (true) {
-                    if (tokens.getFirst() == ELLIPSIS) {
-                        tokens.removeFirst();
-                        varargs = true;
-                        expect(CLOSE_PAREN, tokens);
-                        break;
-                    }
-                    List<DeclarationSpecifier> specifiers =
-                            parseDeclarationSpecifiers(tokens, typeAliases);
-                    TypeAndStorageClass typeAndStorageClass =
-                            parseTypeAndStorageClass(specifiers, typeAliases, tokens);
-                    if (typeAndStorageClass.storageClass() != null)
-                        fail("error: storage class specified for parameter");
-                    ParameterDeclaration paramDeclarator = parseParameterDeclaration(tokens, typeAliases);
-//                    Declarator paramDeclarator = parseDeclarator(tokens,
-//                            typeAliases);
-                    NameDeclTypeParams nameDeclTypeParams =
-                            processDeclarator(paramDeclarator,
-                                    typeAndStorageClass.type());
-                    params.add(new ParamInfo(nameDeclTypeParams.type(),
-                            paramDeclarator));
-
-                    Token token = tokens.removeFirst();
-                    if (token == RESTRICT) token = tokens.removeFirst();
-                    if (token == CLOSE_PAREN) break;
-                    else if (token != COMMA)
-                        throw new IllegalArgumentException("Expected COMMA, " + "got " + token);
-                }
-
-            }
-            return new FunDeclarator(params, d, varargs);
-        } else {
-            while (tokens.getFirst() == OPEN_BRACKET) {
-                tokens.removeFirst();
-                Constant c;
-                if (tokens.getFirst() == CLOSE_BRACKET) {
-                    c = null;
-                }
-                else {
-                    c = parseConstExp(tokens, typeAliases);
-                    if (c.isFloatingPointType()) {
-                        throw new Err("illegal non-integer array size");
-                    }
-                    if (c.toLong() < 0L)
-                        throw new Err("illegal negative array size");
-                }
-                d = new ArrayDeclarator(d, c);
-                expect(CLOSE_BRACKET, tokens);
-            }
-        }
-        return d;
-    }
-
-    private static ParameterDeclaration parseParameterDeclaration(TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
-//        parameter-declaration:
-//            attribute-specifier-sequenceopt declaration-specifiers declarator
-//            attribute-specifier-sequenceopt declaration-specifiers abstract-declaratoropt
-        int cursorAtStart = tokens.cursor;
-        try {
-            return parseDeclarator(tokens, typeAliases);
-        } catch (Err e){
-            tokens.cursor = cursorAtStart;
-            return parseAbstractDeclarator(tokens);
-        }
-    }
-
-    private static Constant parseConstExp(TokenList tokens,
+    public static Constant parseConstExp(TokenList tokens,
                                           ArrayList<Map<String, Type>> typeAliases) {
         int cursorAtStart = tokens.cursor;
         Exp e = parseExp(tokens, 0, false, typeAliases);
@@ -675,48 +565,56 @@ public class Parser {
     }
 
 
-    private static NameDeclTypeParams processDeclarator(ParameterDeclaration declarator,
-                                                        Type baseType) {
-        return switch (declarator) {
-            case Ident(String name) ->
-                    new NameDeclTypeParams(name, baseType, new ArrayList<>());
-            case PointerDeclarator(Declarator d) ->
-                    processDeclarator(d, new Pointer(baseType));
-            case FunDeclarator(List<ParamInfo> params, Declarator d,
-                               boolean varargs) -> {
+    private static NameDeclTypeParams processDeclarator(Declarator declarator,
+                                                        Type baseType,
+                                                        ArrayList<Map<String, Type>> typeAliases,
+                                                        TokenList tokens) {
+        switch (declarator) {
+            case null: {
+                return new NameDeclTypeParams(null, baseType, new ArrayList<>());
+            }
+            case Ident(String name):
+            {
+                return new NameDeclTypeParams(name, baseType, new ArrayList<>());
+            }
+            case PointerDeclarator(Declarator d):
+                   return  processDeclarator(d, new Pointer(baseType), typeAliases, tokens);
 
+            case ArrayDeclarator(Declarator inner, Constant size): {
+                Array derivedType = new Array(baseType, size);
+                return processDeclarator(inner, derivedType, typeAliases, tokens);
+            }
+
+            case FunctionDeclarator(Declarator d, ParameterTypeList parameterTypeList) :
+            {
+                ArrayList<ParameterDeclaration> parameterDeclarations=parameterTypeList.parameterDeclarations();
+                boolean varargs=parameterTypeList.varArgs();
                 ArrayList<String> paramNames = new ArrayList<>();
                 List<Type> paramTypes = new ArrayList<>();
-
-                for (ParamInfo pi : params) {
+                for(ParameterDeclaration pi:parameterDeclarations){
+                    TypeAndStorageClass xxx =
+                            parseTypeAndStorageClass(pi.declarationSpecifiers(), typeAliases, tokens);
                     NameDeclTypeParams decl =
-                            processDeclarator(pi.declarator(), pi.type());
+                            processDeclarator((Declarator) pi.declarator(), xxx.type(), typeAliases, tokens);
+
                     String name = decl.name();
-                    Type type = pi.type();
+                    Type type = decl.type();
+                    if (type == Primitive.VOID) continue;
                     if (type instanceof FunType)
                         throw new Err("function pointers are not supported");
                     paramNames.add(name);
                     paramTypes.add(type);
                 }
-                FunType derivedType = new FunType(paramTypes, baseType,
-                        varargs);
-                if (d instanceof Ident(String name)){
-                    yield new NameDeclTypeParams(name, derivedType, paramNames);
-                } else if (d instanceof PointerDeclarator(Declarator decl)){
-                    yield processDeclarator(d, derivedType);
+                FunType derivedType =
+                        new FunType(paramTypes, baseType, varargs);
+                if (d instanceof Ident(String name)) {
+                    return new NameDeclTypeParams(name, derivedType, paramNames);
+                } else if (d instanceof PointerDeclarator(Declarator decl)) {
+                    return processDeclarator(d, derivedType, typeAliases, tokens);
                 }
-
-                throw new Err("Can't apply array " +
-                        "derivations to a function type. Not implemented yet.");
-
             }
-            case ArrayDeclarator(Declarator inner, Constant size) -> {
-                Array derivedType = new Array(baseType, size);
-                yield processDeclarator(inner, derivedType);
-            }
-            case AbstractDeclarator abstractDeclarator->
-                    new NameDeclTypeParams(null, processAbstractDeclarator(abstractDeclarator, baseType),new ArrayList<>());
-        };
+        }
+        throw new Todo();
     }
 
     private static MemberDeclaration parseMemberDeclaration(TokenList tokens,
@@ -727,14 +625,153 @@ public class Parser {
                 parseTypeAndStorageClass(specifiers, typeAliases, tokens);
         if (typeAndStorageClass.storageClass() != null)
             fail("error: storage class specified for struct member");
-        Declarator paramDeclarator = parseDeclarator(tokens, typeAliases);
+        Declarator paramDeclarator =
+                parseDeclarator(tokens, typeAliases);
         NameDeclTypeParams nameDeclTypeParams =
-                processDeclarator(paramDeclarator, typeAndStorageClass.type());
+                processDeclarator(paramDeclarator, typeAndStorageClass.type(), typeAliases, tokens);
         var t = nameDeclTypeParams.type();
         if (t instanceof FunType)
             fail("error: member declaration can't be function");
         return new MemberDeclaration(t, nameDeclTypeParams.name(), typeAndStorageClass.structOrUnionSpecifier());
 
+    }
+
+
+    record PointerDeclarator(Declarator d) implements Declarator {}
+    sealed interface DirectDeclarator extends Declarator permits ArrayDeclarator, Ident, FunctionDeclarator {};
+    record Ident(String identifier) implements DirectDeclarator {}
+    sealed interface Declarator extends DeclaratorOrAbstractDeclarator permits  DirectDeclarator, PointerDeclarator {}
+    record ArrayDeclarator(Declarator d, Constant arraySize) implements DirectDeclarator{};
+    record FunctionDeclarator(Declarator d, ParameterTypeList parameterTypeList) implements DirectDeclarator{};
+    record ParameterTypeList(
+            ArrayList<ParameterDeclaration> parameterDeclarations, boolean varArgs){}
+    sealed interface DeclaratorOrAbstractDeclarator {}
+
+    record ParameterDeclaration(
+            List<DeclarationSpecifier> declarationSpecifiers,
+            DeclaratorOrAbstractDeclarator declarator) {}
+
+    public static Declarator parseDeclarator(TokenList tokens,
+                                             ArrayList<Map<String, Type>> typeAliases){
+        Parser.skipRestrict(tokens);
+        Token t = tokens.getFirst();
+        if (t == IMUL){
+            tokens.removeFirst();
+            return new PointerDeclarator(parseDeclarator(tokens, typeAliases));
+        }
+
+        return parseDirectDeclarator(tokens, typeAliases);
+
+    }
+
+    /** it returns declarator because of the "(" declarator ")" rule*/
+    private static Declarator parseDirectDeclarator(TokenList tokens,
+                                                    ArrayList<Map<String, Type>> typeAliases) {
+//        direct-declarator:
+//            identifier attribute-specifier-sequenceopt
+//            "(" declarator ")"
+//            array-declarator attribute-specifier-sequenceopt
+//            function-declarator attribute-specifier-sequenceopt
+
+        Token t  = tokens.getFirst();
+        Declarator d = switch (t) {
+            case TokenWithValue(Token type,
+                                String identifier) -> {
+                if (type == TokenType.IDENTIFIER) {
+                    tokens.removeFirst();
+                    yield new Ident(identifier);
+                }
+                yield null;
+
+            }
+            case OPEN_PAREN -> {
+                tokens.removeFirst();
+                var r = parseDeclarator(tokens, typeAliases);
+                Parser.expect(TokenType.CLOSE_PAREN, tokens);
+                yield r;
+            }
+            default -> {
+                yield null;
+            }
+        };
+        while(true) {
+            t = tokens.getFirst();
+            if (t == GCC_ATTRIBUTE) {
+                Parser.stripGccAttribute(tokens);
+            } else if (t == OPEN_BRACKET) {
+                tokens.removeFirst();
+                Constant arraySize=parseArraySize(tokens, typeAliases);
+                Parser.expect(TokenType.CLOSE_BRACKET, tokens);
+                d = new ArrayDeclarator(d, arraySize);
+            } else if (t == OPEN_PAREN) {
+                tokens.removeFirst();
+                ParameterTypeList parameterTypeList = parseParameterTypeList(tokens, typeAliases);
+                Parser.expect(TokenType.CLOSE_PAREN, tokens);
+                d = new FunctionDeclarator(d, parameterTypeList);
+            } else break;
+        }
+        return d;
+    }
+
+    private static ParameterTypeList parseParameterTypeList(TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
+
+        ArrayList<ParameterDeclaration> parameterDeclarations = new ArrayList<>();
+        boolean allowComma=false;
+        while(true){
+            Token t = tokens.getFirst();
+
+            switch(t){
+                case CLOSE_PAREN -> {
+                    return new ParameterTypeList(parameterDeclarations, false);
+                }
+                case ELLIPSIS -> {
+                    tokens.removeFirst();
+                    return new ParameterTypeList(parameterDeclarations, true);
+                } case COMMA -> {
+                    if (allowComma) {
+                        tokens.removeFirst();
+                        allowComma = false;
+                    } else throw makeErr("Unexpected comma while parsing parameter list", tokens);
+                }
+                default -> {
+                    var pd = parseParameterDeclaration(tokens,typeAliases);
+                    allowComma = true;
+                    parameterDeclarations.add(pd);
+                }
+            }
+        }
+
+
+    }
+
+    private static ParameterDeclaration parseParameterDeclaration(TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
+//        parameter-declaration:
+//        attribute-specifier-sequenceopt declaration-specifiers declarator
+//        attribute-specifier-sequenceopt declaration-specifiers abstract-declaratoropt
+        int cursorAtStart=tokens.cursor;
+        List<DeclarationSpecifier> s = Parser.parseDeclarationSpecifiers(tokens, typeAliases);
+        if (s.isEmpty()) {
+            throw makeErr("Could not find declaraton specifier while parsing parameter declaration", tokens);
+        }
+        DeclaratorOrAbstractDeclarator d= parseDeclarator(tokens, typeAliases);
+        return new ParameterDeclaration(s, d);
+    }
+
+    private static Constant parseArraySize(TokenList tokens,
+                                           ArrayList<Map<String, Type>> typeAliases) {
+        Constant c;
+        if (tokens.getFirst() == CLOSE_BRACKET) {
+            c = null;
+        }
+        else {
+            c = parseConstExp(tokens, typeAliases);
+            if (c.isFloatingPointType()) {
+                throw new Err("illegal non-integer array size");
+            }
+            if (c.toLong() < 0L)
+                throw new Err("illegal negative array size");
+        }
+        return c;
     }
 
     private static Initializer parseInitializer(TokenList tokens,
@@ -875,7 +912,7 @@ public class Parser {
         ArrayList<Map<String, Type>> typeAliases = new ArrayList<>();
         // built initial typeAliases. Will contain __builtin_va_list
         typeAliases.add(new HashMap<>());
-        SymbolTableEntry e = Mcc.SYMBOL_TABLE.get("__builtin_va_list");
+        SymbolTableEntry e = SYMBOL_TABLE.get("__builtin_va_list");
         if (e != null) { // before Mcc.mcc loading the users c file, it loads
             // some built in source which is parsed and validated to
             // create __builtin_va_list. So during that parsing e will be null.
@@ -936,10 +973,44 @@ public class Parser {
             } else if (token.equals(COMMA)) {
                 if (first) throw new Err("unexpected comma");
                 tokens.removeFirst();
-            } else if (token.equals(OPEN_PAREN) || token.equals(IMUL) || token instanceof TokenWithValue(
-                    Token type, String _) && type == IDENTIFIER) {
-                var decl = parseDeclaration(tokens, typeAndStorageClass,
-                        typeAliases);
+            } else if (token.equals(OPEN_PAREN) || token.equals(IMUL) ||
+                    token instanceof TokenWithValue(Token type, String _) &&
+                            type == IDENTIFIER) {
+                Declaration decl;
+                Declarator declarator =
+                        parseDeclarator(tokens, typeAliases);
+                NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator,
+                        typeAndStorageClass.type(), typeAliases, tokens);
+                String name = nameDeclTypeParams.name();
+                Type type = nameDeclTypeParams.type();
+                ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
+                if (type instanceof FunType funType) {
+                    decl =
+                            parseRestOfFunction(paramNames, tokens, name, typeAndStorageClass.storageClass(), typeAliases, funType);
+                } else {
+                    Token token1 = tokens.getFirst();
+                    Initializer init;
+                    switch (token1.type()) {
+                        case BECOMES:
+                            tokens.removeFirst();
+                            init = parseInitializer(tokens, typeAliases);
+                            break;
+                        case SEMICOLON:
+                            init = null;
+                            break;
+                        default:
+                            throw makeErr(
+                                    "Expected ; or =, got " + token1, tokens);
+                    }
+                    if (typeAndStorageClass.storageClass() ==
+                            StorageClass.TYPEDEF) {
+                        addTypedefToCurrentScope(typeAliases, name, type);
+                    }
+                    decl =
+                            new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass(), typeAndStorageClass.structOrUnionSpecifier());
+                }
+
+
                 l.add(decl);
                 if (decl instanceof Function) break out;
             } else {
@@ -950,43 +1021,6 @@ public class Parser {
             throw new Err("Expected identifier or (");
         }
         return new DeclarationList(l);
-    }
-
-    private static Declaration parseDeclaration(TokenList tokens,
-                                                TypeAndStorageClass typeAndStorageClass,
-                                                ArrayList<Map<String, Type>> typeAliases) throws Err {
-        Declarator declarator = parseDeclarator(tokens, typeAliases);
-        NameDeclTypeParams nameDeclTypeParams = processDeclarator(declarator,
-                typeAndStorageClass.type());
-        String name = nameDeclTypeParams.name();
-        Type type = nameDeclTypeParams.type();
-        ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
-        if (type instanceof FunType funType) {
-            return parseRestOfFunction(paramNames, tokens, name,
-                    typeAndStorageClass.storageClass(), typeAliases, funType);
-        }
-        Token token = tokens.getFirst();
-        Initializer init;
-        switch (token.type()) {
-            case BECOMES:
-                tokens.removeFirst();
-                init = parseInitializer(tokens, typeAliases);
-                break;
-            case SEMICOLON:
-                init = null;
-                break;
-            default:
-                throw makeErr("Expected ; or =, got " + token, tokens);
-        }
-
-
-        if (typeAndStorageClass.storageClass() == StorageClass.TYPEDEF) {
-            addTypedefToCurrentScope(typeAliases, name, type);
-        }
-
-        return new VarDecl(new Var(name, type), init, type,
-                typeAndStorageClass.storageClass(),
-                typeAndStorageClass.structOrUnionSpecifier());
     }
 
 
@@ -1212,7 +1246,6 @@ public class Parser {
         return new While(condition, body, null);
     }
 
-
     private static Constant parseConst(String value, Type type, boolean hex) {
         int base = hex ? 16 : 10;
         if (type == Primitive.DOUBLE)
@@ -1237,8 +1270,8 @@ public class Parser {
             case AbstractBase _ -> type;
             case AbstractPointer(AbstractDeclarator declarator) ->
                     processAbstractDeclarator(declarator, new Pointer(type));
-            case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
-                    processAbstractDeclarator(declarator, type);
+//            case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
+//                    processAbstractDeclarator(declarator, type);
             case AbstractArrayDeclarator(AbstractDeclarator declarator,
                                          Constant arraySize) ->
                     processAbstractDeclarator(declarator, new Array(type,
@@ -1446,7 +1479,7 @@ public class Parser {
                     case IDENTIFIER,
                          // if we're in the middle of a ?: expression we
                          // might have token type label (because of the
-                         // colon), but it's really an identifier
+                         // colon), but it'declarationSpecifiers really an identifier
                          LABEL -> {
                         tokens.removeFirst();
 

@@ -1,0 +1,41 @@
+6.7.6 Declarators
+
+
+declarator:
+    pointeropt direct-declarator
+
+direct-declarator:
+    identifier attribute-specifier-sequenceopt
+    "(" declarator ")"
+    array-declarator attribute-specifier-sequenceopt
+    function-declarator attribute-specifier-sequenceopt
+
+array-declarator:
+    direct-declarator "[" type-qualifier-listopt assignment-expressionopt "]"
+    direct-declarator "[" "static" type-qualifier-listopt assignment-expression "]"
+    direct-declarator "[" type-qualifier-list "static" assignment-expression "]"
+    direct-declarator "[" type-qualifier-listopt * "]"
+
+function-declarator:
+    direct-declarator "(" parameter-type-listopt ")"
+
+pointer:
+    "*" attribute-specifier-sequenceopt type-qualifier-listopt
+    "*" attribute-specifier-sequenceopt type-qualifier-listopt pointer
+
+type-qualifier-list:
+    type-qualifier
+    type-qualifier-list type-qualifier
+
+parameter-type-list:
+    parameter-list
+    parameter-list "," "..."
+    "..."
+    
+parameter-list:
+    parameter-declaration
+    parameter-list "," parameter-declaration
+
+parameter-declaration:
+    attribute-specifier-sequenceopt declaration-specifiers declarator
+    attribute-specifier-sequenceopt declaration-specifiers abstract-declaratoropt

@@ -50,6 +50,11 @@ public class TokenList  {
         return tokens.subList(cursor, tokens.size()).stream();
     }
 
+    public TokenList back() {
+        cursor--;
+        return this;
+    }
+
     record Position(int file, int lineNumber, int tokenIndex) {}
 
     public void add(Token token, String filename, int lineNumber) {

@@ -28,7 +28,7 @@ class MccTest {
 
     @Test
     void function_pointer() throws Exception {
-        returns("function_pointer", 64);
+        returns("function_pointer", 128);
     }
 
     @Test
@@ -135,6 +135,11 @@ class MccTest {
     @Test
     void extern_test()  throws Exception {
         outputs("extern", "a.b.c\n");
+    }
+
+    @Test
+    void extern2_test()  throws Exception {
+        returns("extern2", 0);
     }
 
     @AfterAll

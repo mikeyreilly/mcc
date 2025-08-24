@@ -347,4 +347,11 @@ public class Mcc {
         }
         return new Err(s);
     }
+
+    public static Err2 makeErr2(String s, TokenList tokens) {
+        if (tokens!=null) {
+            return new Err2(s+" "+ tokens.positionString());
+        }
+        return new Err2(s);
+    }
 }
