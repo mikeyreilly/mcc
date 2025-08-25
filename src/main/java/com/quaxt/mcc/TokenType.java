@@ -1,5 +1,6 @@
 package com.quaxt.mcc;
 
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public enum TokenType implements Token {
@@ -17,7 +18,8 @@ public enum TokenType implements Token {
             "[^\\w.]", 1), UNSIGNED_INT_LITERAL("([0-9]+[uU])[^\\w.]", 1),
     UNSIGNED_HEX_INT_LITERAL("0x([a-fA-F0-9]+[uU])"),
     LONG_LITERAL("([0-9]+[lL][lL]?)[^\\w.]", 1),
-    UNSIGNED_HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))"),
+    UNSIGNED_HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
+            "[^\\w.]", 1),
     HEX_LONG_LITERAL("0x([a-fA-F0-9]+)([lL]|[lL][lL])"),
     HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
     , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*|#\\s*pragma\\b.*"),
@@ -137,6 +139,16 @@ public enum TokenType implements Token {
     }
 
     public static void main(String[] args) {
-        System.out.println("\"([^\"\\\\\n]|\\\\['\"\\\\?abfnrtvo]|\\\\[0-7]{1,3})*\"");
+        String src = "0x1ULL, 0x0000000000000002ULL};";
+        var tokenType=UNSIGNED_HEX_LONG_LITERAL;
+        Matcher matcher = tokenType.regex.matcher(src);
+        boolean b = matcher.lookingAt();
+        System.out.println(b);
+
+        int end = matcher.end(tokenType.group());
+        int start = matcher.start();
+        System.out.println(src.substring(start, end));
+
+        System.out.println("DONE");
     }
 }

@@ -1,6 +1,5 @@
-static unsigned char utf8_width_print(const char *zUtf){
-  const unsigned char *a = (const unsigned char*)zUtf;
-  
+static unsigned char char_sum(const char *c){
+  const unsigned char *a = (const unsigned char*)c;
   unsigned char sum = 0;
   for (int i=0;i<5;i++) {
       sum+=a[i];
@@ -10,7 +9,7 @@ static unsigned char utf8_width_print(const char *zUtf){
 
 int main(int argc, char** args) {
     const char* hello = "hello";
-    int sum = utf8_width_print(hello);
+    int sum = char_sum(hello);
     if (sum != 20) {
         return 1;
     }

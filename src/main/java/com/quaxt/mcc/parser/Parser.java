@@ -140,7 +140,7 @@ public class Parser {
            if (tokentype == LABEL) {
                tokens.removeFirst(); // COLON
                TypeName typeName = parseTypeName(tokens, typeAliases);
-               type = typeNameToType(typeName, typeAliases);
+               type = typeNameToType(typeName, tokens, typeAliases);
            }
         }
         if (tokens.getFirst() != OPEN_BRACE)
@@ -803,8 +803,8 @@ public class Parser {
                     }
                     case CLOSE_BRACE -> true;
                     default ->
-                            throw new IllegalStateException("Unexpected " +
-                                    "value: " + tokens.removeFirst());
+                            throw makeErr("Unexpected " +
+                                    "value: " + tokens.removeFirst(), tokens);
                 };
             }
             return new CompoundInit(inits, null);
@@ -813,106 +813,6 @@ public class Parser {
         return new SingleInit(parseExp(tokens, 0, false, typeAliases), null);
 
     }
-
-    static int parseTypeCount = 0;
-
-    private static Type parseType(List<Token> types,
-                                  boolean throwExceptionIfNoType,
-                                  ArrayList<Map<String, Type>> typeAliases) {
-        parseTypeCount++;
-        boolean foundInt = false;
-        boolean foundLong = false;
-        boolean foundSigned = false;
-        boolean foundUnsigned = false;
-        boolean foundChar = false;
-        if (types.getFirst() instanceof TokenWithValue(Token type,
-                                                       String name) && type == IDENTIFIER) {
-            Type foundAlias = findTypeByName(typeAliases, name);
-            if (foundAlias == null && throwExceptionIfNoType)
-                fail("invalid type specifier");
-            return foundAlias;
-        }
-        for (Token t : types) {
-            switch (t) {
-
-                case DOUBLE -> {
-                    if (types.size() != 1) {
-                        fail("can't combine double with other type specifiers");
-                    }
-                    return Primitive.DOUBLE;
-                }
-                case INT -> {
-                    if (foundInt || foundChar) fail("invalid type specifier");
-                    else foundInt = true;
-                }
-                case CHAR -> {
-                    if (foundChar || foundInt || foundLong)
-                        fail("invalid type specifier");
-                    else foundChar = true;
-                }
-                case LONG -> {
-                    if (foundLong || foundChar) fail("invalid type specifier");
-                    else foundLong = true;
-                }
-                case SIGNED -> {
-                    if (foundSigned || foundUnsigned)
-                        fail("invalid type specifier");
-                    else foundSigned = true;
-                }
-                case UNSIGNED -> {
-                    if (foundSigned || foundUnsigned)
-                        fail("invalid type specifier");
-                    else foundUnsigned = true;
-                }
-                case VOID -> {
-                    if (types.size() > 1)
-                        fail("can't combine void with other type specifiers");
-                    return Primitive.VOID;
-                }
-                case STRUCT, UNION -> {
-                    boolean isUnion = t == UNION;
-                    if (types.size() > 2)
-                        fail("can't combine void with other type specifiers");
-                    if (types.get(1) instanceof TokenWithValue(Token type,
-                                                               String tag) && type == IDENTIFIER)
-                        return new Structure(isUnion, tag, null);
-                    else
-                        fail("identifier expected following " + (isUnion ?
-                                "union" : "struct"));
-                }
-                case TokenWithValue(Token type,
-                                    String name) when type == IDENTIFIER -> {
-                    // The caller might pass in some aliases, in the list of
-                    // tokens that it thinks signify types
-                    // And if the first item in that list is an alias then we
-                    // would have already returned that type before entering
-                    // this loop)
-                    // Any other aliases should be ignored, because they
-                    // can't be types, they are regular identifiers
-                    if (findTypeByName(typeAliases, name) == null) {
-                        fail("invalid type specifier");
-                    } else {
-                        throw new Todo();
-                    }
-                }
-                case CONST -> {}
-                default -> fail("invalid type specifier");
-            }
-        }
-        if (foundChar)
-            return foundSigned ? Primitive.SCHAR : foundUnsigned ?
-                    Primitive.UCHAR : Primitive.CHAR;
-        else if (foundLong)
-            return foundUnsigned ? Primitive.ULONG : Primitive.LONG;
-        else if (foundInt)
-            return foundUnsigned ? Primitive.UINT : Primitive.INT;
-        else if (foundSigned) return Primitive.INT;
-        else if (foundUnsigned) return Primitive.UINT;
-        if (throwExceptionIfNoType)
-            throw new Err("invalid type specifier: " + types);
-        return null;
-    }
-
 
     public static Program parseProgram(TokenList tokens) {
         ArrayList<Declaration> declarations = new ArrayList<>();
@@ -1345,7 +1245,7 @@ public class Parser {
                     tokens.removeFirst();
                     TypeName typeName = parseTypeName(tokens, typeAliases);
                     expect(CLOSE_PAREN, tokens);
-                    yield new SizeOfT(typeNameToType(typeName, typeAliases));
+                    yield new SizeOfT(typeNameToType(typeName, tokens, typeAliases));
                 } else {
                     yield new SizeOf(parseUnaryExp(tokens, typeAliases));
                 }
@@ -1461,7 +1361,11 @@ public class Parser {
                     case 'r' -> '\r';
                     case 't' -> '\t';
                     case 'v' -> 11;
-                    default -> throw new AssertionError(c);
+                    default -> {
+                        if (c>='0' && c<='7'){
+                            yield (char) Integer.parseInt(s.substring(1),8);
+                        } else throw new AssertionError(c);
+                    }
                 };
             }
             case 1 -> {
@@ -1483,7 +1387,7 @@ public class Parser {
                 String identifier = expectIdentifier(tokens);
                 expect(COMMA, tokens);
                 TypeName typeName = parseTypeName(tokens, typeAliases);
-                Type type = typeNameToType(typeName, typeAliases);
+                Type type = typeNameToType(typeName, tokens, typeAliases);
                 expect(CLOSE_PAREN, tokens);
                 yield new BuiltinVaArg(new Var(identifier, null), type);
             }
@@ -1513,6 +1417,15 @@ public class Parser {
                 Exp exp = parseExp(tokens, 0, true, typeAliases);
                 expect(CLOSE_PAREN, tokens);
                 yield exp;
+            }
+            case RESTRICT -> {
+                tokens.removeFirst();
+                yield parsePrimaryExp(tokens, typeAliases);
+            }
+            case ADD -> {
+                // MR-TODO: c has unary plus - going to add it later for now just negate twice
+                tokens.removeFirst();
+                yield new UnaryOp(UnaryOperator.UNARY_MINUS, new UnaryOp(UnaryOperator.UNARY_MINUS, parsePrimaryExp(tokens, typeAliases), null), null);
             }
             default ->
                     throw makeErr("Expected either identifier, constant or (,"
@@ -1587,7 +1500,17 @@ public class Parser {
                             case 'r' -> '\r';
                             case 't' -> '\t';
                             case 'v' -> 11;
-                            default -> throw new AssertionError(next);
+                            default -> {
+                                int len = 0;
+                                while (next>='0' && next<='7' && i<slen){
+                                    next = value.charAt(i);
+                                    len++;
+                                    i++;
+                                }
+                                if (len==0) throw new AssertionError(next);
+                                yield (char)Integer.parseInt(value.substring(i-len,i),8);
+                            }
+
                         };
                     }
                     default -> cs[toIndex++] = value.charAt(i);
@@ -1611,7 +1534,7 @@ public class Parser {
             tokens.removeFirst();
             TypeName typeName = parseTypeName(tokens, typeAliases);
             expect(CLOSE_PAREN, tokens);
-            Type type = typeNameToType(typeName, typeAliases);
+            Type type = typeNameToType(typeName, tokens, typeAliases);
             Exp inner = parseCastExp(tokens, typeAliases);
             return new Cast(type, inner);
         }
@@ -1619,24 +1542,18 @@ public class Parser {
     }
 
     private static Type typeNameToType(TypeName typeName,
+                                       TokenList tokens,
                                        ArrayList<Map<String, Type>> typeAliases) {
-        List<Token> typeSpecifiers = typeName.typeSpecifiers();
-        Type t = parseType(typeSpecifiers, true, typeAliases);
+        Type t = parseTypeAndStorageClass(typeName.typeSpecifierQualifiers(), typeAliases, tokens).type();
         return processAbstractDeclarator(typeName.abstractDeclarator(), t);
     }
 
-    record TypeName(List<Token> typeSpecifiers,
+    record TypeName(List<DeclarationSpecifier> typeSpecifierQualifiers,
                     AbstractDeclarator abstractDeclarator) {}
 
     private static TypeName parseTypeName(TokenList tokens,
                                           ArrayList<Map<String, Type>> typeAliases) {
-        List<Token> typeSpecifiers = new ArrayList<>();
-        while (isTypeSpecifier(tokens, 0, typeAliases)) {
-            var t = tokens.removeFirst();
-            typeSpecifiers.add(t);
-            if (t == STRUCT || t == UNION)
-                typeSpecifiers.add(tokens.removeFirst());
-        }
+        List<DeclarationSpecifier> typeSpecifiers= parseDeclarationSpecifiers(tokens, typeAliases);
         AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens);
         return new TypeName(typeSpecifiers, abstractDeclarator);
     }
@@ -1765,4 +1682,5 @@ public class Parser {
                                        EnumSet<TypeQualifier> typeQualifiers,
                                        StructOrUnionSpecifier structOrUnionSpecifier) {}
 
+    public sealed static interface DeclarationSpecifier permits StorageClass, TypeSpecifier, TypeQualifier {}
 }

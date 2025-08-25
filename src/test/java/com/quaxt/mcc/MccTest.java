@@ -122,6 +122,13 @@ class MccTest {
         returns("short", 5);
     }
 
+
+    @Test
+    void const_literals_test()  throws Exception {
+        returns("const_literals", 3);
+    }
+
+
     @Test
     void float_test()  throws Exception {
         returns("float", 30);

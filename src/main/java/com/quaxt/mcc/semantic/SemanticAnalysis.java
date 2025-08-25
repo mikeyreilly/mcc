@@ -803,29 +803,36 @@ public class SemanticAnalysis {
             default -> {}
         }
     }
-
-
+    
     private static VarDecl typeCheckLocalVariableDeclaration(VarDecl decl) {
-        validateTypeSpecifier(decl.varType());
-        if (decl.varType() == VOID) fail("Can't declare void variable");
-        var sd=typeCheckStructureDeclaration(decl.structOrUnionSpecifier());
-        if (!isComplete(decl.varType())) {
+        Type varType = decl.varType();
+        validateTypeSpecifier(varType);
+        if (varType == VOID) fail("Can't declare void variable");
+        var sd = typeCheckStructureDeclaration(decl.structOrUnionSpecifier());
+        Initializer init = decl.init();
+        if (init != null) {
+            init = typeCheckInit(init, varType);
+            if (!isComplete(varType)) {
+                varType = init.type();
+            }
+        }
+        if (!isComplete(varType)) {
             if (decl.storageClass() != EXTERN)
                 fail("Attempt to declare variable of incomplete type with " + "non-external storage class");
-            if (decl.init() != null)
+            if (init != null)
                 fail("Attempt to define variable of incomplete type");
         }
         if (decl.storageClass() == EXTERN) {
-            if (decl.init() != null)
+            if (init != null)
                 fail("Initializer on local extern variable declaration");
             if (SYMBOL_TABLE.get(decl.name().name()) instanceof SymbolTableEntry ste) {
                 Type oldType = ste.type();
-                if (!oldType.looseEquals(decl.varType()))
+                if (!oldType.looseEquals(varType))
                     fail("inconsistent variable redefinition");
 
             } else {
                 SYMBOL_TABLE.put(decl.name().name(),
-                        new SymbolTableEntry(decl.varType(),
+                        new SymbolTableEntry(varType,
                                 new StaticAttributes(NO_INITIALIZER, true, decl.storageClass())));
             }
             return decl;
@@ -833,11 +840,11 @@ public class SemanticAnalysis {
             InitialValue initialValue;
             ArrayList<StaticInit> staticInits = new ArrayList<>();
 
-            convertCompoundInitializerToStaticInitList(decl.init(),
-                    decl.varType(), staticInits);
+            convertCompoundInitializerToStaticInitList(init,
+                    varType, staticInits);
             initialValue = new Initial(staticInits);
 
-            if (isStringPointerInit(staticInits) && decl.varType() instanceof Pointer(
+            if (isStringPointerInit(staticInits) && varType instanceof Pointer(
                     Type referenced)) {
                 if (referenced == CHAR) {
                     String uniqueName = makeTemporary(decl.name().name() +
@@ -849,24 +856,23 @@ public class SemanticAnalysis {
                                     new IntInit((int) strlen(staticInits))),
                                     new StaticAttributes(initialValue, false, decl.storageClass())));
                     SYMBOL_TABLE.put(decl.name().name(),
-                            new SymbolTableEntry(decl.varType(),
-                                new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false, decl.storageClass())));
+                            new SymbolTableEntry(varType,
+                                    new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false, decl.storageClass())));
                 } else
                     throw new Err("Can't initialize pointer to " + referenced + " with string literal");
             } else
 
                 SYMBOL_TABLE.put(decl.name().name(),
-                        new SymbolTableEntry(decl.varType(),
-                            new StaticAttributes(initialValue, false, decl.storageClass())));
-            return new VarDecl(new Var(decl.name().name(), decl.varType()),
-                    decl.init(), decl.varType(), decl.storageClass(),decl.structOrUnionSpecifier());
+                        new SymbolTableEntry(varType,
+                                new StaticAttributes(initialValue, false, decl.storageClass())));
+            return new VarDecl(new Var(decl.name().name(), varType),
+                    init, varType, decl.storageClass(),decl.structOrUnionSpecifier());
         } else {
-            Initializer init;
-            Type type = decl.varType();
+
+            Type type = varType;
             SYMBOL_TABLE.put(decl.name().name(),
-                    new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
-            if (decl.init() != null) {
-                init = typeCheckInit(decl.init(), decl.varType());
+                    new SymbolTableEntry(varType, LOCAL_ATTR));
+            if (init != null) {
                 type = init.type();
                 // the init type might have an array length when decl.varType
                 // () doesn't
