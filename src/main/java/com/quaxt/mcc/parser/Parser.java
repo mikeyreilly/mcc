@@ -445,7 +445,7 @@ public class Parser {
                             typeAliases));
         }
         Exp exp = parseExp(tokens, 0, true, typeAliases);
-        if (tokens.getFirst()==OPEN_PAREN) {
+        if (tokens.getFirst() == OPEN_PAREN) {
             throw makeErr("function application is not supported in this kind of situation yet", tokens);
         }
         expect(SEMICOLON, tokens);
@@ -895,6 +895,7 @@ public class Parser {
                         throw new Todo();
                     }
                 }
+                case CONST -> {}
                 default -> fail("invalid type specifier");
             }
         }
@@ -995,7 +996,7 @@ public class Parser {
                             parseRestOfFunction(paramNames, tokens, name, typeAndStorageClass.storageClass(), typeAliases, funType);
                 } else {
                     Token token1 = tokens.getFirst();
-                    Initializer init;
+                    Initializer init=null;
                     switch (token1.type()) {
                         case BECOMES:
                             tokens.removeFirst();
@@ -1004,6 +1005,10 @@ public class Parser {
                         case SEMICOLON:
                             init = null;
                             break;
+                        case COMMA:
+                            tokens.removeFirst();
+                            break;
+                            //throw new Todo();
                         default:
                             throw makeErr(
                                     "Expected ; or =, got " + token1, tokens);
@@ -1167,7 +1172,11 @@ public class Parser {
 
     private static boolean isTypeSpecifier(TokenList tokens, int start,
                                            ArrayList<Map<String, Type>> typeAliases) {
+        if (CONST == tokens.get(start)) {
+            start++;
+        }
         Token first = tokens.get(start);
+
         if (CHAR == first || INT == first || SHORT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first|| FLOAT == first || VOID == first || STRUCT == first || UNION == first || ENUM == first)
             return true;
         return typeAliases != null && first instanceof TokenWithValue(
