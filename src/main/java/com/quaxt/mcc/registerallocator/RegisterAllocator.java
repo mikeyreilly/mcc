@@ -227,7 +227,7 @@ public class RegisterAllocator {
     }
 
     /* The George test says that you can coalesce a pseudoregister p into a
-    hard register h if each of p'structOrUnionSpecifier neighbours meets either of two conditions:
+    hard register h if each of p's neighbours meets either of two conditions:
        1. It has fewer than k neighbours
        2. It already interferes with h
        p. 667 */

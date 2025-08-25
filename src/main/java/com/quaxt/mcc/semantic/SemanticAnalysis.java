@@ -1081,7 +1081,7 @@ public class SemanticAnalysis {
 //                        new SymbolTableEntry(t, LOCAL_ATTR));
 //
 //                //ugh I thought I could use a temp var to get around
-//                evaluating left twice, but it'structOrUnionSpecifier not that easy
+//                evaluating left twice, but it's not that easy
 //                // need a way to separate the assignment part from the
 //                evaluate part
 //                yield typeCheckExpression(new Assignment(new Var(temp.name
@@ -1258,8 +1258,9 @@ public class SemanticAnalysis {
             case Constant constant -> constant;
             case Str(String s, Type type) ->
                     new Str(s, new Array(CHAR, new IntInit(s.length() + 1)));
-            case FunctionCall(Var name, List<Exp> args, boolean _, Type _) -> {
-                Type fType = SYMBOL_TABLE.get(name.name()).type();
+            case FunctionCall(Exp name, List<Exp> args, boolean _, Type _) -> {
+                name = typeCheckExpression(name);
+                Type fType = name.type();
                 if (fType instanceof Pointer(Type referenced)){
                     fType = referenced;
                 }
@@ -1279,10 +1280,10 @@ public class SemanticAnalysis {
                             } else
                                 args.set(i, typeCheckAndConvert(arg));
                         }
-                        yield new FunctionCall((Var) typeCheckExpression(name), args, varargs, ret);
+                        yield new FunctionCall(typeCheckExpression(name), args, varargs, ret);
                     }
                     default ->
-                            fail("variable " + name.name() + " used as " +
+                            fail("variable " + name + " used as " +
                                     "function");
                 };
             }
@@ -1893,9 +1894,9 @@ public class SemanticAnalysis {
                             structureMap), resolveExp(ifTrue, identifierMap,
                             structureMap), resolveExp(ifFalse, identifierMap,
                             structureMap), type);
-            case FunctionCall(Var name, List<Exp> args, boolean varargs,
+            case FunctionCall(Exp name, List<Exp> args, boolean varargs,
                               Type type) ->
-                    identifierMap.get(name.name()) instanceof Entry newFunctionName ? new FunctionCall(new Var(newFunctionName.name(), type), resolveArgs(identifierMap, structureMap, args), varargs, type) : fail("Undeclared function:" + name);
+                            new FunctionCall(resolveExp(name, identifierMap, structureMap), resolveArgs(identifierMap, structureMap, args), varargs, type);
             case Cast(Type type, Exp e) -> {
                 Type resolvedType = resolveType(type, structureMap);
                 yield new Cast(resolvedType, resolveExp(e, identifierMap,

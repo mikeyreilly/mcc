@@ -56,16 +56,19 @@ public class Parser {
         return l;
     }
 
-    public static void skipRestrict(TokenList tokens) {
+    public static void skipRestrictAndConst(TokenList tokens) {
         while (true) {
             if (tokens.isEmpty()) return;
             if (tokens.getFirst() == RESTRICT) tokens.removeFirst();
+            else if (tokens.getFirst() == CONST) {
+                tokens.removeFirst();
+            }
             else break;
         }
     }
 
     private static TypeQualifier parseTypeQualifier(TokenList tokens) {
-        skipRestrict(tokens);
+        skipRestrictAndConst(tokens);
         TypeQualifier tq;
         switch (tokens.getFirst()) {
             case CONST -> tq = TypeQualifier.CONST;
@@ -84,7 +87,7 @@ public class Parser {
     private static TypeSpecifier parseTypeSpecifier(TokenList tokens,
                                                     ArrayList<Map<String,
                                                             Type>> typeAliases) {
-        skipRestrict(tokens);
+        skipRestrictAndConst(tokens);
         TypeSpecifier ts;
         switch (tokens.getFirst()) {
             case VOID -> ts = PrimitiveTypeSpecifier.VOID;
@@ -257,7 +260,7 @@ public class Parser {
     }
     
     private static StorageClass parseStorageClassSpecifier(TokenList tokens) {
-        skipRestrict(tokens);
+        skipRestrictAndConst(tokens);
         StorageClass sc;
         switch (tokens.getFirst()) {
             case TYPEDEF -> sc = StorageClass.TYPEDEF;
@@ -442,6 +445,9 @@ public class Parser {
                             typeAliases));
         }
         Exp exp = parseExp(tokens, 0, true, typeAliases);
+        if (tokens.getFirst()==OPEN_PAREN) {
+            throw makeErr("function application is not supported in this kind of situation yet", tokens);
+        }
         expect(SEMICOLON, tokens);
         return exp;
     }
@@ -592,10 +598,10 @@ public class Parser {
                 ArrayList<String> paramNames = new ArrayList<>();
                 List<Type> paramTypes = new ArrayList<>();
                 for(ParameterDeclaration pi:parameterDeclarations){
-                    TypeAndStorageClass xxx =
+                    TypeAndStorageClass typeAndStorageClass =
                             parseTypeAndStorageClass(pi.declarationSpecifiers(), typeAliases, tokens);
                     NameDeclTypeParams decl =
-                            processDeclarator((Declarator) pi.declarator(), xxx.type(), typeAliases, tokens);
+                            processDeclarator((Declarator) pi.declarator(), typeAndStorageClass.type(), typeAliases, tokens);
 
                     String name = decl.name();
                     Type type = decl.type();
@@ -653,7 +659,7 @@ public class Parser {
 
     public static Declarator parseDeclarator(TokenList tokens,
                                              ArrayList<Map<String, Type>> typeAliases){
-        Parser.skipRestrict(tokens);
+        Parser.skipRestrictAndConst(tokens);
         Token t = tokens.getFirst();
         if (t == IMUL){
             tokens.removeFirst();
@@ -1484,36 +1490,9 @@ public class Parser {
                         tokens.removeFirst();
 
                         Var id = new Var(value, null);
-                        if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
-                            tokens.removeFirst();
-                            Token current = tokens.getFirst();
-                            if (current == CLOSE_PAREN) {
-                                tokens.removeFirst();
-                                yield new FunctionCall(id,
-                                        Collections.emptyList(), false, null);
-                            }
-                            List<Exp> args = new ArrayList<>();
-
-                            while (true) {
-                                Exp e = parseExp(tokens, 0, false,
-                                        typeAliases); // false because we
-                                // want comma as argument separator, not
-                                // operator
-                                args.add(e);
-                                current = tokens.removeFirst();
-                                if (current == COMMA) {
-                                    continue;
-                                }
-                                if (current == CLOSE_PAREN) {
-                                    break;
-                                } else
-                                    throw new IllegalArgumentException(
-                                            "unexpected token while parsing " + "function call: " + current);
-
-                            }
-                            yield new FunctionCall(id, args, false, null);
-
-                        }
+                        FunctionCall id1 =
+                                parseFunctionCallArgs(id, tokens, typeAliases);
+                        if (id1 != null) yield id1;
                         yield id;
 
                     }
@@ -1530,6 +1509,39 @@ public class Parser {
                     throw makeErr("Expected either identifier, constant or (,"
                             + " found:" + tokens.getFirst(), tokens);
         };
+    }
+
+    private static FunctionCall parseFunctionCallArgs(Exp id, TokenList tokens,
+                                                ArrayList<Map<String, Type>> typeAliases) {
+        if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
+            tokens.removeFirst();
+            Token current = tokens.getFirst();
+            if (current == CLOSE_PAREN) {
+                tokens.removeFirst();
+                return new FunctionCall(id, Collections.emptyList(), false, null);
+            }
+            List<Exp> args = new ArrayList<>();
+
+            while (true) {
+                Exp e = parseExp(tokens, 0, false, typeAliases); // false because we
+                // want comma as argument separator, not
+                // operator
+                args.add(e);
+                current = tokens.removeFirst();
+                if (current == COMMA) {
+                    continue;
+                }
+                if (current == CLOSE_PAREN) {
+                    break;
+                } else
+                    throw new IllegalArgumentException(
+                            "unexpected token while parsing " + "function call: " + current);
+
+            }
+            return new FunctionCall(id, args, false, null);
+
+        }
+        return null;
     }
 
     private static String parseStr(TokenList tokens) {
@@ -1633,7 +1645,7 @@ public class Parser {
 
         while (!tokens.isEmpty()) {
             Token token = tokens.getFirst();
-            if (token instanceof BinaryOperator binop && (allowComma || binop != COMMA) || token == QUESTION_MARK) {
+            if (token instanceof BinaryOperator binop && (allowComma || binop != COMMA) || token == QUESTION_MARK || token == OPEN_PAREN) {
                 int precedence = getPrecedence(token);
                 if (precedence < minPrecedence) break;
                 tokens.removeFirst();
@@ -1648,7 +1660,10 @@ public class Parser {
                     Exp right = parseExp(tokens, precedence + 1, true,
                             typeAliases);
                     left = new BinaryOp(binop, left, right, null);
-                } else { // QUESTION_MARK
+                } else if (token == OPEN_PAREN) {
+                    tokens.back();
+                    left = parseFunctionCallArgs(left, tokens, typeAliases);
+                }else { // QUESTION_MARK
                     Exp middle = parseExp(tokens, 0, true, typeAliases);
                     expect(COLON, tokens);
                     Exp right = parseExp(tokens, precedence, true, typeAliases);
@@ -1663,8 +1678,9 @@ public class Parser {
 
     private static int getPrecedence(Token t) {
         return switch (t) {
-            // case CAST -> 60; just reminding myself it'structOrUnionSpecifier higher than these
+            // case CAST -> 60; just reminding myself it's higher than these
             // others
+            case OPEN_PAREN -> 70;
             case IMUL, DIVIDE, REMAINDER -> 50;
             case SUB, ADD -> 45;
             case SHL, SAR, UNSIGNED_RIGHT_SHIFT -> 40;

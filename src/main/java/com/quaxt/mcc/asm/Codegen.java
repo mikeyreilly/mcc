@@ -1303,7 +1303,7 @@ public class Codegen {
                 ins.add(new Mov(QUADWORD, regSaveArea, AX));
                 ins.add(new Mov(LONGWORD, isFp ? fpOffset : gpOffset, DX));
                 ins.add(new Binary(ADD, QUADWORD, DX, AX));
-                // mov what'structOrUnionSpecifier at address gp_offset+reg_save_area to dst
+                // mov what's at address gp_offset+reg_save_area to dst
                 int offset=i*8;
 // 6. Return the fetched type.
                 ins.add(new Mov(QUADWORD, new Memory(AX, 0),

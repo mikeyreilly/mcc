@@ -323,7 +323,7 @@ public class IrGen {
                 compileStatement(statement, instructions);
             }
             case BuiltinVaEnd builtinVaEnd -> {
-                // it'structOrUnionSpecifier a NOOP
+                // it's a NOOP
             }
         }
     }
@@ -577,6 +577,19 @@ public class IrGen {
                 instructions.add(new FunCall(name.name(), argVals, varargs,  indirect, result));
                 return new PlainOperand(result);
             }
+            case FunctionCall(Exp name, List<Exp> args, boolean varargs, Type type): {
+                VarIr func = (VarIr) emitTackyAndConvert(name, instructions);
+                VarIr result = type == VOID ? null : makeTemporary("tmp.",
+                        type);
+                ArrayList<ValIr> argVals = new ArrayList<>();
+                for (Exp e : args) {
+                    argVals.add(emitTackyAndConvert(e, instructions));
+                }
+                boolean indirect = Mcc.SYMBOL_TABLE.get(func.identifier()).type() instanceof Pointer;
+
+                instructions.add(new FunCall(func.identifier(), argVals, varargs,  indirect, result));
+                return new PlainOperand(result);
+            }
             case Cast(Type t, Exp inner): {
                 ValIr result = emitTackyAndConvert(inner, instructions);
                 Type innerType = inner.type();
@@ -629,7 +642,7 @@ public class IrGen {
                 // the
                 // "wrong" (index-first) order and it would make this code
                 // simpler.
-                // On the other hand,  it'structOrUnionSpecifier not all that complicated and it
+                // On the other hand,  it's not all that complicated and it
                 // is nice
                 // having the AST closely resemble the corresponding code
                 if (left.type() instanceof Pointer(Type referenced)) {

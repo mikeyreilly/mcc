@@ -28,7 +28,7 @@ class MccTest {
 
     @Test
     void function_pointer() throws Exception {
-        returns("function_pointer", 128);
+        returns("function_pointer", 38);
     }
 
     @Test

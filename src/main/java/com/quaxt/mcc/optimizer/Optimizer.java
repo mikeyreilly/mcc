@@ -302,7 +302,7 @@ public class Optimizer {
     private static boolean eliminateUnreachableBlocks(List<CfgNode> nodes) {
         Set<Integer> nodesToKeep = new HashSet<>();
         nodesToKeep.add(nodes.getLast().nodeId());// always keep the exit
-        // node, even if there'structOrUnionSpecifier an infinite loop
+        // node, even if there's an infinite loop
         nodesToKeep(nodesToKeep, nodes, nodes.getFirst());
         return nodes.removeIf(n -> !nodesToKeep.contains(n.nodeId()));
     }
