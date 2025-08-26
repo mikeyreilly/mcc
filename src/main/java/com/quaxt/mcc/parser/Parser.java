@@ -829,9 +829,16 @@ public class Parser {
             addTypedefToCurrentScope(typeAliases, "_Float128", Primitive.DOUBLE);
         }
         DeclarationList declarationList;
-        while ((declarationList = parseDeclarationList(tokens, true,
-                typeAliases)) != null) {
-            declarations.addAll(declarationList.list());
+        while (true) {
+            while ((declarationList =
+                    parseDeclarationList(tokens, true, typeAliases)) != null) {
+                declarations.addAll(declarationList.list());
+            }
+            if (!tokens.isEmpty() && tokens.getFirst() == SEMICOLON) {
+                tokens.removeFirst();
+            } else {
+                break;
+            }
         }
         return new Program(declarations);
     }
