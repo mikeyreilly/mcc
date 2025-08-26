@@ -331,6 +331,14 @@ public class SemanticAnalysis {
                     }
                     String pointerName = handleStringPointer(s);
                     acc.add(new PointerInit(pointerName));
+                } else if (exp instanceof AddrOf(Exp exp1, Type type1) && exp1 instanceof Str(String s,
+                                              Type _) && targetType instanceof Pointer(
+                        Type element)) {
+                    if (element != CHAR) {
+                        throw new Err("Can't initialize pointer to " + element + " with string literal");
+                    }
+                    String pointerName = handleStringPointer(s);
+                    acc.add(new PointerInit(pointerName));
                 } else {
                     if (targetType instanceof Array) {
                         throw new Err("Can't initialize static array with a " + "scalar");
@@ -340,16 +348,11 @@ public class SemanticAnalysis {
                                 "scalar");
                     }
                     Constant v = switch (exp) {
-                        case IntInit(int i) ->
-                                convertConst(new IntInit(i), targetType);
-                        case LongInit(long i) ->
-                                convertConst(new LongInit(i), targetType);
-                        case UIntInit(int i) ->
-                                convertConst(new UIntInit(i), targetType);
-                        case ULongInit(long i) ->
-                                convertConst(new ULongInit(i), targetType);
-                        case DoubleInit(double d) ->
-                                convertConst(new DoubleInit(d), targetType);
+                        case ConstantExp cExp ->{
+                            throw new Err("Non constant initializer");
+                        }
+                        case Constant cc -> convertConst(cc, targetType);
+
                         default -> throw new Err("Non constant initializer");
                     };
                     acc.add((StaticInit)v);
@@ -805,13 +808,18 @@ public class SemanticAnalysis {
         }
     }
     
-    private static VarDecl typeCheckLocalVariableDeclaration(VarDecl decl) {
+    private static VarDecl typeCheckLocalVariableDeclaration(final VarDecl decl) {
         Type varType = decl.varType();
         validateTypeSpecifier(varType);
         if (varType == VOID) fail("Can't declare void variable");
         var sd = typeCheckStructureDeclaration(decl.structOrUnionSpecifier());
         Initializer init = decl.init();
         if (init != null) {
+            // this entry will likely be overwritten - we just need typeCheckInit
+            // to find the type of the var we're declaring in case it is used in init
+
+            SYMBOL_TABLE.computeIfAbsent(decl.name().name(),
+                    k -> new SymbolTableEntry(decl.varType(), LOCAL_ATTR));
             init = typeCheckInit(init, varType);
             if (!isComplete(varType)) {
                 varType = init.type();
@@ -961,7 +969,7 @@ public class SemanticAnalysis {
                         typeCheckedList.add(typeCheckInit(inits.get(i),
                                 members.get(i).type()));
                     }
-                    for (; i < members.size(); i++) {
+                    for (; i < (isUnion ? 1 :members.size()); i++) {
                         typeCheckedList.add(zeroInitializer(members.get(i).type()));
                     }
                     yield new CompoundInit(typeCheckedList, targetType);
