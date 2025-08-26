@@ -5,8 +5,7 @@ import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.CharInit;
 import com.quaxt.mcc.parser.StructOrUnionSpecifier;
-import com.quaxt.mcc.tacky.PointerInit;
-import com.quaxt.mcc.tacky.StringInit;
+import com.quaxt.mcc.tacky.*;
 import com.quaxt.mcc.UCharInit;
 
 import java.util.*;
@@ -16,9 +15,9 @@ import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
-import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
-import static com.quaxt.mcc.Mcc.makeTemporary;
+import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.UnaryOperator.*;
+import static com.quaxt.mcc.optimizer.Optimizer.optimizeInstructions;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
 import static com.quaxt.mcc.semantic.Primitive.*;
@@ -208,14 +207,16 @@ public class SemanticAnalysis {
         boolean isUnion = structDecl.isUnion();
         for (MemberDeclaration member : structDecl.members()) {
             typeCheckStructureDeclaration(member.structOrUnionSpecifier());
-            int memberAlignment = Mcc.typeAlignment(member.type());
+            Type memberType = completeType(member.type());
+            int memberAlignment = Mcc.typeAlignment(memberType);
             int memberOffset = isUnion ? 0 : roundUp(structSize,
                     memberAlignment);
-            MemberEntry m = new MemberEntry(member.name(), member.type(),
+
+            MemberEntry m = new MemberEntry(member.name(), memberType,
                     memberOffset);
             memberEntries.add(m);
             structAlignment = Math.max(structAlignment, memberAlignment);
-            int memberSize = (int) Mcc.size(member.type());
+            int memberSize = (int) Mcc.size(memberType);
             structSize = isUnion ? Math.max(memberSize, structSize) :
                     memberOffset + memberSize;
         }
@@ -1048,6 +1049,19 @@ public class SemanticAnalysis {
         };
     }
 
+    public static Constant evaluateConstantExp(ConstantExp c){
+        List<InstructionIr> irs = new ArrayList<>();
+        var typeCheckedSize = typeCheckExpression(c.exp());
+        var r = new Return(typeCheckedSize);
+        IrGen.compileStatement(r, irs);
+        irs = optimizeInstructions(EnumSet.allOf(Optimization.class), irs);
+        if (irs.size() == 1 && irs.getFirst() instanceof ReturnIr(
+                Constant val)) {
+            return val;
+        }
+        return null;
+    }
+
     public static Exp typeCheckExpression(Exp exp) {
         return switch (exp) {
             case null -> null;
@@ -1261,6 +1275,7 @@ public class SemanticAnalysis {
                         commonType), convertTo(typedIfFalse, commonType),
                         commonType);
             }
+            case ConstantExp c -> evaluateConstantExp(c);
             case Constant constant -> constant;
             case Str(String s, Type type) ->
                     new Str(s, new Array(CHAR, new IntInit(s.length() + 1)));
@@ -1298,9 +1313,9 @@ public class SemanticAnalysis {
                 if (e == null) {
                     yield Mcc.lookupEnumConstant(name);
                 }
-                Type t = e.type();
-//                if (t instanceof FunType)
-//                    fail("Function " + name + " used as a variable");
+                Type t = completeType(e.type());
+                SymbolTableEntry ste = SYMBOL_TABLE.get(name);
+                SYMBOL_TABLE.put(name, new SymbolTableEntry(t, ste.attrs()));
                 yield new Var(name, t);
             }
             case UnaryOp(UnaryOperator op, Exp e1,
@@ -1413,6 +1428,16 @@ public class SemanticAnalysis {
         };
     }
 
+    private static Type completeType(Type t) {
+        if (t instanceof Array(Type refType, ConstantExp c)){
+            Constant val = evaluateConstantExp(c);
+            if (val == null) throw makeErr("Non constant array size", null);
+            return new Array(refType, val);
+        }
+        return t;
+
+    }
+
     /**
      * When a character value is used in some operators, it needs to be
      * promoted to int
@@ -1490,7 +1515,8 @@ public class SemanticAnalysis {
     }
 
     public static Type resolveType(Type typeSpecifier,
-                                   Map<String, TagEntry> structureMap) {
+
+                                   Map<String, Entry> identifierMap, Map<String, TagEntry> structureMap) {
         return switch (typeSpecifier) {
             case Structure(boolean isUnion, String tag, StructDef sd) -> {
                 TagEntry e = structureMap.get(tag);
@@ -1505,13 +1531,15 @@ public class SemanticAnalysis {
                 } else throw new Err("Specified an undeclared tag: tag=" + tag);
             }
             case Pointer(Type referenced) ->
-                    new Pointer(resolveType(referenced, structureMap));
-            case Array(Type element, Constant size) ->
-                    new Array(resolveType(element, structureMap), size);
+                    new Pointer(resolveType(referenced, identifierMap, structureMap));
+            case Array(Type element, Constant size) ->{
+                if (size instanceof ConstantExp c){
+                    size = new ConstantExp(resolveExp(c.exp(), identifierMap, structureMap));
+                }
+                yield new Array(resolveType(element, identifierMap, structureMap), size);
+            }
             case FunType(List<Type> params, Type ret, boolean varargs) ->
-                    new FunType(params.stream().map(p -> resolveType(p,
-                            structureMap)).toList(), resolveType(ret,
-                            structureMap), varargs);
+                    new FunType(params.stream().map(p -> resolveType(p, identifierMap, structureMap)).toList(), resolveType(ret, identifierMap, structureMap), varargs);
             case Primitive primitive -> primitive;
         };
     }
@@ -1533,7 +1561,7 @@ public class SemanticAnalysis {
                                 resolveFileScopeVariableDeclaration(varDecl,
                                         identifierMap, structureMap));
                 case StructOrUnionSpecifier decl ->
-                        decls.set(i, resolveStructureDeclaration(decl,
+                        decls.set(i, resolveStructureDeclaration(decl, identifierMap,
                                 structureMap));
             }
 
@@ -1571,6 +1599,7 @@ public class SemanticAnalysis {
 
     private static StructOrUnionSpecifier resolveStructureDeclaration(
             StructOrUnionSpecifier decl,
+            Map<String, Entry> identifierMap,
             Map<String, TagEntry> structureMap) {
         if (decl == null) return null;
         TagEntry prevEntry = structureMap.get(decl.tag());
@@ -1605,9 +1634,9 @@ public class SemanticAnalysis {
                 }
                 StructOrUnionSpecifier sous = member.structOrUnionSpecifier();
                 if (sous != null && sous.members() != null) { // sous without members would already be resolved
-                    sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), structureMap);
+                    sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap);
                 }
-                processedMembers.add(new MemberDeclaration(resolveType(member.type(), structureMap), member.name(), sous));
+                processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap), member.name(), sous));
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
@@ -1623,11 +1652,11 @@ public class SemanticAnalysis {
                          StructOrUnionSpecifier structOrUnionSpecifier) -> {
                 if (structOrUnionSpecifier != null){
                     structOrUnionSpecifier = resolveStructureDeclaration(structOrUnionSpecifier,
-                            structureMap);
+                            identifierMap, structureMap);
                 }
                 identifierMap.put(name.name(), new Entry(name.name(), true,
                         true));
-                Type t = resolveType(type, structureMap);
+                Type t = resolveType(type, identifierMap, structureMap);
                 yield new VarDecl(new Var(name.name(), t), init, t,
                         storageClass, structOrUnionSpecifier);
             }
@@ -1664,15 +1693,14 @@ public class SemanticAnalysis {
         Block newBody = function.body instanceof Block block ?
                 resolveBlock(block, innerMap, innerStructureMap) : null;
         return new Function(function.name, newArgs, newBody,
-                resolveFunType(function.funType, innerStructureMap),
+                resolveFunType(function.funType, identifierMap, innerStructureMap),
                 function.storageClass, function.callsVaStart);
     }
 
     private static FunType resolveFunType(FunType funType,
+                                          Map<String, Entry> identifierMap,
                                           Map<String, TagEntry> structureMap) {
-        return new FunType(funType.params().stream().map(p -> resolveType(p,
-                structureMap)).toList(), resolveType(funType.ret(),
-                structureMap), funType.varargs());
+        return new FunType(funType.params().stream().map(p -> resolveType(p, identifierMap, structureMap)).toList(), resolveType(funType.ret(), identifierMap, structureMap), funType.varargs());
     }
 
     private static List<Var> resolveParams(List<Var> parameters,
@@ -1685,8 +1713,7 @@ public class SemanticAnalysis {
             }
             String uniqueName = makeTemporary(d.name() + ".");
             identifierMap.put(d.name(), new Entry(uniqueName, true, false));
-            newParams.add(new Var(uniqueName, resolveType(d.type(),
-                    innerStructureMap)));
+            newParams.add(new Var(uniqueName, resolveType(d.type(), identifierMap, innerStructureMap)));
         }
         return newParams;
     }
@@ -1705,7 +1732,7 @@ public class SemanticAnalysis {
                     resolveFunctionDeclaration(function, identifierMap,
                             structureMap);
             case StructOrUnionSpecifier structDecl ->
-                    resolveStructureDeclaration(structDecl, structureMap);
+                    resolveStructureDeclaration(structDecl, identifierMap,structureMap);
         };
     }
 
@@ -1828,7 +1855,7 @@ public class SemanticAnalysis {
             identifierMap.put(decl.name().name(),
                     new Entry(decl.name().name(), true, true));
             return new VarDecl(decl.name(), decl.init(),
-                    resolveType(decl.varType(), structureMap),
+                    resolveType(decl.varType(), identifierMap, structureMap),
                     decl.storageClass(), decl.structOrUnionSpecifier());
         }
         String uniqueName = makeTemporary(decl.name().name() + ".");
@@ -1837,11 +1864,10 @@ public class SemanticAnalysis {
         var init = decl.init();
         StructOrUnionSpecifier sous = decl.structOrUnionSpecifier();
         if (sous != null && sous.members() != null) { // sous without members would already be resolved
-            sous = resolveStructureDeclaration(decl.structOrUnionSpecifier(), structureMap);
+            sous = resolveStructureDeclaration(decl.structOrUnionSpecifier(), identifierMap, structureMap);
         }
         return new VarDecl(new Var(uniqueName, null), resolveInitializer(init
-                , identifierMap, structureMap), resolveType(decl.varType(),
-                structureMap), decl.storageClass(),
+                , identifierMap, structureMap), resolveType(decl.varType(), identifierMap, structureMap), decl.storageClass(),
                 sous);
     }
 
@@ -1904,7 +1930,7 @@ public class SemanticAnalysis {
                               Type type) ->
                             new FunctionCall(resolveExp(name, identifierMap, structureMap), resolveArgs(identifierMap, structureMap, args), varargs, type);
             case Cast(Type type, Exp e) -> {
-                Type resolvedType = resolveType(type, structureMap);
+                Type resolvedType = resolveType(type, identifierMap, structureMap);
                 yield new Cast(resolvedType, resolveExp(e, identifierMap,
                         structureMap));
             }
@@ -1915,7 +1941,7 @@ public class SemanticAnalysis {
             case SizeOf(Exp e) ->
                     new SizeOf(resolveExp(e, identifierMap, structureMap));
             case SizeOfT(Type type) ->
-                    new SizeOfT(resolveType(type, structureMap));
+                    new SizeOfT(resolveType(type, identifierMap, structureMap));
             case Arrow(Exp pointer, String member, Type type) ->
                     new Arrow(resolveExp(pointer, identifierMap,
                             structureMap), member, type);
@@ -1923,7 +1949,7 @@ public class SemanticAnalysis {
                     new Dot(resolveExp(structure, identifierMap,
                             structureMap), member, type);
             case BuiltinVaArg(Var e, Type type) -> {
-                Type resolvedType = resolveType(type, structureMap);
+                Type resolvedType = resolveType(type, identifierMap, structureMap);
                 yield new BuiltinVaArg((Var) resolveExp(e, identifierMap,
                         structureMap), resolvedType);
             }

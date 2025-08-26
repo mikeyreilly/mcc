@@ -494,6 +494,8 @@ public class Codegen {
             case ULongInit(long l) -> new Imm(l);
             case DoubleInit(double d) -> resolveConstantDouble(d);
             case FloatInit(float d) -> resolveConstantFloat(d);
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + val);
         };
     }
 

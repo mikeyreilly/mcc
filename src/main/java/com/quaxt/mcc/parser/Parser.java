@@ -160,11 +160,11 @@ public class Parser {
                 if (next == BECOMES) {
                     tokens.removeFirst();
                     current = parseConstExp(tokens, typeAliases);
-                    if (!current.type().isInteger()) {
-                        throw makeErr("Only integer types are allowed for enum constants", tokens);
-                    }
+//                    if (!current.type().isInteger()) {
+//                        throw makeErr("Only integer types are allowed for enum constants", tokens);
+//                    }
                 }
-                if (current.type() != effectiveType){
+                if (!(current instanceof ConstantExp) && current.type() != effectiveType){
                     effectiveType = SemanticAnalysis.getCommonType(current.type(), effectiveType);
                 }
                 enumerators.add(new Enumerator(enumeratorName, current));
@@ -189,11 +189,12 @@ public class Parser {
             }
 
         }
-        if (type != null) effectiveType = type;
-        for (int i = 0; i < enumerators.size(); i++){
-            var e = enumerators.get(i);
-            enumerators.set(i,new Enumerator(e.name(), convertConst(e.value(), effectiveType)));
-        }
+        //MR-TODO move this to type checker
+//        if (type != null) effectiveType = type;
+//        for (int i = 0; i < enumerators.size(); i++){
+//            var e = enumerators.get(i);
+//            enumerators.set(i,new Enumerator(e.name(), convertConst(e.value(), effectiveType)));
+//        }
         return ret;
     }
 
@@ -553,21 +554,11 @@ public class Parser {
 
     public static Constant parseConstExp(TokenList tokens,
                                           ArrayList<Map<String, Type>> typeAliases) {
-        int cursorAtStart = tokens.cursor;
         Exp e = parseExp(tokens, 0, false, typeAliases);
-        e = typeCheckAndConvert(e);
+        //e = typeCheckAndConvert(e);
+        if (e==null) return null;
         if (e instanceof Constant c) return c;
-        List<InstructionIr> irs = new ArrayList<>();
-        var r = new Return(e);
-        IrGen.compileStatement(r, irs);
-        irs = optimizeInstructions(EnumSet.allOf(Optimization.class), irs);
-        if (irs.size() == 1 && irs.getFirst() instanceof ReturnIr(
-                Constant val)) {
-            return val;
-        }
-        tokens.cursor = cursorAtStart;
-        throw makeErr("Expected constant but found " + tokens.getFirst(),
-                tokens);
+        return new ConstantExp(e);
     }
 
 
@@ -586,8 +577,9 @@ public class Parser {
             case PointerDeclarator(Declarator d):
                    return  processDeclarator(d, new Pointer(baseType), typeAliases, tokens);
 
-            case ArrayDeclarator(Declarator inner, Constant size): {
-                Array derivedType = new Array(baseType, size);
+            case ArrayDeclarator(Declarator inner, Exp size): {
+                Constant sizeC = size==null ? null:size instanceof Constant c ? c : new ConstantExp(size);
+                Array derivedType = new Array(baseType, sizeC);
                 return processDeclarator(inner, derivedType, typeAliases, tokens);
             }
 
@@ -647,7 +639,7 @@ public class Parser {
     sealed interface DirectDeclarator extends Declarator permits ArrayDeclarator, Ident, FunctionDeclarator {};
     record Ident(String identifier) implements DirectDeclarator {}
     sealed interface Declarator extends DeclaratorOrAbstractDeclarator permits  DirectDeclarator, PointerDeclarator {}
-    record ArrayDeclarator(Declarator d, Constant arraySize) implements DirectDeclarator{};
+    record ArrayDeclarator(Declarator d, Exp arraySize) implements DirectDeclarator{};
     record FunctionDeclarator(Declarator d, ParameterTypeList parameterTypeList) implements DirectDeclarator{};
     record ParameterTypeList(
             ArrayList<ParameterDeclaration> parameterDeclarations, boolean varArgs){}
@@ -771,11 +763,11 @@ public class Parser {
         }
         else {
             c = parseConstExp(tokens, typeAliases);
-            if (c.isFloatingPointType()) {
-                throw new Err("illegal non-integer array size");
-            }
-            if (c.toLong() < 0L)
-                throw new Err("illegal negative array size");
+//            if (c.isFloatingPointType()) {
+//                throw new Err("illegal non-integer array size");
+//            }
+//            if (c.toLong() < 0L)
+//                throw new Err("illegal negative array size");
         }
         return c;
     }
@@ -1048,6 +1040,7 @@ public class Parser {
                 }
                 case EnumSpecifier es -> {
                     type=es.type();
+                    if (type == null) type=Primitive.INT;
                 }
                 default -> throw new Todo();
             }

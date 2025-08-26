@@ -169,4 +169,9 @@ class MccTest {
             throw new RuntimeException(e);
         }
     }
+
+    @Test
+    void array_size_expression() throws Exception {
+        outputs("array_size_expression", "abcdefg\n");
+    }
 }
