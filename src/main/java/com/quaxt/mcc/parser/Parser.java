@@ -136,9 +136,9 @@ public class Parser {
         if (token instanceof TokenWithValue(Token tokentype,
                                             String value) ) {
            tokens.removeFirst(); // enumName
-           if (tokentype == IDENTIFIER || tokentype == LABEL) enumName = value;
-           if (tokentype == LABEL) {
-               tokens.removeFirst(); // COLON
+           if (tokentype == IDENTIFIER) enumName = value;
+           if (tokens.getFirst() == COLON) {
+               tokens.removeFirst();
                TypeName typeName = parseTypeName(tokens, typeAliases);
                type = typeNameToType(typeName, tokens, typeAliases);
            }
@@ -418,7 +418,7 @@ public class Parser {
             var label = expectIdentifier(tokens);
             expect(SEMICOLON, tokens);
             return new Goto(label);
-        } else if (tokenType == LABEL) {
+        } else if (tokenType == IDENTIFIER && tokens.get(1) == COLON) {
             tokens.removeFirst(); // LABEL
             tokens.removeFirst(); // has to be COLON because of how LABEL
             // regex is defined
@@ -1395,11 +1395,11 @@ public class Parser {
 
                 yield switch (tokenType) {
                     case STRING_LITERAL -> new Str(parseStr(tokens), null);
-                    case IDENTIFIER,
+                    case IDENTIFIER
                          // if we're in the middle of a ?: expression we
                          // might have token type label (because of the
                          // colon), but it'declarationSpecifiers really an identifier
-                         LABEL -> {
+                        -> {
                         tokens.removeFirst();
 
                         Var id = new Var(value, null);

@@ -12,7 +12,7 @@ import static com.quaxt.mcc.TokenType.*;
 
 public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
-    static final Token[] TOKEN_TYPES_TO_MATCH = new Token[]{LABEL, IDENTIFIER,
+    static final Token[] TOKEN_TYPES_TO_MATCH = new Token[]{IDENTIFIER,
             SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ,
             BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ,
             SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE, CHAR_LITERAL,
@@ -97,7 +97,7 @@ public class Lexer {
                             String value = src.substring(start, end - 1);
                             Token token = new TokenWithValue(tokenType, value);
                             tokens.add(token, filename,lineNumber);
-                        } else if (tokenType == LABEL || tokenType == IDENTIFIER || tokenType == FLOAT_LITERAL
+                        } else if (tokenType == IDENTIFIER || tokenType == FLOAT_LITERAL
                                 || tokenType == DOUBLE_LITERAL
                                 || tokenType == UNSIGNED_HEX_LONG_LITERAL
                                 || tokenType == HEX_LONG_LITERAL

@@ -4,7 +4,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public enum TokenType implements Token {
-    LABEL("([a-zA-Z_]\\w*)\\s*:", 1),
     IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), CHAR_LITERAL("'([^'\\\\\n" +
             "]|\\\\['\"\\\\?abfnrtv0])'"),
@@ -101,7 +100,6 @@ public enum TokenType implements Token {
             case UNSIGNED_HEX_INT_LITERAL -> "unsigned_hex_int_literal";
             case UNSIGNED_HEX_LONG_LITERAL -> "unsigned_hex_long_literal";
             case HEX_LONG_LITERAL -> "hex_long_literal";
-            case LABEL -> "label";
             case LONG -> "long";
             case LONG_LITERAL -> "long_literal";
             case MULTILINE_COMMENT -> "multiline_comment";
