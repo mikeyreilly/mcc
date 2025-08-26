@@ -1116,7 +1116,7 @@ public class Parser {
                                             String value) && type == IDENTIFIER) {
             return value;
         }
-        throw new IllegalArgumentException("Expected IDENTIFIER got " + token);
+        throw makeErr("Expected IDENTIFIER got " + token, tokens);
     }
 
     private static Block parseBlock(TokenList tokens, List<String> labels,

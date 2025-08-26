@@ -20,7 +20,8 @@ public enum TokenType implements Token {
     LONG_LITERAL("([0-9]+[lL][lL]?)[^\\w.]", 1),
     UNSIGNED_HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
             "[^\\w.]", 1),
-    HEX_LONG_LITERAL("0x([a-fA-F0-9]+)([lL]|[lL][lL])"),
+    HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL]|[lL][lL]))" +
+            "[^\\w.]", 1),
     HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
     , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*|#\\s*pragma\\b.*"),
     MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0),
