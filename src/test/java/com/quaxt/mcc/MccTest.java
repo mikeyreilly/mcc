@@ -64,6 +64,11 @@ class MccTest {
     }
 
     @Test
+    void struct2() throws Exception {
+        returns("struct2", 46);
+    }
+
+    @Test
     void struct_anon_struct_member() throws Exception {
         returns("struct_inline_struct_member", 36);
     }
