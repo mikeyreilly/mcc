@@ -663,6 +663,7 @@ public class SemanticAnalysis {
                 var entries = enclosingSwitch.entries;
                 Constant<? extends Constant<?>> convertedConst;
                 if (label != null) {
+                    label = (Constant<?>) typeCheckExpression(label);
                     var t = label.type();
                     if (!t.isInteger()) {
                         throw new Err("case label is not an integer");
@@ -1057,7 +1058,7 @@ public class SemanticAnalysis {
         };
     }
 
-    public static Constant evaluateConstantExp(ConstantExp c){
+    public static Constant evaluateConstantExp(ConstantExp c) {
         List<InstructionIr> irs = new ArrayList<>();
         var typeCheckedSize = typeCheckExpression(c.exp());
         var r = new Return(typeCheckedSize);
@@ -1757,7 +1758,8 @@ public class SemanticAnalysis {
                             identifierMap, structureMap));
             case CaseStatement(Switch enclosingSwitch, Constant<?> label,
                                Statement statement) ->
-                    new CaseStatement(enclosingSwitch, label,
+                    new CaseStatement(enclosingSwitch, (Constant<?>) resolveExp(label, identifierMap,
+                            structureMap),
                             resolveStatement(statement, identifierMap,
                                     structureMap));
             case Return(Exp exp) ->
@@ -1913,6 +1915,9 @@ public class SemanticAnalysis {
                     op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new CompoundAssignment(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), tempType, type);
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
                     op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new BinaryOp(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), type);
+            case ConstantExp(Exp cexp) -> new ConstantExp(resolveExp(cexp,
+                    identifierMap,
+                    structureMap));
             case Constant constant -> constant;
             case Str str -> str;
             case UnaryOp(UnaryOperator op, Exp arg, Type type) ->

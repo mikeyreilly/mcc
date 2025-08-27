@@ -69,6 +69,11 @@ class MccTest {
     }
 
     @Test
+    void switch_test() throws Exception {
+        returns("switch", 8);
+    }
+
+    @Test
     void struct_anon_struct_member() throws Exception {
         returns("struct_inline_struct_member", 36);
     }

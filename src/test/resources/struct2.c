@@ -23,6 +23,6 @@ int main() {
     struct container c2;
     c2.a=i;
     c2.d=19.0;
-    
+
     return c1.a.i+c1.x+c2.a.i+c2.d;
 }

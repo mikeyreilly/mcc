@@ -486,7 +486,7 @@ public class Parser {
                     labels, enclosingSwitch, typeAliases));
         } else if (tokenType == CASE) {
             tokens.removeFirst(); // CASE
-            Constant<?> c = parseConst(tokens, true);
+            Constant<?> c = parseConstExp(tokens, typeAliases);
             expect(COLON, tokens);
             return new CaseStatement(enclosingSwitch, c,
                     parseStatement(tokens, labels, enclosingSwitch,
@@ -1375,7 +1375,7 @@ public class Parser {
             }
         }
         if (throwIfNotFound)
-            throw new IllegalStateException("expected const, found: " + token);
+            throw makeErr("expected const, found: " + token, tokens);
         return null;
     }
 
