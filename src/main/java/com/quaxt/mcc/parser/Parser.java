@@ -262,11 +262,40 @@ public class Parser {
         if (first.equals(OPEN_BRACE)) {
             tokens.removeFirst();
             members = new ArrayList<>();
-            while (tokens.getFirst() != CLOSE_BRACE) {
-                members.add(Parser.parseMemberDeclaration(tokens, typeAliases));
-                Parser.expect(SEMICOLON, tokens);
-            }
-            tokens.removeFirst(); // closing brace
+                List<DeclarationList> dl = new ArrayList<>();
+                while(tokens.getFirst()!=CLOSE_BRACE) {
+                    DeclarationList x = parseDeclarationList(tokens, false, typeAliases);
+                    for(Declaration y:x.list()){
+                        switch(y){
+                            case VarDecl(Var name,
+                                         Initializer init, Type t,
+                                         StorageClass storageClass,
+                                         StructOrUnionSpecifier structOrUnionSpecifier)->{
+                                                        if (t instanceof FunType)
+                            fail("error: member declaration can't be function");
+                                members.add(new MemberDeclaration(t, name.name(), structOrUnionSpecifier));
+                            }
+                            default->{
+                                throw makeErr("Todo", tokens);
+                            }
+                        }
+
+
+                    }
+                }
+                tokens.removeFirst(); // CLOSE_BRACE
+//                List<DeclarationSpecifier> specifiers =
+//                        parseDeclarationSpecifiers(tokens, typeAliases);
+//                TypeAndStorageClass typeAndStorageClass =
+//                        parseTypeAndStorageClass(specifiers, typeAliases, tokens);
+//                if (typeAndStorageClass.storageClass() != null)
+//                    fail("error: storage class specified for struct member");
+//                Declarator paramDeclarator =
+//                        parseDeclarator(tokens, typeAliases);
+//                NameDeclTypeParams nameDeclTypeParams =
+//                        processDeclarator(paramDeclarator, typeAndStorageClass.type(), typeAliases, tokens);
+
+
         } else if (tag == null) {
             throw new Err("Expected either union identifer or '{', found: " + tokens.removeFirst());
         }
@@ -642,26 +671,6 @@ public class Parser {
         }
 
     }
-
-    private static MemberDeclaration parseMemberDeclaration(TokenList tokens,
-                                                            ArrayList<Map<String, Type>> typeAliases) {
-        List<DeclarationSpecifier> specifiers =
-                parseDeclarationSpecifiers(tokens, typeAliases);
-        TypeAndStorageClass typeAndStorageClass =
-                parseTypeAndStorageClass(specifiers, typeAliases, tokens);
-        if (typeAndStorageClass.storageClass() != null)
-            fail("error: storage class specified for struct member");
-        Declarator paramDeclarator =
-                parseDeclarator(tokens, typeAliases);
-        NameDeclTypeParams nameDeclTypeParams =
-                processDeclarator(paramDeclarator, typeAndStorageClass.type(), typeAliases, tokens);
-        var t = nameDeclTypeParams.type();
-        if (t instanceof FunType)
-            fail("error: member declaration can't be function");
-        return new MemberDeclaration(t, nameDeclTypeParams.name(), typeAndStorageClass.structOrUnionSpecifier());
-
-    }
-
 
 
     public static Declarator parseDeclarator(TokenList tokens,
