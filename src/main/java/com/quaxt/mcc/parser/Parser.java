@@ -275,6 +275,11 @@ public class Parser {
                             fail("error: member declaration can't be function");
                                 members.add(new MemberDeclaration(t, name.name(), structOrUnionSpecifier));
                             }
+                            case StructOrUnionSpecifier sous ->{
+                                // the only way we can get one of these is if we have an anonymous inner struct or union
+                                members.add(new MemberDeclaration(new Structure(sous.isUnion(), sous.tag(), TYPE_TABLE.get(sous.tag())
+                                ), null, sous));
+                            }
                             default->{
                                 throw makeErr("Todo", tokens);
                             }
