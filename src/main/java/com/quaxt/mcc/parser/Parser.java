@@ -4,9 +4,6 @@ package com.quaxt.mcc.parser;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.semantic.*;
-import com.quaxt.mcc.tacky.InstructionIr;
-import com.quaxt.mcc.tacky.IrGen;
-import com.quaxt.mcc.tacky.ReturnIr;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -20,13 +17,35 @@ import static com.quaxt.mcc.TokenType.*;
 import static com.quaxt.mcc.TokenType.VOID;
 import static com.quaxt.mcc.UnaryOperator.POST_DECREMENT;
 import static com.quaxt.mcc.UnaryOperator.POST_INCREMENT;
-import static com.quaxt.mcc.optimizer.Optimizer.optimizeInstructions;
 import static com.quaxt.mcc.parser.NullStatement.NULL_STATEMENT;
-import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
-import static com.quaxt.mcc.semantic.SemanticAnalysis.typeCheckAndConvert;
 
 public class Parser {
+    record AbstractArrayDeclarator(AbstractDeclarator abstractDeclarator,
+                                   Constant arraySize) implements AbstractDeclarator {}
 
+    record NameDeclTypeParams(String name, Type type,
+                              ArrayList<String> paramNames) {}
+    sealed interface AbstractDeclarator extends DeclaratorOrAbstractDeclarator{};
+
+    record AbstractBase() implements AbstractDeclarator {}
+
+    record AbstractPointer(
+            AbstractDeclarator declarator) implements AbstractDeclarator {}
+    record FunctionAbstractDeclarator(AbstractDeclarator d,
+                                      ParameterTypeList args) implements AbstractDeclarator{}
+    record PointerDeclarator(Declarator d) implements Declarator {}
+    sealed interface DirectDeclarator extends Declarator permits ArrayDeclarator, Ident, FunctionDeclarator {};
+    record Ident(String identifier) implements DirectDeclarator {}
+    sealed interface Declarator extends DeclaratorOrAbstractDeclarator permits  DirectDeclarator, PointerDeclarator {}
+    record ArrayDeclarator(Declarator d, Exp arraySize) implements DirectDeclarator{};
+    record FunctionDeclarator(DeclaratorOrAbstractDeclarator d, ParameterTypeList parameterTypeList) implements DirectDeclarator{};
+    record ParameterTypeList(
+            ArrayList<ParameterDeclaration> parameterDeclarations, boolean varArgs){}
+    sealed interface DeclaratorOrAbstractDeclarator {}
+
+    record ParameterDeclaration(
+            List<DeclarationSpecifier> declarationSpecifiers,
+            DeclaratorOrAbstractDeclarator declarator) {}
     public static List<DeclarationSpecifier> parseDeclarationSpecifiers(
             TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
         // declaration-specifiers:
@@ -497,40 +516,39 @@ public class Parser {
     }
 
 
-    record AbstractArrayDeclarator(AbstractDeclarator abstractDeclarator,
-                                   Constant arraySize) implements AbstractDeclarator {}
-
-    record NameDeclTypeParams(String name, Type type,
-                              ArrayList<String> paramNames) {}
-    sealed interface AbstractDeclarator{};
-
-    record AbstractBase() implements AbstractDeclarator {}
-
-    record AbstractPointer(
-            AbstractDeclarator declarator) implements AbstractDeclarator {}
 
     private static AbstractDeclarator parseAbstractDeclarator(
-            TokenList tokens) {
+            TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
         // <abstract-declarator> ::= "*" [ <abstract-declarator> ]
         //                         | <direct-abstract-declarator>
-        if (tokens.getFirst() == OPEN_PAREN || tokens.getFirst() == OPEN_BRACKET)
-            return parseDirectAbstractDeclarator(tokens);
+        if (tokens.getFirst() == OPEN_PAREN || tokens.getFirst() == OPEN_BRACKET){
+            var d= parseDirectAbstractDeclarator(tokens, typeAliases);
+            if (tokens.getFirst() == OPEN_PAREN) {
+                tokens.removeFirst();
+                var args=parseParameterTypeList(tokens, typeAliases);
+                expect(CLOSE_PAREN, tokens);
+                return new FunctionAbstractDeclarator(d, args);
+            }
+            return d;
+        }
+
         if (tokens.getFirst() == IMUL) {
             tokens.removeFirst();
-            return new AbstractPointer(parseAbstractDeclarator(tokens));
+            return new AbstractPointer(parseAbstractDeclarator(tokens, typeAliases));
         }
+
         return new AbstractBase();
     }
 
     private static AbstractDeclarator parseDirectAbstractDeclarator(
-            TokenList tokens) {
+            TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
         // <direct-abstract-declarator> ::= "(" <abstract-declarator> ")" {
         // "[" <const> "]" }
         //                                | { "[" <const> "]" }+
         AbstractDeclarator d = null;
         if (tokens.getFirst() == OPEN_PAREN) {
             tokens.removeFirst();
-            d = parseAbstractDeclarator(tokens);
+            d = parseAbstractDeclarator(tokens, typeAliases);
             expect(CLOSE_PAREN, tokens);
         }
         if (tokens.getFirst() == OPEN_BRACKET) {
@@ -562,7 +580,7 @@ public class Parser {
     }
 
 
-    private static NameDeclTypeParams processDeclarator(Declarator declarator,
+    private static NameDeclTypeParams processDeclarator(DeclaratorOrAbstractDeclarator declarator,
                                                         Type baseType,
                                                         ArrayList<Map<String, Type>> typeAliases,
                                                         TokenList tokens) {
@@ -583,10 +601,10 @@ public class Parser {
                 return processDeclarator(inner, derivedType, typeAliases, tokens);
             }
 
-            case FunctionDeclarator(Declarator d, ParameterTypeList parameterTypeList) :
+            case FunctionDeclarator(DeclaratorOrAbstractDeclarator d, ParameterTypeList parameterTypeList) :
             {
-                ArrayList<ParameterDeclaration> parameterDeclarations=parameterTypeList.parameterDeclarations();
-                boolean varargs=parameterTypeList.varArgs();
+                ArrayList<ParameterDeclaration> parameterDeclarations = parameterTypeList.parameterDeclarations();
+                boolean varargs = parameterTypeList.varArgs();
                 ArrayList<String> paramNames = new ArrayList<>();
                 List<Type> paramTypes = new ArrayList<>();
                 for(ParameterDeclaration pi:parameterDeclarations){
@@ -608,11 +626,21 @@ public class Parser {
                 if (d instanceof Ident(String name)) {
                     return new NameDeclTypeParams(name, derivedType, paramNames);
                 } else if (d instanceof PointerDeclarator(Declarator decl)) {
-                    return processDeclarator(d, derivedType, typeAliases, tokens);
+                    return processDeclarator(decl, new Pointer(derivedType), typeAliases, tokens);
+                }  else if (d instanceof AbstractPointer(AbstractDeclarator inner)) {
+                    return processDeclarator(inner, new Pointer(derivedType), typeAliases, tokens);
+                }else {
+                    throw new Todo();
                 }
             }
+            case AbstractDeclarator abstractDeclarator: {
+                Type derivedType = processAbstractDeclarator(abstractDeclarator, baseType,
+                        typeAliases,
+                        tokens);
+                return new NameDeclTypeParams(null, derivedType, new ArrayList<>());
+            }
         }
-        throw new Todo();
+
     }
 
     private static MemberDeclaration parseMemberDeclaration(TokenList tokens,
@@ -635,19 +663,6 @@ public class Parser {
     }
 
 
-    record PointerDeclarator(Declarator d) implements Declarator {}
-    sealed interface DirectDeclarator extends Declarator permits ArrayDeclarator, Ident, FunctionDeclarator {};
-    record Ident(String identifier) implements DirectDeclarator {}
-    sealed interface Declarator extends DeclaratorOrAbstractDeclarator permits  DirectDeclarator, PointerDeclarator {}
-    record ArrayDeclarator(Declarator d, Exp arraySize) implements DirectDeclarator{};
-    record FunctionDeclarator(Declarator d, ParameterTypeList parameterTypeList) implements DirectDeclarator{};
-    record ParameterTypeList(
-            ArrayList<ParameterDeclaration> parameterDeclarations, boolean varArgs){}
-    sealed interface DeclaratorOrAbstractDeclarator {}
-
-    record ParameterDeclaration(
-            List<DeclarationSpecifier> declarationSpecifiers,
-            DeclaratorOrAbstractDeclarator declarator) {}
 
     public static Declarator parseDeclarator(TokenList tokens,
                                              ArrayList<Map<String, Type>> typeAliases){
@@ -675,7 +690,7 @@ public class Parser {
         Declarator d = switch (t) {
             case TokenWithValue(Token type,
                                 String identifier) -> {
-                if (type == TokenType.IDENTIFIER) {
+                if (type == IDENTIFIER) {
                     tokens.removeFirst();
                     yield new Ident(identifier);
                 }
@@ -685,7 +700,7 @@ public class Parser {
             case OPEN_PAREN -> {
                 tokens.removeFirst();
                 var r = parseDeclarator(tokens, typeAliases);
-                Parser.expect(TokenType.CLOSE_PAREN, tokens);
+                Parser.expect(CLOSE_PAREN, tokens);
                 yield r;
             }
             default -> {
@@ -699,12 +714,12 @@ public class Parser {
             } else if (t == OPEN_BRACKET) {
                 tokens.removeFirst();
                 Constant arraySize=parseArraySize(tokens, typeAliases);
-                Parser.expect(TokenType.CLOSE_BRACKET, tokens);
+                Parser.expect(CLOSE_BRACKET, tokens);
                 d = new ArrayDeclarator(d, arraySize);
             } else if (t == OPEN_PAREN) {
                 tokens.removeFirst();
                 ParameterTypeList parameterTypeList = parseParameterTypeList(tokens, typeAliases);
-                Parser.expect(TokenType.CLOSE_PAREN, tokens);
+                Parser.expect(CLOSE_PAREN, tokens);
                 d = new FunctionDeclarator(d, parameterTypeList);
             } else break;
         }
@@ -1180,17 +1195,24 @@ public class Parser {
     }
 
     private static Type processAbstractDeclarator(
-            AbstractDeclarator abstractDeclarator, Type type) {
+            AbstractDeclarator abstractDeclarator, Type type,
+            ArrayList<Map<String, Type>> typeAliases,
+            TokenList tokens) {
         return switch (abstractDeclarator) {
             case AbstractBase _ -> type;
             case AbstractPointer(AbstractDeclarator declarator) ->
-                    processAbstractDeclarator(declarator, new Pointer(type));
+                    processAbstractDeclarator(declarator, new Pointer(type) ,typeAliases ,tokens);
 //            case DirectAbstractDeclarator(AbstractDeclarator declarator) ->
 //                    processAbstractDeclarator(declarator, type);
             case AbstractArrayDeclarator(AbstractDeclarator declarator,
                                          Constant arraySize) ->
                     processAbstractDeclarator(declarator, new Array(type,
-                            arraySize));
+                            arraySize) ,typeAliases ,tokens);
+            case FunctionAbstractDeclarator(AbstractDeclarator d,
+                                            ParameterTypeList args) -> {
+               var xxx= processDeclarator(new FunctionDeclarator(d, args), type ,typeAliases ,tokens);
+               yield xxx.type();
+            }
         };
     }
 
@@ -1398,7 +1420,7 @@ public class Parser {
                     case IDENTIFIER
                          // if we're in the middle of a ?: expression we
                          // might have token type label (because of the
-                         // colon), but it'declarationSpecifiers really an identifier
+                         // colon), but it's really an identifier
                         -> {
                         tokens.removeFirst();
 
@@ -1545,7 +1567,7 @@ public class Parser {
                                        TokenList tokens,
                                        ArrayList<Map<String, Type>> typeAliases) {
         Type t = parseTypeAndStorageClass(typeName.typeSpecifierQualifiers(), typeAliases, tokens).type();
-        return processAbstractDeclarator(typeName.abstractDeclarator(), t);
+        return processAbstractDeclarator(typeName.abstractDeclarator(), t, typeAliases, tokens);
     }
 
     record TypeName(List<DeclarationSpecifier> typeSpecifierQualifiers,
@@ -1554,7 +1576,7 @@ public class Parser {
     private static TypeName parseTypeName(TokenList tokens,
                                           ArrayList<Map<String, Type>> typeAliases) {
         List<DeclarationSpecifier> typeSpecifiers= parseDeclarationSpecifiers(tokens, typeAliases);
-        AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens);
+        AbstractDeclarator abstractDeclarator = parseAbstractDeclarator(tokens, typeAliases);
         return new TypeName(typeSpecifiers, abstractDeclarator);
     }
 

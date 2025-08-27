@@ -27,6 +27,11 @@ class MccTest {
     }
 
     @Test
+    void void_fn_pointer() throws Exception {
+        outputs("void_fn_pointer", "hello\n");
+    }
+
+    @Test
     void function_pointer() throws Exception {
         returns("function_pointer", 38);
     }

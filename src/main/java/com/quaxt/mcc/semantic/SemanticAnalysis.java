@@ -1250,7 +1250,9 @@ public class SemanticAnalysis {
                     fail("Can only cast to scalar type or void");
                 }
                 Type innerType = typedInner.type();
-                if (!innerType.isScalar()) {
+                if (innerType instanceof FunType && type instanceof Pointer(Type r) && r instanceof FunType){
+                    yield new Cast(type, typedInner);
+                } else if (!innerType.isScalar()) {
                     fail("Cannot cast non-scalar expression to scalar type");
                 }
 
