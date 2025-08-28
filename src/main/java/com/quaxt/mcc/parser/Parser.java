@@ -305,8 +305,12 @@ public class Parser {
             throw new Err("Expected either union identifer or '{', found: " + tokens.removeFirst());
         }
         //MR-TODO something better
-        if (tag == null) tag = generateTagForAnonymousStructOrUnion();
-        return new StructOrUnionSpecifier(isUnion, tag, members);
+        boolean anonymous = false;
+        if (tag == null) {
+            anonymous = true;
+            tag = generateTagForAnonymousStructOrUnion();
+        }
+        return new StructOrUnionSpecifier(isUnion, tag, members, anonymous);
     }
 
     private static String generateTagForAnonymousStructOrUnion() {
@@ -344,21 +348,26 @@ public class Parser {
     }
 
     public static Token expect(Token expected, TokenList tokens) {
-        Token token = tokens.getFirst();
-        if (expected != token.type()) {
+        Token token = null;
+        while(!tokens.isEmpty()) {
+            token = tokens.getFirst();
             if (token == GCC_ATTRIBUTE) {
                 stripGccAttribute(tokens);
-                return expect(expected, tokens);
-            }
-            if (token == ASM) {
+            } else if (token == ASM) {
                 stripAsm(tokens);
-                return expect(expected, tokens);
+            } else if (token == CONST) {
+                tokens.removeFirst();
+            } else {
+                if (expected == token.type()) {
+                    tokens.removeFirst();
+                    return token;
+                }
+                break;
             }
-            throw makeErr("Expected " + expected + ", " + "got " + token,
-                    tokens);
         }
-        tokens.removeFirst();
-        return token;
+        throw makeErr("Expected " + expected + ", " + "got " + token,
+                tokens);
+
     }
 
     public static void stripGccAttribute(TokenList tokens) {
@@ -555,6 +564,9 @@ public class Parser {
             TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
         // <abstract-declarator> ::= "*" [ <abstract-declarator> ]
         //                         | <direct-abstract-declarator>
+        if (tokens.getFirst() == CONST) {
+            tokens.removeFirst();
+        }
         if (tokens.getFirst() == OPEN_PAREN || tokens.getFirst() == OPEN_BRACKET){
             var d= parseDirectAbstractDeclarator(tokens, typeAliases);
             if (tokens.getFirst() == OPEN_PAREN) {
@@ -1196,7 +1208,7 @@ public class Parser {
             return new DoubleInit(Double.parseDouble(value));
         if (type == Primitive.FLOAT)
             return new FloatInit(Float.parseFloat(value));
-        if (type.isSigned()) {
+        if (type.isSigned() && base == 10) {
             long v = Long.parseLong(value, base);
             if (v < 1L << 31 && type == Primitive.INT)
                 return new IntInit((int) v);
@@ -1538,13 +1550,27 @@ public class Parser {
                             case 'v' -> 11;
                             default -> {
                                 int len = 0;
-                                while (next>='0' && next<='7' && i<slen){
-                                    next = value.charAt(i);
-                                    len++;
-                                    i++;
+                                int base = 8;
+                                if (next == 'x') {
+                                    next = value.charAt(++i);
+                                    base = 16;
+                                    while (i < slen && len < 2 &&
+                                            ((next >= '0' && next <= '9') || (next >= 'a' && next <= 'f')
+                                                    || (next >= 'A' && next <= 'F'))) {
+                                        next = value.charAt(i);
+                                        len++;
+                                        i++;
+                                    }
+
+                                } else {
+                                    while (i < slen && len < 3 && next >= '0' && next <= '7') {
+                                        next = value.charAt(i);
+                                        len++;
+                                        i++;
+                                    }
                                 }
-                                if (len==0) throw new AssertionError(next);
-                                yield (char)Integer.parseInt(value.substring(i-len,i),8);
+                                if (len == 0) throw new AssertionError(next);
+                                yield (char) Integer.parseInt(value.substring(i - len, i), base);
                             }
 
                         };

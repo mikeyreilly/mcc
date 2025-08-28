@@ -206,19 +206,39 @@ public class SemanticAnalysis {
         int structAlignment = 0;
         boolean isUnion = structDecl.isUnion();
         for (MemberDeclaration member : structDecl.members()) {
-            typeCheckStructureDeclaration(member.structOrUnionSpecifier());
-            Type memberType = completeType(member.type());
-            int memberAlignment = Mcc.typeAlignment(memberType);
-            int memberOffset = isUnion ? 0 : roundUp(structSize,
-                    memberAlignment);
+            var innerSd = typeCheckStructureDeclaration(member.structOrUnionSpecifier());
+            if (innerSd!=null && member.structOrUnionSpecifier().isAnonymous() && member.name() == null) {
+                for (var innerMember:innerSd.members()) {
+                    Type memberType = completeType(innerMember.type());
+                    int memberAlignment = Mcc.typeAlignment(memberType);
+                    int memberOffset =
+                            isUnion ? 0 : roundUp(structSize, memberAlignment);
 
-            MemberEntry m = new MemberEntry(member.name(), memberType,
-                    memberOffset);
-            memberEntries.add(m);
-            structAlignment = Math.max(structAlignment, memberAlignment);
-            int memberSize = (int) Mcc.size(memberType);
-            structSize = isUnion ? Math.max(memberSize, structSize) :
-                    memberOffset + memberSize;
+                    MemberEntry m =
+                            new MemberEntry(innerMember.name(), memberType,
+                                    memberOffset);
+                    memberEntries.add(m);
+                    structAlignment = Math.max(structAlignment, memberAlignment);
+                    int memberSize = (int) Mcc.size(memberType);
+                    structSize = isUnion ? Math.max(memberSize, structSize) :
+                            memberOffset + memberSize;
+                }
+            }else{
+
+                Type memberType = completeType(member.type());
+                int memberAlignment = Mcc.typeAlignment(memberType);
+                int memberOffset =
+                        isUnion ? 0 : roundUp(structSize, memberAlignment);
+
+                MemberEntry m =
+                        new MemberEntry(member.name(), memberType,
+                                memberOffset);
+                memberEntries.add(m);
+                structAlignment = Math.max(structAlignment, memberAlignment);
+                int memberSize = (int) Mcc.size(memberType);
+                structSize = isUnion ? Math.max(memberSize, structSize) :
+                        memberOffset + memberSize;
+            }
         }
         structSize = roundUp(structSize, structAlignment);
         var sd = new StructDef(isUnion,
@@ -226,6 +246,8 @@ public class SemanticAnalysis {
         Mcc.TYPE_TABLE.put(structDecl.tag(), sd);
         return sd;
     }
+
+
 
     private static int roundUp(int x, int n) {
         int rem = x % n;
@@ -1647,11 +1669,12 @@ public class SemanticAnalysis {
                 if (sous != null && sous.members() != null) { // sous without members would already be resolved
                     sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap);
                 }
+                // MR-TODO for anonymous inner structs/unions just add their members to the container correctly, adjusting their size appropriately
                 processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap), member.name(), sous));
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
-                processedMembers);
+                processedMembers, decl.isAnonymous());
     }
 
     private static Declaration resolveFileScopeVariableDeclaration(

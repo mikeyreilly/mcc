@@ -29,7 +29,11 @@ public class Mcc {
             return super.put(key, value);
         }
     };
-    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>();
+    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>(){
+        public StructDef put(String key, StructDef value) {
+            return super.put(key, value);
+        }
+    };
     public static final HashMap<String, EnumSpecifier> ENUM_MAP = new HashMap<>();
 
     public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
