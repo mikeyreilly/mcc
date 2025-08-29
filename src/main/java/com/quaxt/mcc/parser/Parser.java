@@ -149,7 +149,7 @@ public class Parser {
 
 // enum-type-specifier:
 //    : specifier-qualifier-list
-        String enumName =null;
+        String enumName=null;
         Token token = tokens.getFirst();
         Type type = null;
         if (token instanceof TokenWithValue(Token tokentype,
@@ -161,6 +161,9 @@ public class Parser {
                TypeName typeName = parseTypeName(tokens, typeAliases);
                type = typeNameToType(typeName, tokens, typeAliases);
            }
+        }
+        if (enumName == null) {
+            enumName = generatePseudoIdentifier();
         }
         if (tokens.getFirst() != OPEN_BRACE)
             return new EnumSpecifier(type, enumName, null);
@@ -308,12 +311,13 @@ public class Parser {
         boolean anonymous = false;
         if (tag == null) {
             anonymous = true;
-            tag = generateTagForAnonymousStructOrUnion();
+            tag = generatePseudoIdentifier();
         }
         return new StructOrUnionSpecifier(isUnion, tag, members, anonymous);
     }
 
-    private static String generateTagForAnonymousStructOrUnion() {
+    /* So that things (e.g. structs, unions, enums) can have a name even when in the code they are not given one*/
+    private static String generatePseudoIdentifier() {
         return makeTemporary("tag.");
     }
     
@@ -787,9 +791,10 @@ public class Parser {
 //        parameter-declaration:
 //        attribute-specifier-sequenceopt declaration-specifiers declarator
 //        attribute-specifier-sequenceopt declaration-specifiers abstract-declaratoropt
-        int cursorAtStart=tokens.cursor;
+        int cursorAtStart = tokens.cursor;
         List<DeclarationSpecifier> s = Parser.parseDeclarationSpecifiers(tokens, typeAliases);
         if (s.isEmpty()) {
+            tokens.cursor = cursorAtStart;
             throw makeErr("Could not find declaraton specifier while parsing parameter declaration", tokens);
         }
         DeclaratorOrAbstractDeclarator d= parseDeclarator(tokens, typeAliases);

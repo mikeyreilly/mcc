@@ -46,7 +46,6 @@ class MccTest {
         outputs("hello_world", "hello world");
     }
 
-
     @Test
     void typedef() throws Exception {
         returns("typedef", 0);

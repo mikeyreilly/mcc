@@ -40,7 +40,9 @@ public class TokenList  {
                 break;
             }
         }
-
+        if (positionsIndex >= positions.size()) {
+            positionsIndex = positions.size() - 1;
+        }
         var pos = positions.get(positionsIndex);
 
         return " at " + filenames.get(pos.file) + ":" + (pos.lineNumber + 1);

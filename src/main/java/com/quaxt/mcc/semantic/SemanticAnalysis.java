@@ -1561,10 +1561,18 @@ public class SemanticAnalysis {
                     yield new Structure(isUnion, e.name(), sd);
                 } else if ("__builtin_va_list_item.0".equals(tag)) {
                     yield new Structure(isUnion, "__builtin_va_list_item.0", null);
-                } else throw new Err("Specified an undeclared tag: tag=" + tag);
+                } else
+                    throw new Err("Specified an undeclared tag: tag=" + tag);
             }
-            case Pointer(Type referenced) ->
-                    new Pointer(resolveType(referenced, identifierMap, structureMap));
+            case Pointer(Type referenced) ->{
+                if (referenced instanceof Structure s) {
+                    resolveStructureDeclaration(new StructOrUnionSpecifier(s.isUnion(), s.tag(), null,
+                            s.tag() == null),
+                            copyIdentifierMap(identifierMap),
+                            copyStructureMap(structureMap));
+                }
+                yield    new Pointer(resolveType(referenced, identifierMap, structureMap));
+            }
             case Array(Type element, Constant size) ->{
                 if (size instanceof ConstantExp c){
                     size = new ConstantExp(resolveExp(c.exp(), identifierMap, structureMap));
@@ -1661,7 +1669,7 @@ public class SemanticAnalysis {
             processedMembers = new ArrayList<>();
             for (MemberDeclaration member : decl.members()) {
                 for (var p : processedMembers) {
-                    if (p.name().equals(member.name())) {
+                    if (p.name()!=null && p.name().equals(member.name())) {
                         throw new Err("Duplicate structure member name");
                     }
                 }
