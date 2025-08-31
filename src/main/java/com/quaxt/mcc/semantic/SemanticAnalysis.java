@@ -1566,12 +1566,10 @@ public class SemanticAnalysis {
             }
             case Pointer(Type referenced) ->{
                 if (referenced instanceof Structure s) {
-                    resolveStructureDeclaration(new StructOrUnionSpecifier(s.isUnion(), s.tag(), null,
-                            s.tag() == null),
-                            copyIdentifierMap(identifierMap),
-                            copyStructureMap(structureMap));
+                    referenced = resolveType(referenced, identifierMap, structureMap);
+
                 }
-                yield    new Pointer(resolveType(referenced, identifierMap, structureMap));
+                yield new Pointer(referenced);
             }
             case Array(Type element, Constant size) ->{
                 if (size instanceof ConstantExp c){
@@ -1587,7 +1585,7 @@ public class SemanticAnalysis {
 
     public static Program resolveProgram(Program program) {
         Map<String, Entry> identifierMap = new HashMap<>();
-        Map<String, TagEntry> structureMap = new HashMap<>();
+        Map<String, TagEntry> structureMap = new DebugHashMap<>();
         ArrayList<Declaration> decls = program.declarations();
         for (int i = 0; i < decls.size(); i++) {
             switch (decls.get(i)) {
@@ -1678,6 +1676,13 @@ public class SemanticAnalysis {
                     sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap);
                 }
                 // MR-TODO for anonymous inner structs/unions just add their members to the container correctly, adjusting their size appropriately
+                if (member.type() instanceof Pointer(Type ref) && ref instanceof Structure(boolean isUnion, String tag, StructDef structDef)){
+                    StructOrUnionSpecifier rrr =
+                            resolveStructureDeclaration(new StructOrUnionSpecifier(isUnion, tag, null,
+                                    tag ==
+                                            null), identifierMap, structureMap);
+                }
+
                 processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap), member.name(), sous));
             }
         }
@@ -1871,7 +1876,7 @@ public class SemanticAnalysis {
 
     private static Map<String, TagEntry> copyStructureMap(
             Map<String, TagEntry> m) {
-        Map<String, TagEntry> copy = HashMap.newHashMap(m.size());
+        Map<String, TagEntry> copy = new DebugHashMap<>(m.size());
         for (var e : m.entrySet()) {
             var v = e.getValue();
             copy.put(e.getKey(), new TagEntry(v.isUnion(), v.name(),

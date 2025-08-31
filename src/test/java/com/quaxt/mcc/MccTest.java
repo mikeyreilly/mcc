@@ -47,6 +47,11 @@ class MccTest {
     }
 
     @Test
+    void double_decl_with_struct() throws Exception {
+        outputs("double_decl_with_struct", "hello world");
+    }
+
+    @Test
     void typedef() throws Exception {
         returns("typedef", 0);
     }
@@ -65,6 +70,11 @@ class MccTest {
     @Test
     void anon_struct() throws Exception {
         returns("anon_struct", 46);
+    }
+
+    @Test
+    void awkward_struct() throws Exception {
+        returns("awkward_struct", 10);
     }
 
     @Test
