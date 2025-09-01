@@ -109,7 +109,10 @@ class MccTest {
                 startProcessAndCaptureOutput("src/test/resources/" + testProgram));
     }
 
-
+    @Test
+    void uses_func()  throws Exception {
+        outputs("uses_func", "main\n");
+    }
 
     @Test
     void varargs1()  throws Exception {

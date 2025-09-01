@@ -11,6 +11,7 @@ public final class Function implements Declaration {
     public FunType funType;
     public StorageClass storageClass;
     public boolean callsVaStart;
+    public boolean usesFunc = false;
 
     public Function(String name, List<Var> parameters, Block body,
                     FunType funType, StorageClass storageClass,

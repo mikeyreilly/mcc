@@ -949,6 +949,10 @@ public class SemanticAnalysis {
                         Type element, Constant arraySize)) {
                     if (!element.isCharacter())
                         throw new Err("Can't initialize non-character type " + "with a string literal");
+                    if (arraySize == null) {
+                        arraySize = new LongInit(s.length() + 1);
+                        targetType = new Array(element, arraySize);
+                    }
                     if (s.length() > arraySize.toLong())
                         throw new Err("Too many chars in string literal");
                     yield new SingleInit(new Str(s, targetType), targetType);
@@ -1126,18 +1130,6 @@ public class SemanticAnalysis {
                     case SAR_EQ -> SAR;
                 };
 
-//                Exp typedLeft = typeCheckAndConvert(left);
-//                t = typedLeft.type();
-//                SYMBOL_TABLE.put(temp.name(),
-//                        new SymbolTableEntry(t, LOCAL_ATTR));
-//
-//                //ugh I thought I could use a temp var to get around
-//                evaluating left twice, but it's not that easy
-//                // need a way to separate the assignment part from the
-//                evaluate part
-//                yield typeCheckExpression(new Assignment(new Var(temp.name
-//                (),t),
-//                        new BinaryOp(newOp, left, right, t), t));
                 BinaryOp foo =
                         (BinaryOp) typeCheckExpression(new BinaryOp(newOp,
                                 left, right, t));
@@ -1549,7 +1541,7 @@ public class SemanticAnalysis {
 
     public static Type resolveType(Type typeSpecifier,
 
-                                   Map<String, Entry> identifierMap, Map<String, TagEntry> structureMap) {
+                                   Map<String, Entry> identifierMap, Map<String, TagEntry> structureMap, Function enclosingFunction) {
         return switch (typeSpecifier) {
             case Structure(boolean isUnion, String tag, StructDef sd) -> {
                 TagEntry e = structureMap.get(tag);
@@ -1566,19 +1558,19 @@ public class SemanticAnalysis {
             }
             case Pointer(Type referenced) ->{
                 if (referenced instanceof Structure s) {
-                    referenced = resolveType(referenced, identifierMap, structureMap);
+                    referenced = resolveType(referenced, identifierMap, structureMap, enclosingFunction);
 
                 }
                 yield new Pointer(referenced);
             }
             case Array(Type element, Constant size) ->{
                 if (size instanceof ConstantExp c){
-                    size = new ConstantExp(resolveExp(c.exp(), identifierMap, structureMap));
+                    size = new ConstantExp(resolveExp(c.exp(), identifierMap, structureMap, enclosingFunction));
                 }
-                yield new Array(resolveType(element, identifierMap, structureMap), size);
+                yield new Array(resolveType(element, identifierMap, structureMap, enclosingFunction), size);
             }
             case FunType(List<Type> params, Type ret, boolean varargs) ->
-                    new FunType(params.stream().map(p -> resolveType(p, identifierMap, structureMap)).toList(), resolveType(ret, identifierMap, structureMap), varargs);
+                    new FunType(params.stream().map(p -> resolveType(p, identifierMap, structureMap, enclosingFunction)).toList(), resolveType(ret, identifierMap, structureMap, enclosingFunction), varargs);
             case Primitive primitive -> primitive;
         };
     }
@@ -1601,7 +1593,7 @@ public class SemanticAnalysis {
                                         identifierMap, structureMap));
                 case StructOrUnionSpecifier decl ->
                         decls.set(i, resolveStructureDeclaration(decl, identifierMap,
-                                structureMap));
+                                structureMap, null));
             }
 
         }
@@ -1639,7 +1631,7 @@ public class SemanticAnalysis {
     private static StructOrUnionSpecifier resolveStructureDeclaration(
             StructOrUnionSpecifier decl,
             Map<String, Entry> identifierMap,
-            Map<String, TagEntry> structureMap) {
+            Map<String, TagEntry> structureMap, Function enclosingFunction) {
         if (decl == null) return null;
         TagEntry prevEntry = structureMap.get(decl.tag());
         String uniqueTag;
@@ -1673,17 +1665,17 @@ public class SemanticAnalysis {
                 }
                 StructOrUnionSpecifier sous = member.structOrUnionSpecifier();
                 if (sous != null && sous.members() != null) { // sous without members would already be resolved
-                    sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap);
+                    sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap, enclosingFunction);
                 }
                 // MR-TODO for anonymous inner structs/unions just add their members to the container correctly, adjusting their size appropriately
                 if (member.type() instanceof Pointer(Type ref) && ref instanceof Structure(boolean isUnion, String tag, StructDef structDef)){
                     StructOrUnionSpecifier rrr =
                             resolveStructureDeclaration(new StructOrUnionSpecifier(isUnion, tag, null,
                                     tag ==
-                                            null), identifierMap, structureMap);
+                                            null), identifierMap, structureMap, enclosingFunction);
                 }
 
-                processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap), member.name(), sous));
+                processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap, enclosingFunction), member.name(), sous));
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
@@ -1699,24 +1691,26 @@ public class SemanticAnalysis {
                          StructOrUnionSpecifier structOrUnionSpecifier) -> {
                 if (structOrUnionSpecifier != null){
                     structOrUnionSpecifier = resolveStructureDeclaration(structOrUnionSpecifier,
-                            identifierMap, structureMap);
+                            identifierMap, structureMap, null);
                 }
                 identifierMap.put(name.name(), new Entry(name.name(), true,
                         true));
-                Type t = resolveType(type, identifierMap, structureMap);
+                Type t = resolveType(type, identifierMap, structureMap, null);
                 yield new VarDecl(new Var(name.name(), t), init, t,
                         storageClass, structOrUnionSpecifier);
             }
         };
     }
 
-    private static Block resolveBlock(Block block,
-                                      Map<String, Entry> identifierMap,
-                                      Map<String, TagEntry> structureMap) {
-        ArrayList<BlockItem> blockItems = new ArrayList<>();
+    private static Block resolveBlock(
+            Block block,
+            ArrayList<BlockItem> blockItems,
+                                       Map<String, Entry> identifierMap,
+                                      Map<String, TagEntry> structureMap, Function enclosingFunction) {
+
         for (BlockItem i : block.blockItems()) {
             blockItems.add(resolveIdentifiersBlockItem(i, identifierMap,
-                    structureMap));
+                    structureMap, enclosingFunction));
         }
         return new Block(blockItems);
     }
@@ -1735,24 +1729,42 @@ public class SemanticAnalysis {
         Map<String, TagEntry> innerStructureMap =
                 copyStructureMap(structureMap);
         List<Var> newArgs = resolveParams(function.parameters, innerMap,
-                innerStructureMap);
+                innerStructureMap, function);
 
-        Block newBody = function.body instanceof Block block ?
-                resolveBlock(block, innerMap, innerStructureMap) : null;
+        Block newBody=null;
+        if (function.body instanceof Block block) {
+            var newBlockItems = new ArrayList<BlockItem>();
+            var t = new Array(Primitive.CHAR, null);
+            VarDecl func =
+                    new VarDecl(new Var("__func__", t),
+                            new SingleInit(new Str(function.name, t), t), t, STATIC,
+                            null);
+
+            newBlockItems.add(resolveIdentifiersBlockItem(func, innerMap,
+                    structureMap, function));
+            newBody =
+                    resolveBlock(block, newBlockItems, innerMap,
+                            innerStructureMap, function);
+        }
+
+
         return new Function(function.name, newArgs, newBody,
-                resolveFunType(function.funType, identifierMap, innerStructureMap),
+                resolveFunType(function.funType, identifierMap, innerStructureMap, function),
                 function.storageClass, function.callsVaStart);
     }
 
     private static FunType resolveFunType(FunType funType,
                                           Map<String, Entry> identifierMap,
-                                          Map<String, TagEntry> structureMap) {
-        return new FunType(funType.params().stream().map(p -> resolveType(p, identifierMap, structureMap)).toList(), resolveType(funType.ret(), identifierMap, structureMap), funType.varargs());
+                                          Map<String, TagEntry> structureMap,
+    Function enclosingFunction) {
+        return new FunType(funType.params().stream().map(p -> resolveType(p, identifierMap, structureMap, enclosingFunction)).toList(),
+                resolveType(funType.ret(), identifierMap, structureMap, enclosingFunction), funType.varargs());
     }
 
     private static List<Var> resolveParams(List<Var> parameters,
                                            Map<String, Entry> identifierMap,
-                                           Map<String, TagEntry> innerStructureMap) {
+                                           Map<String, TagEntry> innerStructureMap,
+                                           Function enclosingFunction) {
         List<Var> newParams = new ArrayList<>();
         for (Var d : parameters) {
             if (d.name()!=null && identifierMap.get(d.name()) instanceof Entry e && e.fromCurrentScope()) {
@@ -1760,60 +1772,60 @@ public class SemanticAnalysis {
             }
             String uniqueName = makeTemporary(d.name() + ".");
             identifierMap.put(d.name(), new Entry(uniqueName, true, false));
-            newParams.add(new Var(uniqueName, resolveType(d.type(), identifierMap, innerStructureMap)));
+            newParams.add(new Var(uniqueName, resolveType(d.type(), identifierMap, innerStructureMap, enclosingFunction)));
         }
         return newParams;
     }
 
     private static BlockItem resolveIdentifiersBlockItem(BlockItem blockItem,
                                                          Map<String, Entry> identifierMap,
-                                                         Map<String, TagEntry> structureMap) {
+                                                         Map<String, TagEntry> structureMap, Function enclosingFunction) {
         return switch (blockItem) {
             case EnumSpecifier enumSpecifier -> throw new Todo();
             case VarDecl declaration ->
                     resolveLocalIdentifierDeclaration(declaration,
-                            identifierMap, structureMap);
+                            identifierMap, structureMap, enclosingFunction);
             case Statement statement ->
-                    resolveStatement(statement, identifierMap, structureMap);
+                    resolveStatement(statement, identifierMap, structureMap, enclosingFunction);
             case Function function ->
                     resolveFunctionDeclaration(function, identifierMap,
                             structureMap);
             case StructOrUnionSpecifier structDecl ->
-                    resolveStructureDeclaration(structDecl, identifierMap,structureMap);
+                    resolveStructureDeclaration(structDecl, identifierMap,structureMap, enclosingFunction);
         };
     }
 
     private static Statement resolveStatement(Statement blockItem,
                                               Map<String, Entry> identifierMap,
-                                              Map<String, TagEntry> structureMap) {
+                                              Map<String, TagEntry> structureMap, Function enclosingFunction) {
         return switch (blockItem) {
             case null -> null;
-            case Exp exp -> resolveExp(exp, identifierMap, structureMap);
+            case Exp exp -> resolveExp(exp, identifierMap, structureMap, enclosingFunction);
             case LabelledStatement(String label, Statement statement) ->
                     new LabelledStatement(label, resolveStatement(statement,
-                            identifierMap, structureMap));
+                            identifierMap, structureMap, enclosingFunction));
             case CaseStatement(Switch enclosingSwitch, Constant<?> label,
                                Statement statement) ->
                     new CaseStatement(enclosingSwitch, (Constant<?>) resolveExp(label, identifierMap,
-                            structureMap),
+                            structureMap, enclosingFunction),
                             resolveStatement(statement, identifierMap,
-                                    structureMap));
+                                    structureMap, enclosingFunction));
             case Return(Exp exp) ->
-                    new Return(resolveExp(exp, identifierMap, structureMap));
+                    new Return(resolveExp(exp, identifierMap, structureMap, enclosingFunction));
             case If(Exp condition, Statement ifTrue, Statement ifFalse) ->
-                    new If(resolveExp(condition, identifierMap, structureMap)
+                    new If(resolveExp(condition, identifierMap, structureMap, enclosingFunction)
                             , resolveStatement(ifTrue, identifierMap,
-                            structureMap), resolveStatement(ifFalse,
-                            identifierMap, structureMap));
+                            structureMap, enclosingFunction), resolveStatement(ifFalse,
+                            identifierMap, structureMap, enclosingFunction));
             case Block block ->
-                    resolveBlock(block, copyIdentifierMap(identifierMap),
-                            copyStructureMap(structureMap));
+                    resolveBlock(block, new ArrayList<>(), copyIdentifierMap(identifierMap),
+                            copyStructureMap(structureMap), enclosingFunction);
             case NullStatement nullStatement -> nullStatement;
             case Break _, Continue _, Goto _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
                     new DoWhile(resolveStatement(body, identifierMap,
-                            structureMap), resolveExp(condition,
-                            identifierMap, structureMap), label);
+                            structureMap, enclosingFunction), resolveExp(condition,
+                            identifierMap, structureMap, enclosingFunction), label);
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String label) -> {
                 Map<String, Entry> newVariableMap =
@@ -1821,29 +1833,29 @@ public class SemanticAnalysis {
                 Map<String, TagEntry> newStructureMap =
                         copyStructureMap(structureMap);
                 yield new For(resolveForInit(init, newVariableMap,
-                        newStructureMap), resolveExp(condition,
-                        newVariableMap, newStructureMap), resolveExp(post,
-                        newVariableMap, newStructureMap),
+                        newStructureMap, enclosingFunction), resolveExp(condition,
+                        newVariableMap, newStructureMap, enclosingFunction), resolveExp(post,
+                        newVariableMap, newStructureMap, enclosingFunction),
                         resolveStatement(body, newVariableMap,
-                                newStructureMap), label);
+                                newStructureMap, enclosingFunction), label);
             }
             case While(Exp condition, Statement body, String label) ->
                     new While(resolveExp(condition, identifierMap,
-                            structureMap), resolveStatement(body,
-                            identifierMap, structureMap), label);
+                            structureMap, enclosingFunction), resolveStatement(body,
+                            identifierMap, structureMap, enclosingFunction), label);
             case Switch switchStatement -> {
                 switchStatement.exp = resolveExp(switchStatement.exp,
-                        identifierMap, structureMap);
+                        identifierMap, structureMap, enclosingFunction);
                 switchStatement.body = resolveStatement(switchStatement.body,
-                        identifierMap, structureMap);
+                        identifierMap, structureMap, enclosingFunction);
                 yield switchStatement;
             }
             case BuiltinC23VaStart(Var ap) ->
                     new BuiltinC23VaStart((Var) resolveExp(ap, identifierMap,
-                            structureMap));
+                            structureMap, enclosingFunction));
             case BuiltinVaEnd(Var ap) ->
                     new BuiltinVaEnd((Var) resolveExp(ap, identifierMap,
-                            structureMap));
+                            structureMap, enclosingFunction));
 
         };
 
@@ -1851,14 +1863,14 @@ public class SemanticAnalysis {
 
     private static ForInit resolveForInit(ForInit init,
                                           Map<String, Entry> identifierMap,
-                                          Map<String, TagEntry> structureMap) {
+                                          Map<String, TagEntry> structureMap, Function enclosingFunction) {
         return switch (init) {
             case DeclarationList dl -> {
                 List<Declaration> list = dl.list();
-                list.replaceAll(decl -> resolveLocalIdentifierDeclaration((VarDecl) decl, identifierMap, structureMap));
+                list.replaceAll(decl -> resolveLocalIdentifierDeclaration((VarDecl) decl, identifierMap, structureMap, enclosingFunction));
                 yield dl;
             }
-            case Exp exp -> resolveExp(exp, identifierMap, structureMap);
+            case Exp exp -> resolveExp(exp, identifierMap, structureMap, enclosingFunction);
             case null -> null;
         };
     }
@@ -1890,7 +1902,8 @@ public class SemanticAnalysis {
     private static VarDecl resolveLocalIdentifierDeclaration(VarDecl decl,
                                                              Map<String,
                                                                      Entry> identifierMap,
-                                                             Map<String, TagEntry> structureMap) {
+                                                             Map<String, TagEntry> structureMap,
+                                                             Function enclosingFunction) {
         if (identifierMap.get(decl.name().name()) instanceof Entry prevEntry) {
             if (prevEntry.fromCurrentScope()) {
                 if (!(prevEntry.hasLinkage() && decl.storageClass() == EXTERN)) {
@@ -1903,7 +1916,7 @@ public class SemanticAnalysis {
             identifierMap.put(decl.name().name(),
                     new Entry(decl.name().name(), true, true));
             return new VarDecl(decl.name(), decl.init(),
-                    resolveType(decl.varType(), identifierMap, structureMap),
+                    resolveType(decl.varType(), identifierMap, structureMap, enclosingFunction),
                     decl.storageClass(), decl.structOrUnionSpecifier());
         }
         String uniqueName = makeTemporary(decl.name().name() + ".");
@@ -1912,61 +1925,66 @@ public class SemanticAnalysis {
         var init = decl.init();
         StructOrUnionSpecifier sous = decl.structOrUnionSpecifier();
         if (sous != null && sous.members() != null) { // sous without members would already be resolved
-            sous = resolveStructureDeclaration(decl.structOrUnionSpecifier(), identifierMap, structureMap);
+            sous = resolveStructureDeclaration(decl.structOrUnionSpecifier(), identifierMap, structureMap, enclosingFunction);
         }
         return new VarDecl(new Var(uniqueName, null), resolveInitializer(init
-                , identifierMap, structureMap), resolveType(decl.varType(), identifierMap, structureMap), decl.storageClass(),
+                , identifierMap, structureMap, enclosingFunction), resolveType(decl.varType(), identifierMap, structureMap, enclosingFunction), decl.storageClass(),
                 sous);
     }
 
     private static Initializer resolveInitializer(Initializer init,
                                                   Map<String, Entry> identifierMap,
-                                                  Map<String, TagEntry> structureMap) {
+                                                  Map<String, TagEntry> structureMap, Function enclosingFunction) {
         return switch (init) {
             case null -> null;
             case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
                 inits.replaceAll(i -> resolveInitializer(i, identifierMap,
-                        structureMap));
+                        structureMap, enclosingFunction));
                 yield new CompoundInit(inits, type);
             }
             case SingleInit(Exp exp, Type targetType) ->
                     new SingleInit(resolveExp(exp, identifierMap,
-                            structureMap), targetType);
+                            structureMap, enclosingFunction), targetType);
         };
 
     }
 
     private static Exp  resolveExp(Exp exp,
                                                 Map<String, Entry> identifierMap,
-                                                Map<String, TagEntry> structureMap) {
+                                                Map<String, TagEntry> structureMap,
+    Function enclosingFunction) {
         Exp r = switch (exp) {
             case null -> null;
             case Assignment(Exp left, Exp right, Type type) ->
                     isLvalue(left) ? new Assignment(resolveExp(left,
-                            identifierMap, structureMap), resolveExp(right,
-                            identifierMap, structureMap), type) : fail(
+                            identifierMap, structureMap, enclosingFunction), resolveExp(right,
+                            identifierMap, structureMap, enclosingFunction), type) : fail(
                                     "Invalid lvalue");
             case CompoundAssignment(CompoundAssignmentOperator op, Exp left,
                                     Exp right, Type tempType, Type type) ->
-                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new CompoundAssignment(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), tempType, type);
+                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new CompoundAssignment(op, resolveExp(left, identifierMap, structureMap, enclosingFunction), resolveExp(right, identifierMap, structureMap, enclosingFunction), tempType, type);
             case BinaryOp(BinaryOperator op, Exp left, Exp right, Type type) ->
-                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new BinaryOp(op, resolveExp(left, identifierMap, structureMap), resolveExp(right, identifierMap, structureMap), type);
+                    op instanceof CompoundAssignmentOperator && !isLvalue(left) ? fail("Invalid lvalue") : new BinaryOp(op, resolveExp(left, identifierMap, structureMap, enclosingFunction), resolveExp(right, identifierMap, structureMap, enclosingFunction), type);
             case ConstantExp(Exp cexp) -> new ConstantExp(resolveExp(cexp,
                     identifierMap,
-                    structureMap));
+                    structureMap, enclosingFunction));
             case Constant constant -> constant;
             case Str str -> str;
             case UnaryOp(UnaryOperator op, Exp arg, Type type) ->
-                    (op == POST_INCREMENT || op == POST_DECREMENT) && !isLvalue(arg) ? fail("Invalid lvalue") : new UnaryOp(op, resolveExp(arg, identifierMap, structureMap), type);
+                    (op == POST_INCREMENT || op == POST_DECREMENT) && !isLvalue(arg) ? fail("Invalid lvalue") : new UnaryOp(op, resolveExp(arg, identifierMap, structureMap, enclosingFunction), type);
             case AddrOf(Exp arg, Type type) ->
-                    new AddrOf(resolveExp(arg, identifierMap, structureMap),
+                    new AddrOf(resolveExp(arg, identifierMap, structureMap, enclosingFunction),
                             type);
             case Dereference(Exp arg, Type type) ->
                     new Dereference(resolveExp(arg, identifierMap,
-                            structureMap), type);
+                            structureMap, enclosingFunction), type);
             case Var(String name, Type type) -> {
-                if (identifierMap.get(name) instanceof Entry e)
+                if (identifierMap.get(name) instanceof Entry e) {
+                    if ("__func__".equals(name)) {
+                        enclosingFunction.usesFunc = true;
+                    }
                     yield new Var(e.name(), type);
+                }
                 Constant e = Mcc.lookupEnumConstant(name);
                 if (e != null) yield e;
                 yield fail("Undeclared variable:" + exp);
@@ -1974,35 +1992,35 @@ public class SemanticAnalysis {
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type) ->
                     new Conditional(resolveExp(condition, identifierMap,
-                            structureMap), resolveExp(ifTrue, identifierMap,
-                            structureMap), resolveExp(ifFalse, identifierMap,
-                            structureMap), type);
+                            structureMap, enclosingFunction), resolveExp(ifTrue, identifierMap,
+                            structureMap, enclosingFunction), resolveExp(ifFalse, identifierMap,
+                            structureMap, enclosingFunction), type);
             case FunctionCall(Exp name, List<Exp> args, boolean varargs,
                               Type type) ->
-                            new FunctionCall(resolveExp(name, identifierMap, structureMap), resolveArgs(identifierMap, structureMap, args), varargs, type);
+                            new FunctionCall(resolveExp(name, identifierMap, structureMap, enclosingFunction), resolveArgs(identifierMap, structureMap, args, enclosingFunction), varargs, type);
             case Cast(Type type, Exp e) -> {
-                Type resolvedType = resolveType(type, identifierMap, structureMap);
+                Type resolvedType = resolveType(type, identifierMap, structureMap, enclosingFunction);
                 yield new Cast(resolvedType, resolveExp(e, identifierMap,
-                        structureMap));
+                        structureMap, enclosingFunction));
             }
             case Subscript(Exp array, Exp index, Type type) ->
                     new Subscript(resolveExp(array, identifierMap,
-                            structureMap), resolveExp(index, identifierMap,
-                            structureMap), type);
+                            structureMap, enclosingFunction), resolveExp(index, identifierMap,
+                            structureMap, enclosingFunction), type);
             case SizeOf(Exp e) ->
-                    new SizeOf(resolveExp(e, identifierMap, structureMap));
+                    new SizeOf(resolveExp(e, identifierMap, structureMap, enclosingFunction));
             case SizeOfT(Type type) ->
-                    new SizeOfT(resolveType(type, identifierMap, structureMap));
+                    new SizeOfT(resolveType(type, identifierMap, structureMap, enclosingFunction));
             case Arrow(Exp pointer, String member, Type type) ->
                     new Arrow(resolveExp(pointer, identifierMap,
-                            structureMap), member, type);
+                            structureMap, enclosingFunction), member, type);
             case Dot(Exp structure, String member, Type type) ->
                     new Dot(resolveExp(structure, identifierMap,
-                            structureMap), member, type);
+                            structureMap, enclosingFunction), member, type);
             case BuiltinVaArg(Var e, Type type) -> {
-                Type resolvedType = resolveType(type, identifierMap, structureMap);
+                Type resolvedType = resolveType(type, identifierMap, structureMap, enclosingFunction);
                 yield new BuiltinVaArg((Var) resolveExp(e, identifierMap,
-                        structureMap), resolvedType);
+                        structureMap, enclosingFunction), resolvedType);
             }
         };
         return r;
@@ -2010,10 +2028,10 @@ public class SemanticAnalysis {
 
     private static <T extends Exp> List<T> resolveArgs(
             Map<String, Entry> identifierMap,
-            Map<String, TagEntry> structureMap, List<T> args) {
+            Map<String, TagEntry> structureMap, List<T> args, Function enclosingFunction) {
         List<T> newArgs = new ArrayList<>();
         for (T arg : args) {
-            newArgs.add((T) resolveExp(arg, identifierMap, structureMap));
+            newArgs.add((T) resolveExp(arg, identifierMap, structureMap, enclosingFunction));
         }
         return newArgs;
     }
