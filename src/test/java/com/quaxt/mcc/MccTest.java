@@ -56,6 +56,10 @@ class MccTest {
         returns("typedef", 0);
     }
 
+    @Test
+    void typedef_callback() throws Exception {
+        outputs("typedef_callback", "8\n15\n");
+    }
 
     @Test
     void typedef_struct_no_tag() throws Exception {

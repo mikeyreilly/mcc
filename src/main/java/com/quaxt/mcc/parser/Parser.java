@@ -958,14 +958,14 @@ public class Parser {
                             throw makeErr(
                                     "Expected ; or =, got " + token1, tokens);
                     }
-                    if (typeAndStorageClass.storageClass() ==
-                            StorageClass.TYPEDEF) {
-                        addTypedefToCurrentScope(typeAliases, name, type);
-                    }
+
                     decl =
                             new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass(), typeAndStorageClass.structOrUnionSpecifier());
                 }
-
+                if (typeAndStorageClass.storageClass() ==
+                        StorageClass.TYPEDEF) {
+                    addTypedefToCurrentScope(typeAliases, name, type);
+                }
 
                 l.add(decl);
                 if (decl instanceof Function) break out;
