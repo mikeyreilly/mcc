@@ -48,7 +48,7 @@ public class SemanticAnalysis {
     private static Function loopLabelFunction(Function function) {
         return new Function(function.name, function.parameters,
                 loopLabelStatement(function.body, null, null),
-                function.funType, function.storageClass, function.callsVaStart);
+                function.funType, function.storageClass, function.callsVaStart, function.usesFunc);
 
     }
 
@@ -651,7 +651,7 @@ public class SemanticAnalysis {
             declParams.set(i, new Var(oldParam.name(), adjustedParams.get(i)));
         }
         return new Function(decl.name, decl.parameters, typeCheckedBody,
-                funType, decl.storageClass, decl.callsVaStart);
+                funType, decl.storageClass, decl.callsVaStart, decl.usesFunc);
     }
 
     private static Type arrayToPointer(Type p) {
@@ -1558,6 +1558,7 @@ public class SemanticAnalysis {
             }
             case Pointer(Type referenced) ->{
                 if (referenced instanceof Structure s) {
+                    ifStructureResolveAsDeclaration(s, identifierMap, structureMap, enclosingFunction);
                     referenced = resolveType(referenced, identifierMap, structureMap, enclosingFunction);
 
                 }
@@ -1567,6 +1568,7 @@ public class SemanticAnalysis {
                 if (size instanceof ConstantExp c){
                     size = new ConstantExp(resolveExp(c.exp(), identifierMap, structureMap, enclosingFunction));
                 }
+
                 yield new Array(resolveType(element, identifierMap, structureMap, enclosingFunction), size);
             }
             case FunType(List<Type> params, Type ret, boolean varargs) ->
@@ -1667,14 +1669,6 @@ public class SemanticAnalysis {
                 if (sous != null && sous.members() != null) { // sous without members would already be resolved
                     sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap, enclosingFunction);
                 }
-                // MR-TODO for anonymous inner structs/unions just add their members to the container correctly, adjusting their size appropriately
-                if (member.type() instanceof Pointer(Type ref) && ref instanceof Structure(boolean isUnion, String tag, StructDef structDef)){
-                    StructOrUnionSpecifier rrr =
-                            resolveStructureDeclaration(new StructOrUnionSpecifier(isUnion, tag, null,
-                                    tag ==
-                                            null), identifierMap, structureMap, enclosingFunction);
-                }
-
                 processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap, enclosingFunction), member.name(), sous));
             }
         }
@@ -1682,6 +1676,26 @@ public class SemanticAnalysis {
                 processedMembers, decl.isAnonymous());
     }
 
+    /*
+    There are places where we can see a struct type name and we should act
+    like the struct has been declared. For example if we see
+    a struct member of type pointer to struct foo, and it's the first time we
+     are seeing foo, act like there was a declaration
+    struct foo.
+    * */
+    static void ifStructureResolveAsDeclaration(Type ref,
+                                                Map<String, Entry> identifierMap,
+                                                Map<String, TagEntry> structureMap,
+                                                Function enclosingFunction) {
+        if (ref instanceof Structure(boolean isUnion, String tag,
+                                     StructDef structDef)) {
+            if (structureMap.containsKey(tag)) return;
+            resolveStructureDeclaration(new StructOrUnionSpecifier(isUnion,
+                            tag, null,
+                    tag == null), identifierMap, structureMap,
+                    enclosingFunction);
+        }
+    }
     private static Declaration resolveFileScopeVariableDeclaration(
             VarDecl varDecl, Map<String, Entry> identifierMap,
             Map<String, TagEntry> structureMap) {
@@ -1745,12 +1759,15 @@ public class SemanticAnalysis {
             newBody =
                     resolveBlock(block, newBlockItems, innerMap,
                             innerStructureMap, function);
+            if (!function.usesFunc) {
+                newBody.blockItems().removeFirst();
+            }
         }
 
 
         return new Function(function.name, newArgs, newBody,
                 resolveFunType(function.funType, identifierMap, innerStructureMap, function),
-                function.storageClass, function.callsVaStart);
+                function.storageClass, function.callsVaStart, function.usesFunc);
     }
 
     private static FunType resolveFunType(FunType funType,
@@ -1987,6 +2004,10 @@ public class SemanticAnalysis {
                 }
                 Constant e = Mcc.lookupEnumConstant(name);
                 if (e != null) yield e;
+                if ("__PRETTY_FUNCTION__".equals(name)) {
+                    yield resolveExp(new Var("__func__", null), identifierMap
+                            , structureMap, enclosingFunction);
+                }
                 yield fail("Undeclared variable:" + exp);
             }
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,

@@ -159,7 +159,7 @@ public class Mcc {
     public static int preprocess(Path cFile,
                                  Path iFile) throws IOException,
             InterruptedException {
-        return startProcess("gcc", "-E", "-std=c23",
+        return startProcess("gcc", "-E", "-std=c23", "-D_POSIX_C_SOURCE=200809",
                 cFile.toString(), "-o", iFile.toString());
     }
 

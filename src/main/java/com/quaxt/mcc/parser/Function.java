@@ -11,16 +11,18 @@ public final class Function implements Declaration {
     public FunType funType;
     public StorageClass storageClass;
     public boolean callsVaStart;
-    public boolean usesFunc = false;
+    public boolean usesFunc;
 
     public Function(String name, List<Var> parameters, Block body,
                     FunType funType, StorageClass storageClass,
-                    boolean callsVaStart) {
+                    boolean callsVaStart,
+    boolean usesFunc) {
         this.name = name;
         this.parameters = parameters;
         this.body = body;
         this.funType = funType;
         this.storageClass = storageClass;
         this.callsVaStart = callsVaStart;
+        this.usesFunc = usesFunc;
     }
 }

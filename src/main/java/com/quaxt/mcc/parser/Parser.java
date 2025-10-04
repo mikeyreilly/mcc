@@ -1152,7 +1152,7 @@ public class Parser {
             block = null;
         }
         return new Function(functionName, params, block, funType,
-                storageClass, false);
+                storageClass, false, false);
     }
 
     private static String expectIdentifier(TokenList tokens) {
