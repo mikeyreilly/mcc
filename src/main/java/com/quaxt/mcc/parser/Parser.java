@@ -58,6 +58,7 @@ public class Parser {
         TypeSpecifier typeSpecifier;
         TypeQualifier typeQualifier;
         var l = new ArrayList<DeclarationSpecifier>();
+        loop:
         while (true) {
             if (tokens.isEmpty() || tokens.getFirst().equals(SEMICOLON)) break;
             if ((storageClass = parseStorageClassSpecifier(tokens)) != null) {
@@ -69,6 +70,11 @@ public class Parser {
                 typeAliases = null; // we only want to recognize a typedef
                 // name as a typedef name if it is the first typeSpecifier
                 l.add(typeSpecifier);
+            } else if (tokens.getFirst() instanceof
+                    TokenWithValue(Token type, String value) && type==IDENTIFIER &&
+                    (value.equals("inline") || value.equals("__inline") ||
+                        value.equals("_NoReturn"))) {
+                    tokens.removeFirst();
             }
             else break;
         }
@@ -121,6 +127,9 @@ public class Parser {
             case ENUM -> {
                 return parseEnumSpecifier(tokens, typeAliases);
             }
+            case TYPEOF -> {
+                return parseTypeofSpecifier(tokens, typeAliases);
+            }
             default -> ts = null;
         }
         if (ts != null) tokens.removeFirst();
@@ -130,6 +139,20 @@ public class Parser {
                 ts = parseTypedefName(tokens, typeAliases);
         }
         return ts;
+    }
+
+    private static TypeSpecifier parseTypeofSpecifier(TokenList tokens,
+                                                      ArrayList<Map<String, Type>> typeAliases) {
+        expect(TYPEOF, tokens);
+        expect(OPEN_PAREN, tokens);
+        if (isTypeSpecifier(tokens, 0, typeAliases)) {
+            TypeName typeName = parseTypeName(tokens, typeAliases);
+            expect(CLOSE_PAREN, tokens);
+            return new TypeofT(typeNameToType(typeName, tokens, typeAliases));
+        } else {
+            expect(CLOSE_PAREN, tokens);
+            return new Typeof(parseExp(tokens, 0, true, typeAliases));
+        }
     }
 
     private static EnumSpecifier parseEnumSpecifier(TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {

@@ -47,6 +47,12 @@ class MccTest {
     }
 
     @Test
+    void nullptr() throws Exception {
+        outputs("nullptr", "hello world");
+    }
+
+
+    @Test
     void double_decl_with_struct() throws Exception {
         outputs("double_decl_with_struct", "hello world");
     }

@@ -28,7 +28,7 @@ public enum TokenType implements Token {
     GCC_ATTRIBUTE(),
     BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
     UNSIGNED(), SIGNED(), ENUM(), GOTO(), CHAR(), SHORT(), FLOAT(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),
-    TYPEDEF(), CASE(),DEFAULT(),
+    TYPEDEF(), TYPEOF(), CASE(),DEFAULT(),
     CONST(), VOLATILE(), RESTRICT(), ATOMIC(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
     , SIZEOF(), STATIC(), STRUCT(), UNION(), DECREMENT("--"), INCREMENT("\\+\\+"),
@@ -122,6 +122,7 @@ public enum TokenType implements Token {
             case BUILTIN_VA_ARG -> "__builtin_va_arg";
             case BUILTIN_VA_END -> "__builtin_va_end";
             case TYPEDEF -> "typedef";
+            case TYPEOF -> "typeof";
             case UNION -> "union";
             case UNSIGNED -> "unsigned";
             case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";

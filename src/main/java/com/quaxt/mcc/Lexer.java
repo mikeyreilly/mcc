@@ -118,10 +118,14 @@ public class Lexer {
                                 case "continue" -> CONTINUE;
                                 case "do" -> DO;
                                 case "double" -> DOUBLE;
+                                case "_Float64" -> DOUBLE;
+                                case "_Float64x" -> DOUBLE;
                                 case "else" -> ELSE;
                                 case "extern" -> EXTERN;
                                 case "for" -> FOR;
                                 case "float" -> FLOAT;
+                                case "_Float32" -> FLOAT;
+                                case "_Float32x" -> FLOAT;
                                 case "enum" -> ENUM;
                                 case "goto" -> GOTO;
                                 case "if" -> IF;
@@ -131,6 +135,7 @@ public class Lexer {
                                 case "short" -> SHORT;
                                 case "switch" -> SWITCH;
                                 case "typedef" -> TYPEDEF;
+                                case "typeof", "__typeof__" -> TYPEOF;
                                 case "case" -> CASE;
                                 case "default" -> DEFAULT;
                                 case "signed" -> SIGNED;
