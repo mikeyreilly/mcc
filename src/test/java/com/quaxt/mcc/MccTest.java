@@ -48,7 +48,8 @@ class MccTest {
 
     @Test
     void nullptr() throws Exception {
-        outputs("nullptr", "hello world");
+        outputs("nullptr", "p is a null pointer.\n" +
+                "q points to value: 42\n" + "q is now a null pointer.\n");
     }
 
 

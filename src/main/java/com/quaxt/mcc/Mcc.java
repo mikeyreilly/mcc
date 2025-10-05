@@ -53,7 +53,7 @@ public class Mcc {
                         (int) Mcc.size(element) : 16;
             }
             case FunType _ -> 0;
-            case Pointer _ -> 8;
+            case Pointer _, NullptrT _ -> 8;
             case CHAR -> 1;
             case UCHAR -> 1;
             case SCHAR -> 1;
@@ -77,7 +77,7 @@ public class Mcc {
         return switch (type) {
             case Array(Type element, Constant _) -> Mcc.typeAlignment(element);
             case FunType _ -> 0;
-            case Pointer _ -> 8;
+            case Pointer _, NullptrT _ -> 8;
             case CHAR -> 1;
             case UCHAR -> 1;
             case SCHAR -> 1;
@@ -99,7 +99,7 @@ public class Mcc {
             case Array(Type element, Constant arraySize) ->
                     size(element) * arraySize.toLong();
             case FunType _ -> 0;
-            case Pointer _ -> 8;
+            case Pointer _, NullptrT _ -> 8;
 
             case CHAR -> 1;
             case UCHAR -> 1;

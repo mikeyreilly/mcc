@@ -1488,6 +1488,10 @@ public class Parser {
                     default -> parseConst(tokens, true);
                 };
             }
+            case NULLPTR -> {
+                tokens.removeFirst();
+                yield Nullptr.NULLPTR;
+            }
             case OPEN_PAREN -> {
                 tokens.removeFirst();
                 Exp exp = parseExp(tokens, 0, true, typeAliases);

@@ -18,8 +18,10 @@ import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.UnaryOperator.*;
 import static com.quaxt.mcc.optimizer.Optimizer.optimizeInstructions;
+import static com.quaxt.mcc.parser.Nullptr.NULLPTR;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
+import static com.quaxt.mcc.semantic.NullptrT.NULLPTR_T;
 import static com.quaxt.mcc.semantic.Primitive.*;
 
 public class SemanticAnalysis {
@@ -197,7 +199,7 @@ public class SemanticAnalysis {
     private static StructDef typeCheckStructureDeclaration(
             StructOrUnionSpecifier structDecl) {
         if (structDecl == null || structDecl.members() == null) return null;
-        if (Mcc.TYPE_TABLE.containsKey(structDecl.tag())) {
+        if (TYPE_TABLE.containsKey(structDecl.tag())) {
             throw new Err("redefinition of struct");
         }
         validateStructDefinition(structDecl);
@@ -210,7 +212,7 @@ public class SemanticAnalysis {
             if (innerSd!=null && member.structOrUnionSpecifier().isAnonymous() && member.name() == null) {
                 for (var innerMember:innerSd.members()) {
                     Type memberType = completeType(innerMember.type());
-                    int memberAlignment = Mcc.typeAlignment(memberType);
+                    int memberAlignment = typeAlignment(memberType);
                     int memberOffset =
                             isUnion ? 0 : roundUp(structSize, memberAlignment);
 
@@ -219,14 +221,14 @@ public class SemanticAnalysis {
                                     memberOffset);
                     memberEntries.add(m);
                     structAlignment = Math.max(structAlignment, memberAlignment);
-                    int memberSize = (int) Mcc.size(memberType);
+                    int memberSize = (int) size(memberType);
                     structSize = isUnion ? Math.max(memberSize, structSize) :
                             memberOffset + memberSize;
                 }
             }else{
 
                 Type memberType = completeType(member.type());
-                int memberAlignment = Mcc.typeAlignment(memberType);
+                int memberAlignment = typeAlignment(memberType);
                 int memberOffset =
                         isUnion ? 0 : roundUp(structSize, memberAlignment);
 
@@ -235,7 +237,7 @@ public class SemanticAnalysis {
                                 memberOffset);
                 memberEntries.add(m);
                 structAlignment = Math.max(structAlignment, memberAlignment);
-                int memberSize = (int) Mcc.size(memberType);
+                int memberSize = (int) size(memberType);
                 structSize = isUnion ? Math.max(memberSize, structSize) :
                         memberOffset + memberSize;
             }
@@ -243,7 +245,7 @@ public class SemanticAnalysis {
         structSize = roundUp(structSize, structAlignment);
         var sd = new StructDef(isUnion,
                 structAlignment, structSize, memberEntries);
-        Mcc.TYPE_TABLE.put(structDecl.tag(), sd);
+        TYPE_TABLE.put(structDecl.tag(), sd);
         return sd;
     }
 
@@ -273,19 +275,20 @@ public class SemanticAnalysis {
             }
             case FunType funType ->
                     throw new Err("Can't zero initialize function");
-            case Pointer pointer -> {
+            case Pointer _, NullptrT _ -> {
                 size *= 8;
                 break out;
             }
             case Primitive primitive -> {
-                size *= Mcc.size(primitive);
+                size *= size(primitive);
                 break out;
             }
 
             case Structure(boolean isUnion, String tag, StructDef _) -> {
-                size *= Mcc.TYPE_TABLE.get(tag).size();
+                size *= TYPE_TABLE.get(tag).size();
                 break out;
             }
+
         }
         return new ZeroInit(size);
     }
@@ -312,11 +315,11 @@ public class SemanticAnalysis {
                         }
                     }
 
-                    case Pointer _, FunType _, Primitive _ ->
+                    case Pointer _, NullptrT _, FunType _, Primitive _ ->
                             throw new Err("illegal compound initializer for " + "scalar type:" + targetType);
 
                     case Structure(boolean isUnion, String tag, StructDef _) -> {
-                        StructDef structDef = Mcc.TYPE_TABLE.get(tag);
+                        StructDef structDef = TYPE_TABLE.get(tag);
                         if (initsSize > structDef.members().size() || (isUnion && initsSize > 1)) {
                             throw new Err("Too many elements in " + (isUnion
                                     ? "union " : "structure") + "initializer");
@@ -331,7 +334,7 @@ public class SemanticAnalysis {
                             }
                             convertCompoundInitializerToStaticInitList(initElement, member.type(), acc);
                             currentOffset =
-                                    (int) (member.offset() + Mcc.size(member.type()));
+                                    (int) (member.offset() + size(member.type()));
                             i++;
                         }
                         if (structDef.size() != currentOffset) {
@@ -558,6 +561,7 @@ public class SemanticAnalysis {
             case LongInit(long l) -> l;
             case UIntInit(int i) -> Integer.toUnsignedLong(i);
             case ULongInit(long l) -> l;
+            case Nullptr _-> 0L;
             default ->
                     throw new IllegalArgumentException("not a const:" + init);
         };
@@ -799,7 +803,7 @@ public class SemanticAnalysis {
     private static Var requireVaList(Var ap) {
         Var typedAp = (Var) typeCheckExpression(ap);
         var t = typedAp.type();
-        if (!t.equals(Mcc.BUILTIN_VA_LIST)) {
+        if (!t.equals(BUILTIN_VA_LIST)) {
             throw new Err(ap + " is of type " + t + " but va_list is required");
         }
         return typedAp;
@@ -984,7 +988,7 @@ public class SemanticAnalysis {
                             : targetType);
                 } else if (targetType instanceof Structure(boolean isUnion,
                                                            String tag, StructDef _)) {
-                    StructDef structDef = Mcc.TYPE_TABLE.get(tag);
+                    StructDef structDef = TYPE_TABLE.get(tag);
                     ArrayList<MemberEntry> members = structDef.members();
                     if (initsSize > members.size() || (isUnion && initsSize > 1)) {
                         throw new Err("Too many elements in " + (isUnion ?
@@ -1022,10 +1026,11 @@ public class SemanticAnalysis {
             }
             case Primitive primitive -> primitive.zeroInitializer;
             case Pointer _ -> ULONG.zeroInitializer;
+            case NullptrT _ -> NULLPTR_T.zeroInitializer;
             case FunType funType -> throw new AssertionError(funType);
 
             case Structure(boolean isUnion, String tag, StructDef _) -> {
-                StructDef structDef = Mcc.TYPE_TABLE.get(tag);
+                StructDef structDef = TYPE_TABLE.get(tag);
                 ArrayList<MemberEntry> members = structDef.members();
                 ArrayList<Initializer> typeCheckedList = new ArrayList<>();
                 for (MemberEntry member : members) {
@@ -1062,6 +1067,9 @@ public class SemanticAnalysis {
                 Type referenced) && referenced == VOID && targetType instanceof Pointer) {
             return convertTo(e, targetType);
         }
+        if(e==NULLPTR || targetType == NULLPTR_T){
+            return convertTo(e, targetType);
+        }
         throw new Err("Cannot convert type for assignment");
     }
 
@@ -1076,7 +1084,7 @@ public class SemanticAnalysis {
             case Array(Type element, _) ->
                     new AddrOf(typedE, new Pointer(element));
             case Structure(boolean isUnion, String tag, StructDef _) -> {
-                if (Mcc.TYPE_TABLE.containsKey(tag)) yield typedE;
+                if (TYPE_TABLE.containsKey(tag)) yield typedE;
                 else throw new Err("Invalid use of incomplete structure type");
             }
             default -> typedE;
@@ -1336,7 +1344,7 @@ public class SemanticAnalysis {
             case Var(String name, Type _) -> {
                 var e = SYMBOL_TABLE.get(name);
                 if (e == null) {
-                    yield Mcc.lookupEnumConstant(name);
+                    yield lookupEnumConstant(name);
                 }
                 Type t = completeType(e.type());
                 SymbolTableEntry ste = SYMBOL_TABLE.get(name);
@@ -1426,7 +1434,7 @@ public class SemanticAnalysis {
                 if (typedPointer.type() instanceof Pointer(
                         Type structure) && structure instanceof Structure(
                         boolean isUnion, String tag, StructDef _)) {
-                    StructDef structDef = Mcc.TYPE_TABLE.get(tag);
+                    StructDef structDef = TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
                         throw new Err("Structure has no member with this name");
@@ -1439,7 +1447,7 @@ public class SemanticAnalysis {
                 Exp typedStructure = typeCheckAndConvert(structure);
                 if (typedStructure.type() instanceof Structure(boolean isUnion,
                                                                String tag, StructDef _)) {
-                    StructDef structDef = Mcc.TYPE_TABLE.get(tag);
+                    StructDef structDef = TYPE_TABLE.get(tag);
                     MemberEntry me = structDef.findMember(member);
                     if (me == null) {
                         throw new Err("Structure has no member with this name");
@@ -1476,7 +1484,7 @@ public class SemanticAnalysis {
         return switch (t) {
             case VOID -> false;
             case Structure(boolean isUnion, String tag, StructDef _) ->
-                    Mcc.TYPE_TABLE.containsKey(tag);
+                    TYPE_TABLE.containsKey(tag);
             case Array(Type element, Constant arraySize) ->{
                 yield arraySize !=null && isComplete(element);
             }
@@ -1506,6 +1514,8 @@ public class SemanticAnalysis {
             if (r1 == VOID) return t1;
             if (r2 == VOID) return t2;
         }
+        if (t1 == NULLPTR_T && t2 instanceof Pointer) return t2;
+        if (t2 == NULLPTR_T && t1 instanceof Pointer) return t1;
         throw new Err("Expressions have incompatible types");
     }
 
@@ -1533,9 +1543,9 @@ public class SemanticAnalysis {
         if (t1 == t2) return t1;
         if (t1 == DOUBLE || t2 == DOUBLE) return DOUBLE;
         if (t1 == FLOAT || t2 == FLOAT) return FLOAT;
-        if (Mcc.size(t1) == Mcc.size(t2))
+        if (size(t1) == size(t2))
             return t1.isSigned() ? t2 : t1;
-        if (Mcc.size(t1) > Mcc.size(t2)) return t1;
+        if (size(t1) > size(t2)) return t1;
         return t2;
     }
 
@@ -1574,6 +1584,7 @@ public class SemanticAnalysis {
             case FunType(List<Type> params, Type ret, boolean varargs) ->
                     new FunType(params.stream().map(p -> resolveType(p, identifierMap, structureMap, enclosingFunction)).toList(), resolveType(ret, identifierMap, structureMap, enclosingFunction), varargs);
             case Primitive primitive -> primitive;
+            case NullptrT nullptrT -> nullptrT;
         };
     }
 
@@ -1609,7 +1620,7 @@ public class SemanticAnalysis {
             // Hack-alert! We call this method with null structureMap just
             // from the parser so that Mcc.resolveEnumConstant will find
             // enumerations that have just been parsed while we are still parsing an enum
-            Mcc.ENUM_MAP.put("CURRENT-ENUM", decl);
+            ENUM_MAP.put("CURRENT-ENUM", decl);
             return decl;
         }
         TagEntry prevEntry = structureMap.get(decl.tag());
@@ -1622,11 +1633,11 @@ public class SemanticAnalysis {
         if (prevEntry == null || !prevEntry.fromCurrentScope()) {
             uniqueTag = makeTemporary(decl.tag() + ".");
             structureMap.put(decl.tag(), new TagEntry(TagEntryType.ENUM, uniqueTag, true));
-            Mcc.ENUM_MAP.put(uniqueTag, decl);
+            ENUM_MAP.put(uniqueTag, decl);
             return decl;
         } else {
             uniqueTag = prevEntry.name();
-            return Mcc.ENUM_MAP.get(uniqueTag);
+            return ENUM_MAP.get(uniqueTag);
         }
     }
 
@@ -1748,7 +1759,7 @@ public class SemanticAnalysis {
         Block newBody=null;
         if (function.body instanceof Block block) {
             var newBlockItems = new ArrayList<BlockItem>();
-            var t = new Array(Primitive.CHAR, null);
+            var t = new Array(CHAR, null);
             VarDecl func =
                     new VarDecl(new Var("__func__", t),
                             new SingleInit(new Str(function.name, t), t), t, STATIC,
@@ -2002,7 +2013,7 @@ public class SemanticAnalysis {
                     }
                     yield new Var(e.name(), type);
                 }
-                Constant e = Mcc.lookupEnumConstant(name);
+                Constant e = lookupEnumConstant(name);
                 if (e != null) yield e;
                 if ("__PRETTY_FUNCTION__".equals(name)) {
                     yield resolveExp(new Var("__func__", null), identifierMap

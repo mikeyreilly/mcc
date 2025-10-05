@@ -131,6 +131,7 @@ public class Lexer {
                                 case "if" -> IF;
                                 case "int" -> INT;
                                 case "long" -> LONG;
+                                case "nullptr" -> NULLPTR;
                                 case "return" -> RETURN;
                                 case "short" -> SHORT;
                                 case "switch" -> SWITCH;

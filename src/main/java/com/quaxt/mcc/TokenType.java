@@ -27,7 +27,8 @@ public enum TokenType implements Token {
     ASM(),
     GCC_ATTRIBUTE(),
     BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
-    UNSIGNED(), SIGNED(), ENUM(), GOTO(), CHAR(), SHORT(), FLOAT(), DOUBLE(), LONG(), INT(), RETURN(), SWITCH(),
+    UNSIGNED(), SIGNED(), ENUM(), GOTO(), CHAR(), SHORT(), FLOAT(), DOUBLE(), LONG(),
+    NULLPTR(), INT(), RETURN(), SWITCH(),
     TYPEDEF(), TYPEOF(), CASE(),DEFAULT(),
     CONST(), VOLATILE(), RESTRICT(), ATOMIC(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
@@ -96,6 +97,7 @@ public enum TokenType implements Token {
             case INCREMENT -> "increment";
             case INT -> "int";
             case INT_LITERAL -> "int_literal";
+            case NULLPTR -> "nullptr";
             case HEX_INT_LITERAL -> "hex_int_literal";
             case UNSIGNED_HEX_INT_LITERAL -> "unsigned_hex_int_literal";
             case UNSIGNED_HEX_LONG_LITERAL -> "unsigned_hex_long_literal";
