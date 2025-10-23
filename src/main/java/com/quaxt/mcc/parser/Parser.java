@@ -150,8 +150,9 @@ public class Parser {
             expect(CLOSE_PAREN, tokens);
             return new TypeofT(typeNameToType(typeName, tokens, typeAliases));
         } else {
+            Exp exp = parseExp(tokens, 0, true, typeAliases);
             expect(CLOSE_PAREN, tokens);
-            return new Typeof(parseExp(tokens, 0, true, typeAliases));
+            return new Typeof(exp);
         }
     }
 
