@@ -1010,15 +1010,9 @@ public class Parser {
             TokenList tokens) {
         if (specifiers.isEmpty()) return null;
         StorageClass storageClass = null;
-        boolean foundChar = false;
-        boolean foundShort = false;
-        boolean foundInt = false;
-        boolean foundLong = false;
-        boolean foundSigned = false;
-        boolean foundUnsigned = false;
-        boolean foundDouble = false;
-        boolean foundFloat = false;
-        boolean foundVoid = false;
+        int signedness = 0;
+        boolean foundSolo = false;
+
         StructOrUnionSpecifier structOrUnionSpecifier = null;
         Type type = null;
         EnumSet<TypeQualifier> typeQualifiers =
@@ -1033,59 +1027,64 @@ public class Parser {
                     storageClass = s;
                 }
                 case PrimitiveTypeSpecifier s -> {
-                    if (type != null) {
-                        fail("can't combine " + type + " with other " +
-                                "specifiers");
-                    }
+//                    if (type != null) {
+//                        fail("can't combine " + type + " with other " +
+//                                "specifiers");
+//                    }
                     switch (s) {
                         case DOUBLE -> {
-                            if (foundInt || foundShort || foundSigned || foundUnsigned || foundChar || foundDouble || foundFloat) {
+                            if (type!=null|signedness!=0) {
                                 fail("can't combine double with other type specifiers");
                             }
-                            foundDouble = true;
+                            type=Primitive.DOUBLE;
+                            foundSolo=true;
                         }
                         case FLOAT -> {
-                            if (foundInt || foundShort || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble || foundFloat) {
+                            if (type!=null|signedness!=0) {
                                 fail("can't combine float with other type specifiers");
                             }
-                            foundFloat = true;
+                            type=Primitive.DOUBLE;
+                            foundSolo=true;
                         }
                         case INT -> {
-                            if (foundInt || foundChar || foundDouble || foundFloat || foundVoid)
+                            if (type==Primitive.INT || type==Primitive.CHAR || foundSolo)
                                 fail("invalid type specifier");
-                            else foundInt = true;
+                            else if (type==null) {
+                                type=Primitive.INT;
+                            }
                         }
                         case CHAR -> {
-                            if (foundChar || foundInt || foundShort || foundLong || foundDouble || foundFloat || foundVoid)
+                            if (type!=null || foundSolo)
                                 fail("invalid type specifier");
-                            else foundChar = true;
+                            else  {
+                                type=Primitive.CHAR;
+                            }
                         }
                         case SHORT -> {
-                            if (foundLong || foundShort || foundChar || foundDouble || foundFloat || foundVoid)
+                            if (foundSolo || (type!=null && type!=Primitive.INT))
                                 fail("invalid type specifier");
-                            else foundShort = true;
+                            else type=Primitive.SHORT;
                         }
                         case LONG -> {
                             // Note this compiler treats long long the same as long
-                            if (foundShort || foundChar || foundDouble || foundFloat || foundVoid)
+                            if (foundSolo || (type!=null && type!=Primitive.INT && type!=Primitive.LONG))
                                 fail("invalid type specifier");
-                            else foundLong = true;
+                            else type=Primitive.LONG;
                         }
                         case SIGNED -> {
-                            if (foundSigned || foundUnsigned || foundDouble || foundFloat || foundVoid)
+                            if (foundSolo || signedness!=0)
                                 fail("invalid type specifier");
-                            else foundSigned = true;
+                            else signedness=1;
                         }
                         case UNSIGNED -> {
-                            if (foundSigned || foundUnsigned || foundDouble || foundFloat || foundVoid)
+                            if (foundSolo || signedness!=0)
                                 fail("invalid type specifier");
-                            else foundUnsigned = true;
+                            else signedness=-1;
                         }
                         case VOID -> {
-                            if (foundInt || foundShort || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble || foundFloat)
-                                fail("can't combine void with other type " +
-                                        "specifiers");
-                            foundVoid = true;
+                            if (foundSolo || signedness!=0)
+                                fail("Can't combine void with other type specifiers");
+                            else type=Primitive.VOID;
                         }
                         default ->
                                 throw new Todo("This compiler doesn't yet " + "support the type: " + s);
@@ -1094,15 +1093,15 @@ public class Parser {
                 }
 
                 case StructOrUnionSpecifier sous -> {
-                    if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
+                    if (foundSolo || signedness!=0)
                         fail("can't combine struct or union with other type " + "specifiers");
                     type = new Structure(sous.isUnion(),
                             sous.tag(), null);
                     structOrUnionSpecifier = sous;
                 }
                 case TypedefName(String name) -> {
-                    if (foundInt || foundLong || foundSigned || foundUnsigned || foundChar || foundDouble)
-                        fail("can't combine struct or union with other type " + "specifiers");
+                    if (foundSolo || signedness!=0)
+                        fail("can't combine typedef name with other type " + "specifiers");
                     type = findTypeByName(typeAliases, name);
                 }
                 case TypeQualifier typeQualifier -> {
@@ -1112,26 +1111,26 @@ public class Parser {
                     type=es.type();
                     if (type == null) type=Primitive.INT;
                 }
-                default -> throw new Todo();
+                //default -> throw new Todo();
+                case Typeof typeof -> {type=typeof;}
+                case TypeofT typeofT -> {type=typeofT;}
             }
         }
+
+        if (type==null && signedness!=0){
+            type=Primitive.INT;
+        }
+
+        if (signedness == -1) {
+            if (type == Primitive.LONG) type = Primitive.ULONG;
+            else if (type == Primitive.SHORT) type = Primitive.USHORT;
+            else if (type == Primitive.CHAR) type = Primitive.UCHAR;
+            else if (type == Primitive.INT) type = Primitive.UINT;
+        } else if (signedness==1) {
+           if (type == Primitive.CHAR) type = Primitive.SCHAR;
+        }
         if (type == null) {
-            if (foundUnsigned) {
-                if (foundLong) type = Primitive.ULONG;
-                else if (foundShort) type = Primitive.USHORT;
-                else if (foundChar) type = Primitive.UCHAR;
-                else type = Primitive.UINT;
-            } else {
-                if (foundLong) type = Primitive.LONG;
-                else if (foundShort) type = Primitive.SHORT;
-                else if (foundDouble) type = Primitive.DOUBLE;
-                else if (foundFloat) type = Primitive.FLOAT;
-                else if (foundChar)
-                    type = foundSigned ? Primitive.SCHAR : Primitive.CHAR;
-                else if (foundVoid) type = Primitive.VOID;
-                else if (foundInt || foundSigned) type = Primitive.INT;
-                else throw makeErr("Missing type specifier", tokens);
-            }
+            throw new Todo();
         }
 
 
@@ -1147,11 +1146,13 @@ public class Parser {
         }
         Token first = tokens.get(start);
 
-        if (CHAR == first || INT == first || SHORT == first || LONG == first || UNSIGNED == first || SIGNED == first || DOUBLE == first|| FLOAT == first || VOID == first || STRUCT == first || UNION == first || ENUM == first)
-            return true;
-        return typeAliases != null && first instanceof TokenWithValue(
-                Token type,
-                String name) && type == IDENTIFIER && findTypeByName(typeAliases, name) != null;
+        if (CHAR == first || INT == first || SHORT == first || LONG == first ||
+                UNSIGNED == first || SIGNED == first || DOUBLE == first ||
+                FLOAT == first || VOID == first || STRUCT == first ||
+                UNION == first || ENUM == first || TYPEOF==first) return true;
+        return typeAliases != null &&
+                first instanceof TokenWithValue(Token type, String name) &&
+                type == IDENTIFIER && findTypeByName(typeAliases, name) != null;
     }
 
     private static Function parseRestOfFunction(ArrayList<String> paramNames,

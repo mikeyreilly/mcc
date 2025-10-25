@@ -289,6 +289,7 @@ public class SemanticAnalysis {
                 break out;
             }
 
+            default -> throw new IllegalStateException("Unexpected value: " + targetType);
         }
         return new ZeroInit(size);
     }
@@ -341,6 +342,7 @@ public class SemanticAnalysis {
                             acc.add(new ZeroInit(structDef.size() - currentOffset));
                         }
                     }
+                    default -> throw new IllegalStateException("Unexpected value: " + targetType);
                 }
             }
             case SingleInit(Exp exp, Type _) -> {
@@ -835,8 +837,9 @@ public class SemanticAnalysis {
         }
     }
     
-    private static VarDecl typeCheckLocalVariableDeclaration(final VarDecl decl) {
-        Type varType = decl.varType();
+    private static VarDecl typeCheckLocalVariableDeclaration(VarDecl _decl) {
+        Type varType = typeCheckType(_decl.varType());
+        final VarDecl decl=_decl.withType(varType);
         validateTypeSpecifier(varType);
         if (varType == VOID) fail("Can't declare void variable");
         var sd = typeCheckStructureDeclaration(decl.structOrUnionSpecifier());
@@ -920,6 +923,16 @@ public class SemanticAnalysis {
             return new VarDecl(new Var(decl.name().name(), type), init, type,
                     decl.storageClass(), decl.structOrUnionSpecifier());
         }
+    }
+
+    private static Type typeCheckType(Type type) {
+        if (type instanceof Typeof(Exp exp)){
+            return typeCheckAndConvert(exp).type();
+        }
+        if (type instanceof TypeofT(Type t)){
+            return typeCheckType(t);
+        }
+        return type;
     }
 
     private static boolean isStringPointerInit(ArrayList<StaticInit> l) {
@@ -1038,6 +1051,7 @@ public class SemanticAnalysis {
                 }
                 yield new CompoundInit(typeCheckedList, elementType);
             }
+            default -> throw new IllegalStateException("Unexpected value: " + elementType);
         };
 
     }
@@ -1052,7 +1066,7 @@ public class SemanticAnalysis {
 
     private static Exp convertByAssignment(Exp e, Type targetType) {
         if (e.type() instanceof FunType) {
-            e=typeCheckExpression(new AddrOf(e, null));
+            e = typeCheckExpression(new AddrOf(e, null));
         }
         Type t = e.type();
 
@@ -1067,7 +1081,7 @@ public class SemanticAnalysis {
                 Type referenced) && referenced == VOID && targetType instanceof Pointer) {
             return convertTo(e, targetType);
         }
-        if(e==NULLPTR || targetType == NULLPTR_T){
+        if(e == NULLPTR || targetType == NULLPTR_T){
             return convertTo(e, targetType);
         }
         throw new Err("Cannot convert type for assignment");
@@ -1585,6 +1599,9 @@ public class SemanticAnalysis {
                     new FunType(params.stream().map(p -> resolveType(p, identifierMap, structureMap, enclosingFunction)).toList(), resolveType(ret, identifierMap, structureMap, enclosingFunction), varargs);
             case Primitive primitive -> primitive;
             case NullptrT nullptrT -> nullptrT;
+            case Typeof(Exp exp) -> new Typeof(resolveExp(exp, identifierMap, structureMap, enclosingFunction));
+            //MR-TODO maybe just yield the resolved innerType?
+            case TypeofT(Type innerType) -> new TypeofT(resolveType(innerType, identifierMap, structureMap, enclosingFunction));
         };
     }
 

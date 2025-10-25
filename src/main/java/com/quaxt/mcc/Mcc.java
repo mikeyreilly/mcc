@@ -70,6 +70,7 @@ public class Mcc {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? 1 : st.alignment();
             }
+            default -> throw new IllegalStateException("Unexpected value: " + type);
         };
     }
 
@@ -91,6 +92,7 @@ public class Mcc {
             case DOUBLE -> 8;
             case VOID -> 1;
             case Structure(boolean isUnion, String tag, StructDef _) -> TYPE_TABLE.get(tag).alignment();
+            default -> throw new IllegalStateException("Unexpected value: " + type);
         };
     }
 
@@ -118,6 +120,8 @@ public class Mcc {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? -1 : st.size();
             }
+            case Typeof typeof -> 0L;
+            case TypeofT typeofT -> 0L;
         };
     }
 

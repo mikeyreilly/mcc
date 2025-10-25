@@ -2,11 +2,13 @@ package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.Err;
 import com.quaxt.mcc.StaticInit;
+import com.quaxt.mcc.parser.Typeof;
+import com.quaxt.mcc.parser.TypeofT;
 
 import static com.quaxt.mcc.semantic.Primitive.*;
 import static com.quaxt.mcc.semantic.Primitive.LONG;
 
-public sealed interface Type permits Array, FunType, NullptrT, Pointer, Primitive, Structure {
+public sealed interface Type permits Array, FunType, NullptrT, Pointer, Primitive, Structure, Typeof, TypeofT {
     default StaticInit zero() {
         throw new Err(this + " has no zero");
     }

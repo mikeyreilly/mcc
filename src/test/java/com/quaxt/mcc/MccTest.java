@@ -72,6 +72,10 @@ class MccTest {
     void typedef_struct_no_tag() throws Exception {
         returns("typedef_struct_no_tag", 17);
     }
+    @Test
+    void typeof() throws Exception {
+        returns("typeof", 8);
+    }
 
     @Test
     void struct() throws Exception {

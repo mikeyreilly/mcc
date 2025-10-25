@@ -1,5 +1,11 @@
 package com.quaxt.mcc.parser;
 
-public record Typeof(Exp exp) implements TypeSpecifier {
+import com.quaxt.mcc.semantic.Type;
 
+public record Typeof(Exp exp) implements TypeSpecifier, Type {
+
+    @Override
+    public boolean looseEquals(Type other) {
+        return false;
+    }
 }
