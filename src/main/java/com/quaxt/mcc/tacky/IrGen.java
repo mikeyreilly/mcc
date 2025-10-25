@@ -58,12 +58,12 @@ public class IrGen {
         }
     }
 
-    private static FunctionIr compileFunction(Function function) {
+    private static FunctionIr  compileFunction(Function function) {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body, instructions);
         FunctionIr f = new FunctionIr(function.name,
                 SYMBOL_TABLE.get(function.name).attrs().global(), function.parameters, instructions, function.funType.ret(), function.callsVaStart);
-        ReturnIr ret = new ReturnIr(IntInit.ZERO);
+          ReturnIr ret = new ReturnIr(IntInit.ZERO);
         instructions.add(ret);
         return f;
     }
@@ -82,7 +82,8 @@ public class IrGen {
             }
             case VarDecl(Var name, Initializer init, Type _,
                          StorageClass storageClass,
-                         StructOrUnionSpecifier structOrUnionSpecifier) -> {
+                         StructOrUnionSpecifier structOrUnionSpecifier,
+                         Constant _) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
                     assign(new VarIr(name.name()), init, instructions, 0);
@@ -111,19 +112,27 @@ public class IrGen {
                     switch (memInit) {
                         case CompoundInit _ ->
                                 assign(name, memInit, instructions,
-                                        offset + member.offset());
+                                        offset + member.byteOffset());
                         case SingleInit(Exp exp, Type targetType) -> {
                             if (exp instanceof Str(String s,
                                                    Type type) && type instanceof Array(
                                     Type _, Constant arraySize)) {
                                 initializeArrayWithStringLiteral(name,
                                         instructions,
-                                        offset + member.offset(), s, arraySize);
+                                        offset + member.byteOffset(), s, arraySize);
                             } else {
                                 var val = emitTackyAndConvert(exp,
                                         instructions);
-                                instructions.add(new CopyToOffset(val, name,
-                                        offset + member.offset()));
+                                if (member instanceof BitFieldMember(        String _,
+                                                                             Type _,
+                                                                             int _,
+                                                                             int bitOffset,
+                                                                             int bitWidth
+                                )){
+                                    instructions.add(new CopyBitsToOffset(val, name,
+                                            offset + member.byteOffset(), bitOffset, bitWidth));
+                                }else instructions.add(new CopyToOffset(val, name,
+                                        offset + member.byteOffset()));
                             }
 
                         }
@@ -573,7 +582,7 @@ public class IrGen {
                 for (Exp e : args) {
                     argVals.add(emitTackyAndConvert(e, instructions));
                 }
-                boolean indirect = Mcc.SYMBOL_TABLE.get(name.name()).type() instanceof Pointer;
+                boolean indirect = SYMBOL_TABLE.get(name.name()).type() instanceof Pointer;
                 instructions.add(new FunCall(name.name(), argVals, varargs,  indirect, result));
                 return new PlainOperand(result);
             }
@@ -585,7 +594,7 @@ public class IrGen {
                 for (Exp e : args) {
                     argVals.add(emitTackyAndConvert(e, instructions));
                 }
-                boolean indirect = Mcc.SYMBOL_TABLE.get(func.identifier()).type() instanceof Pointer;
+                boolean indirect = SYMBOL_TABLE.get(func.identifier()).type() instanceof Pointer;
 
                 instructions.add(new FunCall(func.identifier(), argVals, varargs,  indirect, result));
                 return new PlainOperand(result);
@@ -627,6 +636,7 @@ public class IrGen {
                                     new LongInit(offset), 1, dst));
                         yield new PlainOperand(dst);
                     }
+                    default -> throw new IllegalStateException("Unexpected value: " + v);
                 };
             }
 
@@ -675,7 +685,8 @@ public class IrGen {
             }
             case Dot(Exp structure, String member, Type type): {
                 StructDef structDef = Mcc.TYPE_TABLE.get(tag(structure));
-                int memberOffset = structDef.findMember(member).offset();
+                MemberEntry memberEntry = structDef.findMember(member);
+                int memberOffset = memberEntry.byteOffset();
                 ExpResult innerObject = emitTacky(structure, instructions);
                 return switch (innerObject) {
                     case DereferencedPointer(ValIr ptr) -> {
@@ -686,10 +697,26 @@ public class IrGen {
                                 new LongInit(memberOffset), 1, dstPtr));
                         yield new DereferencedPointer(dstPtr);
                     }
-                    case PlainOperand(VarIr v) ->
-                            new SubObject(v, memberOffset);
-                    case SubObject(VarIr base, int offset) ->
-                            new SubObject(base, memberOffset + offset);
+                    case PlainOperand(VarIr v) -> switch (memberEntry){
+                        case BitFieldMember(
+                                String _,
+                                Type _,
+                                int _,
+                                int bitOffset,
+                                int bitWidth
+                        ) -> new BitFieldSubObject(v, memberOffset, bitOffset, bitWidth);
+                        case OrdinaryMember _ -> new SubObject(v, memberOffset);
+                    };
+                    case SubObject(VarIr v , int offset)-> switch (memberEntry){
+                        case BitFieldMember(
+                                String _,
+                                Type _,
+                                int _,
+                                int bitOffset,
+                                int bitWidth
+                        ) -> new BitFieldSubObject(v, memberOffset+offset, bitOffset, bitWidth);
+                        case OrdinaryMember _ -> new SubObject(v, memberOffset+offset);
+                    };
                     default ->
                             throw new IllegalStateException("Unexpected " +
                                     "value: " + innerObject);
@@ -698,7 +725,7 @@ public class IrGen {
             }
             case Arrow(Exp pointer, String member, Type type): {
                 StructDef structDef = Mcc.TYPE_TABLE.get(ptrTag(pointer));
-                int memberOffset = structDef.findMember(member).offset();
+                int memberOffset = structDef.findMember(member).byteOffset();
                 ValIr innerObject = emitTackyAndConvert(pointer, instructions);
                 if (memberOffset == 0)
                     return new DereferencedPointer((VarIr) innerObject);
@@ -766,6 +793,12 @@ public class IrGen {
             case SubObject(VarIr base, int offset) -> {
                 VarIr dst = makeTemporary("dst.", e.type());
                 instructions.add(new CopyFromOffset(base, offset, dst));
+                yield dst;
+            }
+            case BitFieldSubObject(VarIr base, int byteOffset, int bitOffset,
+                                   int bitWidth) -> {
+                VarIr dst = makeTemporary("dst.", e.type());
+                instructions.add(new CopyBitsFromOffset(base, byteOffset, bitOffset, bitWidth, dst));
                 yield dst;
             }
         };
@@ -846,7 +879,7 @@ public class IrGen {
     private static ExpResult assign(Exp left, Exp right,
                                     List<InstructionIr> instructions) {
         ExpResult lval = emitTacky(left, instructions);
-        ValIr rval = emitTackyAndConvert(right, instructions);
+         ValIr rval = emitTackyAndConvert(right, instructions);
         return switch (lval) {
             case PlainOperand(VarIr obj) -> {
                 instructions.add(new Copy(rval, obj));
@@ -858,6 +891,11 @@ public class IrGen {
             }
             case SubObject(VarIr base, int offset) -> {
                 instructions.add(new CopyToOffset(rval, base, offset));
+                yield new PlainOperand(rval);
+            }
+            case BitFieldSubObject(VarIr base, int byteOffset, int bitOffset,
+                                   int bitWidth)->{
+                instructions.add(new CopyBitsToOffset(rval, base, byteOffset, bitOffset, bitWidth));
                 yield new PlainOperand(rval);
             }
             default ->

@@ -187,6 +187,11 @@ class MccTest {
     }
 
     @Test
+    void bitfield_test()  throws Exception {
+        outputs("bitfield", "x=52\n" + "y=38\n");
+    }
+
+    @Test
     void extern2_test()  throws Exception {
         returns("extern2", 0);
     }

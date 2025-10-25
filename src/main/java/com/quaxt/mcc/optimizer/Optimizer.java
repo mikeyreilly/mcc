@@ -97,7 +97,17 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dstName.isStatic()) aliasedVars.add(dstName);
                 }
+                case CopyBitsFromOffset(ValIr v1, long _,int _, int _, VarIr dstName) -> {
+                    if (v1 instanceof VarIr var1 && var1.isStatic())
+                        aliasedVars.add(var1);
+                    if (dstName.isStatic()) aliasedVars.add(dstName);
+                }
                 case CopyToOffset(ValIr v1, VarIr dstName, long _) -> {
+                    if (v1 instanceof VarIr var1 && var1.isStatic())
+                        aliasedVars.add(var1);
+                    if (dstName.isStatic()) aliasedVars.add(dstName);
+                }
+                case CopyBitsToOffset(ValIr v1, VarIr dstName, long _, int _, int _) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
                     if (dstName.isStatic()) aliasedVars.add(dstName);

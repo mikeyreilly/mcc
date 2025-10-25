@@ -204,49 +204,102 @@ public class SemanticAnalysis {
         }
         validateStructDefinition(structDecl);
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
-        int structSize = 0;
-        int structAlignment = 0;
         boolean isUnion = structDecl.isUnion();
+        StructDef sd = new StructDef(isUnion,
+                0, 0, memberEntries);
+
         for (MemberDeclaration member : structDecl.members()) {
-            var innerSd = typeCheckStructureDeclaration(member.structOrUnionSpecifier());
-            if (innerSd!=null && member.structOrUnionSpecifier().isAnonymous() && member.name() == null) {
-                for (var innerMember:innerSd.members()) {
-                    Type memberType = completeType(innerMember.type());
-                    int memberAlignment = typeAlignment(memberType);
-                    int memberOffset =
-                            isUnion ? 0 : roundUp(structSize, memberAlignment);
-
-                    MemberEntry m =
-                            new MemberEntry(innerMember.name(), memberType,
-                                    memberOffset);
-                    memberEntries.add(m);
-                    structAlignment = Math.max(structAlignment, memberAlignment);
-                    int memberSize = (int) size(memberType);
-                    structSize = isUnion ? Math.max(memberSize, structSize) :
-                            memberOffset + memberSize;
+            var innerSd = typeCheckStructureDeclaration(
+                    member.structOrUnionSpecifier());
+            if (innerSd != null &&
+                    member.structOrUnionSpecifier().isAnonymous() &&
+                    member.name() == null) {
+                for (MemberEntry innerMember : innerSd.members()) {
+                    sd = addMemberToStruct(innerMember.name(), innerMember.type(), sd,
+                            toInteger(member.bitFieldWidth()));
                 }
-            }else{
-
-                Type memberType = completeType(member.type());
-                int memberAlignment = typeAlignment(memberType);
-                int memberOffset =
-                        isUnion ? 0 : roundUp(structSize, memberAlignment);
-
-                MemberEntry m =
-                        new MemberEntry(member.name(), memberType,
-                                memberOffset);
-                memberEntries.add(m);
-                structAlignment = Math.max(structAlignment, memberAlignment);
-                int memberSize = (int) size(memberType);
-                structSize = isUnion ? Math.max(memberSize, structSize) :
-                        memberOffset + memberSize;
+            } else {
+                sd = addMemberToStruct(member.name(), member.type(), sd, toInteger(member.bitFieldWidth()));
             }
         }
-        structSize = roundUp(structSize, structAlignment);
-        var sd = new StructDef(isUnion,
-                structAlignment, structSize, memberEntries);
+        int structSize = roundUp(sd.size(), sd.alignment());
+        sd = new StructDef(sd.isUnion(),sd.alignment(), structSize, sd.members());
         TYPE_TABLE.put(structDecl.tag(), sd);
         return sd;
+    }
+
+    private static Integer toInteger(Constant c) {
+            if (c == null) return null;
+            return (int)c.toLong();
+    }
+
+    private static StructDef addMemberToStruct(
+            String name,
+            Type memberType,
+            StructDef sd,
+            Integer bitFieldWidth
+    ) {
+        memberType = completeType(memberType);
+        int memberAlignment = typeAlignment(memberType);
+        int memberSize = (int) size(memberType);
+
+        ArrayList<MemberEntry> members = sd.members();
+        int structAlignment = Math.max(sd.alignment(), memberAlignment);
+
+        // ---- Union case (easy) ----
+        if (sd.isUnion()) {
+            int offset = 0;
+            MemberEntry m = (bitFieldWidth == null)
+                    ? new OrdinaryMember(name, memberType, offset)
+                    : new BitFieldMember(name, memberType, offset, 0, bitFieldWidth);
+            members.add(m);
+            int newSize = Math.max(sd.size(), memberSize);
+            return new StructDef(true, structAlignment, newSize, members);
+        }
+
+        // ---- Ordinary member ----
+        if (bitFieldWidth == null) {
+            // Align struct size to member's alignment.
+            int offset = roundUp(sd.size(), memberAlignment);
+            members.add(new OrdinaryMember(name, memberType, offset));
+            int newSize = offset + memberSize;
+            return new StructDef(false, structAlignment, newSize, members);
+        }
+
+        // ---- Bit-field member ----
+        int unitBits = memberSize * 8;
+
+        MemberEntry last = members.isEmpty() ? null : members.get(members.size() - 1);
+
+        int baseOffset, bitOffset;
+
+        if (last instanceof BitFieldMember lastBF
+                && lastBF.type().equals(memberType)) {
+
+            int lastEndBit = lastBF.bitOffset() + lastBF.bitWidth();
+            int lastUnitBits = 8 * (int) Mcc.size(lastBF.type());
+
+            // If it fits in same unit → pack it
+            if (lastBF.bitWidth() != 0 && lastEndBit + bitFieldWidth <= lastUnitBits) {
+                baseOffset = lastBF.byteOffset();
+                bitOffset = lastEndBit;
+            } else {
+                // Not enough bits left → new unit after current one
+                baseOffset = lastBF.byteOffset() + (int) size(lastBF.type());
+                bitOffset = 0;
+            }
+        } else {
+            // No previous bit-field or type changed → new unit
+            baseOffset = roundUp(sd.size(), memberAlignment);
+            bitOffset = 0;
+        }
+
+        MemberEntry m = new BitFieldMember(name, memberType, baseOffset, bitOffset, bitFieldWidth);
+        members.add(m);
+
+        // Compute new struct size:
+        int endOfStruct = Math.max(sd.size(), baseOffset + memberSize);
+        return new StructDef(false, structAlignment, endOfStruct, members);
     }
 
 
@@ -329,13 +382,13 @@ public class SemanticAnalysis {
                         int i = 0;
 
                         for (var initElement : inits) {
-                            var member = structDef.members().get(i);
-                            if (member.offset() != currentOffset) {
-                                acc.add(new ZeroInit(member.offset() - currentOffset));
+                            MemberEntry member = structDef.members().get(i);
+                            if (member.byteOffset() != currentOffset) {
+                                acc.add(new ZeroInit(member.byteOffset() - currentOffset));
                             }
                             convertCompoundInitializerToStaticInitList(initElement, member.type(), acc);
                             currentOffset =
-                                    (int) (member.offset() + size(member.type()));
+                                    (int) (member.byteOffset() + size(member.type()));
                             i++;
                         }
                         if (structDef.size() != currentOffset) {
@@ -1694,10 +1747,17 @@ public class SemanticAnalysis {
                     }
                 }
                 StructOrUnionSpecifier sous = member.structOrUnionSpecifier();
-                if (sous != null && sous.members() != null) { // sous without members would already be resolved
-                    sous = resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap, enclosingFunction);
+                if (sous != null && sous.members() !=
+                        null) { // sous without members would already be
+                    // resolved
+                    sous = resolveStructureDeclaration(
+                            member.structOrUnionSpecifier(), identifierMap,
+                            structureMap, enclosingFunction);
                 }
-                processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap, enclosingFunction), member.name(), sous));
+                processedMembers.add(new MemberDeclaration(
+                        resolveType(member.type(), identifierMap, structureMap,
+                                enclosingFunction), member.name(), sous,
+                        member.bitFieldWidth()));
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
@@ -1730,7 +1790,7 @@ public class SemanticAnalysis {
         return switch (varDecl) {
             case VarDecl(Var name, Initializer init, Type type,
                          StorageClass storageClass,
-                         StructOrUnionSpecifier structOrUnionSpecifier) -> {
+                         StructOrUnionSpecifier structOrUnionSpecifier, Constant _) -> {
                 if (structOrUnionSpecifier != null){
                     structOrUnionSpecifier = resolveStructureDeclaration(structOrUnionSpecifier,
                             identifierMap, structureMap, null);

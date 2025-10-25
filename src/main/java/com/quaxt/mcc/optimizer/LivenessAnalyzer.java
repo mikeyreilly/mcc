@@ -178,7 +178,18 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
+                case CopyBitsFromOffset(ValIr src, long _, int _, int _, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
                 case CopyToOffset(ValIr src, VarIr dst, long _) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case CopyBitsToOffset(ValIr src, VarIr dst, long _, int _, int _) -> {
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
                     }

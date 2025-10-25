@@ -963,6 +963,34 @@ public class Codegen {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
+                case CopyBitsToOffset(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
+                                      int bitWidth) -> {
+                    Operand src = toOperand(srcV);
+                    Operand dst = toOperand(dstV, (int) offset1);
+                    TypeAsm typeAsm = valToAsmType(srcV);
+                    ins.add(new Mov(typeAsm, src, AX));
+
+                    long srcMask = (1L << bitWidth) - 1;
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(srcMask), AX));
+                    ins.add(new Binary(SHL,  typeAsm, new Imm(bitOffset), AX));
+
+                    // now we have the value we want to copy in AX, with just the bits we want
+                    // suppose the bits we want are abc
+                    // now we have 000abc000
+
+                    ins.add(new Mov(typeAsm, dst, DX));
+                    // AND it with a mask the keeps all but the bits we want to set
+                    int typeSizeBits= (int) (typeAsm.size()*8);
+                    long typeSizeBitsOnes = ~(-1L << typeSizeBits);
+                    long destMask=srcMask<<bitOffset;
+                    // zero out the bits in DX at abc position
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(~destMask & typeSizeBitsOnes), DX));
+                    ins.add(new Binary(BITWISE_OR, typeAsm , AX, DX));
+                    ins.add(new Mov(typeAsm, DX, dst));
+
+
+
+                }
                 case DoubleToInt(ValIr src, VarIr dst) -> {
                     var dstType = valToType(dst);
                     var dstTypeAsm = toTypeAsm(dstType);
@@ -1188,6 +1216,17 @@ public class Codegen {
                         Operand dst = toOperand(dstV, 0);
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, toOperand(dstV)));
+                }
+                case CopyBitsFromOffset(ValIr srcV, long offset1,int bitOffset,
+                                        int bitWidth, VarIr dstV) -> {
+                    Operand src = toOperand(srcV, (int) offset1);
+                    TypeAsm typeAsm = valToAsmType(dstV);
+                    var dst=toOperand(dstV);
+                    ins.add(new Mov(typeAsm, src, dst));
+                    ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, typeAsm , new Imm(bitOffset), dst));
+                    //bit mask to just keep width bits
+                    long mask = (1L << bitWidth) - 1;
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(mask), dst));
                 }
                 case Ignore.IGNORE -> {}
                 case BuiltinC23VaStartIr(VarIr vaList) -> {
@@ -1588,7 +1627,7 @@ public class Codegen {
             StructureType one = first, two = second;
             for (var memberEntry : members) {
                 Type member = memberEntry.type();
-                long memberOffset = offset + memberEntry.offset();
+                long memberOffset = offset + memberEntry.byteOffset();
                 StructureType[] result = classifyEightbytes(memberOffset, one
                         , two, member);
                 one = result[0];

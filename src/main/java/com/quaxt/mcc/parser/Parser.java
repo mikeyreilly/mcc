@@ -291,21 +291,22 @@ public class Parser {
             members = new ArrayList<>();
                 List<DeclarationList> dl = new ArrayList<>();
                 while(tokens.getFirst()!=CLOSE_BRACE) {
-                    DeclarationList x = parseDeclarationList(tokens, false, typeAliases);
+                    DeclarationList x = parseDeclarationList(tokens, false, typeAliases, true);
                     for(Declaration y:x.list()){
                         switch(y){
                             case VarDecl(Var name,
                                          Initializer init, Type t,
                                          StorageClass storageClass,
-                                         StructOrUnionSpecifier structOrUnionSpecifier)->{
+                                         StructOrUnionSpecifier structOrUnionSpecifier,
+                                         Constant bitFieldWidth) -> {
                                                         if (t instanceof FunType)
                             fail("error: member declaration can't be function");
-                                members.add(new MemberDeclaration(t, name.name(), structOrUnionSpecifier));
+                                members.add(new MemberDeclaration(t, name.name(), structOrUnionSpecifier, bitFieldWidth));
                             }
-                            case StructOrUnionSpecifier sous ->{
-                                // the only way we can get one of these is if we have an anonymous inner struct or union
-                                members.add(new MemberDeclaration(new Structure(sous.isUnion(), sous.tag(), TYPE_TABLE.get(sous.tag())
-                                ), null, sous));
+                            case StructOrUnionSpecifier sous -> {
+                                // the only way we can get one of these is if
+                                // we have an anonymous inner struct or union
+                                members.add(new MemberDeclaration(new Structure(sous.isUnion(), sous.tag(), TYPE_TABLE.get(sous.tag())), null, sous, null));
                             }
                             default->{
                                 throw makeErr("Todo", tokens);
@@ -893,7 +894,7 @@ public class Parser {
         DeclarationList declarationList;
         while (true) {
             while ((declarationList =
-                    parseDeclarationList(tokens, true, typeAliases)) != null) {
+                    parseDeclarationList(tokens, true, typeAliases, false)) != null) {
                 declarations.addAll(declarationList.list());
             }
             if (!tokens.isEmpty() && tokens.getFirst() == SEMICOLON) {
@@ -908,7 +909,8 @@ public class Parser {
     private static DeclarationList parseDeclarationList(TokenList tokens,
                                                         boolean throwExceptionIfNoType,
                                                         ArrayList<Map<String,
-                                                                Type>> typeAliases) {
+                                                                Type>> typeAliases,
+    boolean isMemberDeclarationList) {
         // declaration:
         //        declaration-specifiers init-declarator-list(opt) ";"
 
@@ -918,7 +920,7 @@ public class Parser {
         // init-declarator:
         //         declarator
         //         declarator "=" initializer
-
+        Constant bitFieldWidth=null;
         List<DeclarationSpecifier> specifiers =
                 parseDeclarationSpecifiers(tokens, typeAliases);
         TypeAndStorageClass typeAndStorageClass =
@@ -978,13 +980,20 @@ public class Parser {
                             tokens.removeFirst();
                             break;
                             //throw new Todo();
+                        case COLON:
+                            if (isMemberDeclarationList) {
+                                tokens.removeFirst();
+                                bitFieldWidth =
+                                        parseConst(tokens, true);
+                                break;
+                            }
                         default:
                             throw makeErr(
                                     "Expected ; or =, got " + token1, tokens);
                     }
 
                     decl =
-                            new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass(), typeAndStorageClass.structOrUnionSpecifier());
+                            new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass(), typeAndStorageClass.structOrUnionSpecifier(),bitFieldWidth);
                 }
                 if (typeAndStorageClass.storageClass() ==
                         StorageClass.TYPEDEF) {
@@ -1033,11 +1042,11 @@ public class Parser {
 //                    }
                     switch (s) {
                         case DOUBLE -> {
-                            if (type!=null|signedness!=0) {
-                                fail("can't combine double with other type specifiers");
+                            if ((type != null && type != Primitive.LONG) | signedness != 0) {
+                                fail("can't combine double with other type " +
+                                        "specifiers");
                             }
-                            type=Primitive.DOUBLE;
-                            foundSolo=true;
+                            type = Primitive.DOUBLE;
                         }
                         case FLOAT -> {
                             if (type!=null|signedness!=0) {
@@ -1205,7 +1214,7 @@ public class Parser {
             Token t = tokens.getFirst();
             if (t == EXTERN || t == STATIC || t == TYPEDEF || isTypeSpecifier(tokens, 0, typeAliases)) {
                 blockItems.addAll(parseDeclarationList(tokens, false,
-                        typeAliases).list());
+                        typeAliases, false).list());
             } else {
                 blockItems.add(parseStatement(tokens, labels, enclosingSwitch
                         , typeAliases));
@@ -1728,7 +1737,7 @@ public class Parser {
                                         ArrayList<Map<String, Type>> typeAliases) {
 
         if (isTypeSpecifier(tokens, 0, typeAliases))
-            return parseDeclarationList(tokens, true, typeAliases);
+            return parseDeclarationList(tokens, true, typeAliases, false);
         Exp r = tokens.getFirst() == SEMICOLON ? null : parseExp(tokens, 0,
                 true, typeAliases);
         expect(SEMICOLON, tokens);

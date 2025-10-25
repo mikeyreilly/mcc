@@ -74,10 +74,18 @@ public class PropagateCopies {
                         case CopyFromOffset(VarIr v1, long offset,
                                             VarIr dstName) ->
                                 new CopyFromOffset((VarIr) replaceOperand(v1, reachingCopies), offset, dstName);
+                        case CopyBitsFromOffset(VarIr v1, int byteOffset, int bitOffset,
+                                                int bitWidth,
+                                            VarIr dstName) ->
+                                new CopyBitsFromOffset((VarIr) replaceOperand(v1, reachingCopies), byteOffset, bitOffset, bitWidth, dstName);
                         case CopyToOffset(ValIr v1, VarIr dstName,
                                           long offset) ->
                                 new CopyToOffset(replaceOperand(v1, reachingCopies),
                                         dstName, offset);
+                        case CopyBitsToOffset(ValIr v1, VarIr dstName,
+                                          long byteOffset, int bitOffset, int bitWidth) ->
+                                new CopyBitsToOffset(replaceOperand(v1, reachingCopies), dstName,
+                                         byteOffset, bitOffset, bitWidth);
                         case DoubleToInt(ValIr v1, VarIr dstName) ->
                                 new DoubleToInt(replaceOperand(v1, reachingCopies), dstName);
                         case DoubleToUInt(ValIr v1, VarIr dst) ->
@@ -157,7 +165,11 @@ public class PropagateCopies {
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyFromOffset(ValIr _, long _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case CopyBitsFromOffset(ValIr _, long _, int _, int _, ValIr dst) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyToOffset(ValIr _, VarIr dst, long _) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case CopyBitsToOffset(ValIr _, VarIr dst, long _, int _, int _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case ZeroExtendIr(ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
