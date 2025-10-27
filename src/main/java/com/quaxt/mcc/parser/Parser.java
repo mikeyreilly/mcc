@@ -1434,9 +1434,11 @@ public class Parser {
                     int start=isHex ? 2 : 0;
                    while(end>start+1){
                        int c=value.charAt(end-1);
-                       if (c=='u'||c=='U'||c=='l'||c=='L'||c=='f'||c=='F'){
+                       if (c == 'u' || c == 'U' || c == 'l' || c == 'L' ||
+                               ((c == 'f' || c == 'F') &&
+                                       t == Primitive.FLOAT)) {
                            end--;
-                       }else break;
+                       } else break;
                    }
 
                     return parseConst(value.substring(start, end), t,

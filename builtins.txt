@@ -1,0 +1,10 @@
+|      | __builtin_add_overflow |
+|      | __builtin_bswap16      |
+|      | __builtin_bswap32      |
+| done | __builtin_bswap64      |
+| done | __builtin_c23_va_start |
+|      | __builtin_clzll        |
+|      | __builtin_free         |
+|      | __builtin_mul_overflow |
+|      | __builtin_offsetof     |
+|      | __builtin_sub_overflow |
