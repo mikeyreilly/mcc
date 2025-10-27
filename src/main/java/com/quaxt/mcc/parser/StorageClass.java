@@ -9,5 +9,5 @@ public enum StorageClass implements Parser.DeclarationSpecifier {
      * ISO/IEC 9899:1999 6.7.1
      * </blockquote>
      */
-    TYPEDEF
+    TYPEDEF, REGISTER
 }

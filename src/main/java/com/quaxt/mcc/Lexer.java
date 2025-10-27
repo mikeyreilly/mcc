@@ -139,7 +139,9 @@ public class Lexer {
                                 case "typeof", "__typeof__" -> TYPEOF;
                                 case "case" -> CASE;
                                 case "default" -> DEFAULT;
+                                case "register" -> REGISTER;
                                 case "signed" -> SIGNED;
+                                case "__signed__" -> SIGNED;
                                 case "sizeof" -> SIZEOF;
                                 case "static" -> STATIC;
                                 case "struct" -> STRUCT;

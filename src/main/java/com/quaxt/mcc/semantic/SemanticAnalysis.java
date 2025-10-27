@@ -26,11 +26,11 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 
 public class SemanticAnalysis {
 
-    record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}
+    public record Entry(String name, boolean fromCurrentScope, boolean hasLinkage) {}
 
     enum TagEntryType {UNION, STRUCT, ENUM}
 
-    record TagEntry(TagEntryType isUnion, String name,
+    public record TagEntry(TagEntryType isUnion, String name,
                     boolean fromCurrentScope) {
 
     }
@@ -1657,25 +1657,21 @@ public class SemanticAnalysis {
         };
     }
 
-    public static Program resolveProgram(Program program) {
-        Map<String, Entry> identifierMap = new HashMap<>();
-        Map<String, TagEntry> structureMap = new DebugHashMap<>();
+    public static Program resolveProgram(Program program,
+                                      Map<String, TagEntry> structureMap,
+                                      Map<String, Entry> identifierMap) {
         ArrayList<Declaration> decls = program.declarations();
         for (int i = 0; i < decls.size(); i++) {
             switch (decls.get(i)) {
                 case EnumSpecifier decl ->
-                        decls.set(i, resolveEnumSpecifier(decl,
-                                structureMap));
+                        decls.set(i, resolveEnumSpecifier(decl, structureMap));
                 case Function f ->
-                        decls.set(i, resolveFunctionDeclaration(f,
-                                identifierMap, structureMap));
+                        decls.set(i, resolveFunctionDeclaration(f, identifierMap, structureMap));
                 case VarDecl varDecl ->
                         decls.set(i,
-                                resolveFileScopeVariableDeclaration(varDecl,
-                                        identifierMap, structureMap));
+                                resolveFileScopeVariableDeclaration(varDecl, identifierMap, structureMap));
                 case StructOrUnionSpecifier decl ->
-                        decls.set(i, resolveStructureDeclaration(decl, identifierMap,
-                                structureMap, null));
+                        decls.set(i, resolveStructureDeclaration(decl, identifierMap, structureMap, null));
             }
 
         }

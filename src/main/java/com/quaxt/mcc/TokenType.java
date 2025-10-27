@@ -32,7 +32,7 @@ public enum TokenType implements Token {
     TYPEDEF(), TYPEOF(), CASE(),DEFAULT(),
     CONST(), VOLATILE(), RESTRICT(), ATOMIC(),
     VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
-    , SIZEOF(), STATIC(), STRUCT(), UNION(), DECREMENT("--"), INCREMENT("\\+\\+"),
+    , SIZEOF(), STATIC(), REGISTER(), STRUCT(), UNION(), DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
     OPEN_BRACKET("\\["), CLOSE_BRACKET("\\]"), ARROW("->"),
     ELLIPSIS("\\.\\.\\."), DOT("([.])[^0-9]", 1);
@@ -116,6 +116,7 @@ public enum TokenType implements Token {
             case SINGLE_LINE_COMMENT -> "single_line_comment";
             case SHORT -> "short";
             case SIZEOF -> "sizeof";
+            case REGISTER -> "register";
             case STATIC -> "static";
             case STRING_LITERAL -> "string_literal";
             case STRUCT -> "struct";

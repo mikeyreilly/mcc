@@ -75,6 +75,8 @@ public class Parser {
                     (value.equals("inline") || value.equals("__inline") ||
                         value.equals("_NoReturn"))) {
                     tokens.removeFirst();
+            } else if (tokens.getFirst() == GCC_ATTRIBUTE) {
+                stripGccAttribute(tokens);
             }
             else break;
         }
@@ -353,6 +355,7 @@ public class Parser {
             case TYPEDEF -> sc = StorageClass.TYPEDEF;
             case EXTERN -> sc = StorageClass.EXTERN;
             case STATIC -> sc = StorageClass.STATIC;
+            case REGISTER -> sc = StorageClass.REGISTER;
             default -> {
                 return null;
             }
@@ -881,8 +884,8 @@ public class Parser {
 
     }
 
-    public static Program parseProgram(TokenList tokens) {
-        ArrayList<Declaration> declarations = new ArrayList<>();
+    public static Program parseProgram(TokenList tokens,
+                                       ArrayList<Declaration> declarations) {
         ArrayList<Map<String, Type>> typeAliases = new ArrayList<>();
         // built initial typeAliases. Will contain __builtin_va_list
         typeAliases.add(new HashMap<>());
@@ -1156,7 +1159,7 @@ public class Parser {
            if (type == Primitive.CHAR) type = Primitive.SCHAR;
         }
         if (type == null) {
-            throw new Todo();
+            throw makeErr("TODO", tokens);
         }
 
 
@@ -1167,7 +1170,7 @@ public class Parser {
 
     private static boolean isTypeSpecifier(TokenList tokens, int start,
                                            ArrayList<Map<String, Type>> typeAliases) {
-        if (CONST == tokens.get(start)) {
+        while (CONST == tokens.get(start) || VOLATILE == tokens.get(start)) {
             start++;
         }
         Token first = tokens.get(start);
@@ -1228,8 +1231,12 @@ public class Parser {
 
         while (tokens.getFirst() != CLOSE_BRACE) {
             // parse block-item
+            while(tokens.getFirst()==GCC_ATTRIBUTE){
+                stripGccAttribute(tokens);
+            }
             Token t = tokens.getFirst();
-            if (t == EXTERN || t == STATIC || t == TYPEDEF || isTypeSpecifier(tokens, 0, typeAliases)) {
+            if (t == EXTERN || t == STATIC || t == TYPEDEF || t == REGISTER
+                    || t==VOLATILE || isTypeSpecifier(tokens, 0, typeAliases)) {
                 blockItems.addAll(parseDeclarationList(tokens, false,
                         typeAliases, false).list());
             } else {
@@ -1529,7 +1536,7 @@ public class Parser {
                 expect(CLOSE_PAREN, tokens);
                 yield exp;
             }
-            case RESTRICT -> {
+            case RESTRICT, VOLATILE -> {
                 tokens.removeFirst();
                 yield parsePrimaryExp(tokens, typeAliases);
             }

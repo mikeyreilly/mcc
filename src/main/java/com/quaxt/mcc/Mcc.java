@@ -273,6 +273,9 @@ public class Mcc {
         }
         String cSource = Files.readString(intermediateFile);
         Files.delete(intermediateFile);
+        Map<String, SemanticAnalysis.Entry> identifierMap = new HashMap<>();
+        Map<String, SemanticAnalysis.TagEntry> structureMap = new DebugHashMap<>();
+        ArrayList<Declaration> builtinDeclarations = new ArrayList<>();
 
         mccHelper("""
                 struct __builtin_va_list_item {
@@ -283,23 +286,39 @@ public class Mcc {
                 };
                 
                 typedef struct __builtin_va_list_item  __builtin_va_list[1];
+                
+                static inline unsigned long __builtin_bswap64(unsigned  long x) {
+                    return ((x & 0x00000000000000FFULL) << 56) |
+                           ((x & 0x000000000000FF00ULL) << 40) |
+                           ((x & 0x0000000000FF0000ULL) << 24) |
+                           ((x & 0x00000000FF000000ULL) << 8)  |
+                           ((x & 0x000000FF00000000ULL) >> 8)  |
+                           ((x & 0x0000FF0000000000ULL) >> 24) |
+                           ((x & 0x00FF000000000000ULL) >> 40) |
+                           ((x & 0xFF00000000000000ULL) >> 56);
+                }
+                
                 """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null,
-                null, true, Collections.emptyList());
+                null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations);
         BUILTIN_VA_LIST = Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
+        ArrayList<Declaration> declarations = new ArrayList<>();
 
-        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs);
+        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations);
     }
     public static Type BUILTIN_VA_LIST = null;
     private static int mccHelper(String cSource, Mode mode,
                                  EnumSet<Optimization> optimizations,
                                  Path srcFile, String bareFileName,
                                  boolean doNotCompile,
-                                 List<String> libs) throws IOException, InterruptedException {
+                                 List<String> libs,
+                                 Map<String, SemanticAnalysis.Entry> identifierMap,
+                                 Map<String, SemanticAnalysis.TagEntry> structureMap,
+                                 ArrayList<Declaration> declarations) throws IOException, InterruptedException {
         TokenList l = Lexer.lex(cSource);
         if (mode == Mode.LEX) {
             return 0;
         }
-        Program program = Parser.parseProgram(l);
+        Program program = Parser.parseProgram(l, declarations);
         if (!l.isEmpty()) {
             throw makeErr("Unexpected token " + l.getFirst(), l);
         }
@@ -307,7 +326,10 @@ public class Mcc {
             return 0;
         }
 
-        program = SemanticAnalysis.resolveProgram(program);
+//        Map<String, SemanticAnalysis.Entry> identifierMap = new HashMap<>();
+//        Map<String, SemanticAnalysis.TagEntry> structureMap = new DebugHashMap<>();
+        program =
+                SemanticAnalysis.resolveProgram(program, structureMap, identifierMap);
         SemanticAnalysis.typeCheckProgram(program);
         program = SemanticAnalysis.loopLabelProgram(program);
         if (mode == Mode.VALIDATE) {
