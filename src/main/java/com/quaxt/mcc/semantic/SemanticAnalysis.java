@@ -1055,7 +1055,7 @@ public class SemanticAnalysis {
                 } else if (targetType instanceof Structure(boolean isUnion,
                                                            String tag, StructDef _)) {
                     StructDef structDef = TYPE_TABLE.get(tag);
-                    ArrayList<MemberEntry> members = structDef.members();
+                    List<MemberEntry> members = structDef.namedMembers();
                     if (initsSize > members.size() || (isUnion && initsSize > 1)) {
                         throw new Err("Too many elements in " + (isUnion ?
                                 "union " : "structure") + "initializer");

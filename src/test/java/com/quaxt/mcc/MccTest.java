@@ -192,6 +192,10 @@ class MccTest {
     }
 
     @Test
+    void bitfield_with_anon()  throws Exception {
+        outputs("bitfield_with_anon", "x=1540\n" + "y=1030\n");
+    }
+    @Test
     void extern2_test()  throws Exception {
         returns("extern2", 0);
     }

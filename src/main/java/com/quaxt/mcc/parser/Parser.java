@@ -450,6 +450,10 @@ public class Parser {
     static Statement parseStatement(TokenList tokens, List<String> labels,
                                     Switch enclosingSwitch,
                                     ArrayList<Map<String, Type>> typeAliases) {
+        while (tokens.getFirst() == GCC_ATTRIBUTE) {
+            stripGccAttribute(tokens);
+        }
+
         Token token = tokens.getFirst();
         Token tokenType = token.type();
         if (RETURN == token.type()) {
@@ -944,8 +948,11 @@ public class Parser {
         boolean first = false;
         out:
         while (!tokens.isEmpty()) {
-            var token = tokens.getFirst();
-            if (token.equals(SEMICOLON)) {
+
+            Token token = tokens.getFirst();
+            if (token == GCC_ATTRIBUTE){
+                stripGccAttribute(tokens);
+            } else if (token.equals(SEMICOLON)) {
                 tokens.removeFirst();
                 break out;
             } else if (token.equals(COMMA)) {
@@ -1002,12 +1009,21 @@ public class Parser {
 
                 l.add(decl);
                 if (decl instanceof Function) break out;
-            } else {
+            } else if (token == COLON && isMemberDeclarationList) {
+                    tokens.removeFirst();
+                    bitFieldWidth =
+                            parseConst(tokens, true);
+
+                VarDecl decl =
+                        new VarDecl(new Var(null, null), null, typeAndStorageClass.type(), typeAndStorageClass.storageClass(), typeAndStorageClass.structOrUnionSpecifier(), bitFieldWidth);
+                l.add(decl);
+            }
+            else {
                 break out;
             }
         }
         if (l.isEmpty()) {
-            throw new Err("Expected identifier or (");
+            throw makeErr("Expected identifier or (", tokens);
         }
         return new DeclarationList(l);
     }
@@ -1468,6 +1484,9 @@ public class Parser {
                                        ArrayList<Map<String, Type>> typeAliases) {
         // <primary-exp> ::= <const> | <identifier> | "(" <exp> ")"
         //                 | <identifier> "(" [ <argument-list> ] ")"
+        while (tokens.getFirst() == GCC_ATTRIBUTE) {
+            stripGccAttribute(tokens);
+        }
         return switch (tokens.getFirst()) {
             case BUILTIN_VA_ARG -> {
                 tokens.removeFirst();

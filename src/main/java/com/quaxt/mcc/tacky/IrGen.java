@@ -102,8 +102,8 @@ public class IrGen {
                               Type compoundInitType) when compoundInitType instanceof Structure(boolean isUnion,
                                                                                                 String tag,
             StructDef _) -> {
-                ArrayList<MemberEntry> members =
-                        Mcc.TYPE_TABLE.get(tag).members();
+                List<MemberEntry> members =
+                        Mcc.TYPE_TABLE.get(tag).namedMembers();
                 int limit = inits.size();
                 if (isUnion && limit > 1) limit = 1;
                 for (int i = 0; i < limit; i++) {
