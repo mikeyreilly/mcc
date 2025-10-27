@@ -299,11 +299,11 @@ public class Mcc {
                 }
                 
                 """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null,
-                null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations);
+                null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null);
         BUILTIN_VA_LIST = Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
         ArrayList<Declaration> declarations = new ArrayList<>();
 
-        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations);
+        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations);
     }
     public static Type BUILTIN_VA_LIST = null;
     private static int mccHelper(String cSource, Mode mode,
@@ -313,7 +313,8 @@ public class Mcc {
                                  List<String> libs,
                                  Map<String, SemanticAnalysis.Entry> identifierMap,
                                  Map<String, SemanticAnalysis.TagEntry> structureMap,
-                                 ArrayList<Declaration> declarations) throws IOException, InterruptedException {
+                                 ArrayList<Declaration> declarations,
+                                 ArrayList<Declaration> builtinDeclarations) throws IOException, InterruptedException {
         TokenList l = Lexer.lex(cSource);
         if (mode == Mode.LEX) {
             return 0;
@@ -332,6 +333,15 @@ public class Mcc {
                 SemanticAnalysis.resolveProgram(program, structureMap, identifierMap);
         SemanticAnalysis.typeCheckProgram(program);
         program = SemanticAnalysis.loopLabelProgram(program);
+        // MR-TODO no need to do this redundant work on builtindeclarations
+
+        if (builtinDeclarations!=null){
+            for (int i = builtinDeclarations.size() - 1; i >= 0; i--) {
+                Declaration x = builtinDeclarations.get(i);
+                program.declarations().addFirst(x);
+            }
+        }
+
         if (mode == Mode.VALIDATE) {
             return 0;
         }
@@ -342,6 +352,7 @@ public class Mcc {
         if (!optimizations.isEmpty()) {
             programIr = Optimizer.optimize(programIr, optimizations);
         }
+
         ProgramAsm programAsm = Codegen.generateProgramAssembly(programIr);
         if (mode == Mode.CODEGEN) {
             return 0;
