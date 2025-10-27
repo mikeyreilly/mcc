@@ -16,10 +16,10 @@ public enum TokenType implements Token {
     UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
             "[^\\w.]", 1), UNSIGNED_INT_LITERAL("([0-9]+[uU])[^\\w.]", 1),
     UNSIGNED_HEX_INT_LITERAL("0x([a-fA-F0-9]+[uU])"),
-    LONG_LITERAL("([0-9]+[lL][lL]?)[^\\w.]", 1),
+    LONG_LITERAL("([0-9]+([lL]|ll|LL))[^\\w.]", 1),
     UNSIGNED_HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
             "[^\\w.]", 1),
-    HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL]|[lL][lL]))" +
+    HEX_LONG_LITERAL("0x([0-9a-fA-F]+([lL]|ll|LL))" +
             "[^\\w.]", 1),
     HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
     , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*|#\\s*pragma\\b.*"),

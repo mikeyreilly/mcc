@@ -1021,7 +1021,7 @@ public class Parser {
         StorageClass storageClass = null;
         int signedness = 0;
         boolean foundSolo = false;
-
+        int intCount=0;
         StructOrUnionSpecifier structOrUnionSpecifier = null;
         Type type = null;
         EnumSet<TypeQualifier> typeQualifiers =
@@ -1056,10 +1056,11 @@ public class Parser {
                             foundSolo=true;
                         }
                         case INT -> {
-                            if (type==Primitive.INT || type==Primitive.CHAR || foundSolo)
-                                fail("invalid type specifier");
-                            else if (type==null) {
-                                type=Primitive.INT;
+                            if (intCount != 0 || type == Primitive.CHAR ||
+                                    foundSolo) fail("invalid type specifier");
+                            else if (type == null) {
+                                type = Primitive.INT;
+                                intCount++;
                             }
                         }
                         case CHAR -> {
