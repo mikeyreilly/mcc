@@ -1636,9 +1636,8 @@ public class SemanticAnalysis {
             case Pointer(Type referenced) ->{
                 if (referenced instanceof Structure s) {
                     ifStructureResolveAsDeclaration(s, identifierMap, structureMap, enclosingFunction);
-                    referenced = resolveType(referenced, identifierMap, structureMap, enclosingFunction);
-
                 }
+                referenced = resolveType(referenced, identifierMap, structureMap, enclosingFunction);
                 yield new Pointer(referenced);
             }
             case Array(Type element, Constant size) ->{
@@ -2029,12 +2028,17 @@ public class SemanticAnalysis {
                 false));
         var init = decl.init();
         StructOrUnionSpecifier sous = decl.structOrUnionSpecifier();
-        if (sous != null && sous.members() != null) { // sous without members would already be resolved
-            sous = resolveStructureDeclaration(decl.structOrUnionSpecifier(), identifierMap, structureMap, enclosingFunction);
+        if (sous != null && sous.members() !=
+                null) { // sous without members would already be resolved
+            sous =
+                    resolveStructureDeclaration(decl.structOrUnionSpecifier()
+                            , identifierMap, structureMap, enclosingFunction);
         }
+
         return new VarDecl(new Var(uniqueName, null), resolveInitializer(init
-                , identifierMap, structureMap, enclosingFunction), resolveType(decl.varType(), identifierMap, structureMap, enclosingFunction), decl.storageClass(),
-                sous);
+                , identifierMap, structureMap, enclosingFunction),
+         resolveType(decl.varType(), identifierMap, structureMap,
+          enclosingFunction), decl.storageClass(), sous);
     }
 
     private static Initializer resolveInitializer(Initializer init,
