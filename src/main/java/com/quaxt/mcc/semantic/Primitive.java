@@ -34,6 +34,7 @@ public enum Primitive implements Type {
             case FLOAT_LITERAL -> FLOAT;
             case UNSIGNED_LONG_LITERAL -> ULONG;
             case HEX_INT_LITERAL -> INT;
+            case UNSIGNED_HEX_INT_LITERAL ->UINT;
             case UNSIGNED_HEX_LONG_LITERAL ->ULONG;
             case HEX_LONG_LITERAL -> LONG;
             case UNSIGNED_INT_LITERAL -> UINT;

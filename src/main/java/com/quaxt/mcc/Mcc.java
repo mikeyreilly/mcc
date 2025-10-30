@@ -284,9 +284,9 @@ public class Mcc {
                     void *overflow_arg_area;
                     void *reg_save_area;
                 };
-                
+
                 typedef struct __builtin_va_list_item  __builtin_va_list[1];
-                
+
                 static inline unsigned long __builtin_bswap64(unsigned  long x) {
                     return ((x & 0x00000000000000FFULL) << 56) |
                            ((x & 0x000000000000FF00ULL) << 40) |
@@ -297,7 +297,38 @@ public class Mcc {
                            ((x & 0x00FF000000000000ULL) >> 40) |
                            ((x & 0xFF00000000000000ULL) >> 56);
                 }
+                static inline unsigned int __builtin_bswap32(unsigned int x) {
+                    return ((x & 0x000000FFU) << 24) |
+                           ((x & 0x0000FF00U) << 8)  |
+                           ((x & 0x00FF0000U) >> 8)  |
+                           ((x & 0xFF000000U) >> 24);
+                }
+                static inline unsigned short __builtin_bswap16(unsigned short x) {
+                    return (unsigned short)(((x & 0x00FFU) << 8) |
+                                            ((x & 0xFF00U) >> 8));
+                }
+                extern void free (void *__ptr);
+
+                void __builtin_free(void *ptr){
+                    free(ptr);
+                }
                 
+                void __sync_synchronize(void) {
+                }
+                void __atomic_store_n(int a, int b, int c) {
+                }
+                void __atomic_load_n(int a, int b, int c) {
+                }
+                void __builtin_add_overflow(int a, int b, int c) {
+                }
+                void __builtin_sub_overflow(int a, int b, int c) {
+                }
+                void __builtin_mul_overflow(int a, int b, int c) {
+                }
+                void __builtin_clzll(int a, int b, int c){
+                }
+
+
                 """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null,
                 null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null);
         BUILTIN_VA_LIST = Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();

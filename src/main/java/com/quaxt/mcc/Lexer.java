@@ -109,6 +109,8 @@ public class Lexer {
                             Token token = switch (value) {
                                 case "__builtin_c23_va_start" ->
                                         BUILTIN_C23_VA_START;
+                                case "__builtin_offsetof" ->
+                                        BUILTIN_OFFSETOF;
                                 case "__builtin_va_arg" -> BUILTIN_VA_ARG;
                                 case "__builtin_va_end" -> BUILTIN_VA_END;
                                 case "__asm__" -> ASM;

@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MccTest {
 
@@ -204,6 +205,35 @@ class MccTest {
     @Test
     void extern2_test()  throws Exception {
         returns("extern2", 0);
+    }
+    @Test
+    void offsetof_test()  throws Exception {
+        outputs("offsetof", "the first element is at offset 0\n" +
+                "the double is at offset 8\n");
+    }
+    @Test
+    void string_init()  throws Exception {
+        outputs("string_init", "howdy");
+    }
+    @Test
+    void sizeof_test()  throws Exception {
+        returns("sizeof", 16);
+    }
+    @Test
+    void struct_no_such_member_test()  {
+        Err thrown = assertThrows(Err.class, () -> {
+            returns("struct_no_such_member", 0);
+        });
+        assertEquals("Structure has no member with this name",
+                thrown.getMessage());
+    }
+    @Test
+    void offsetof_no_such_member_test()  {
+        Err thrown = assertThrows(Err.class, () -> {
+            returns("offsetof_no_such_member", 0);
+        });
+        assertEquals("Structure has no member with this name",
+                thrown.getMessage());
     }
 
     @AfterAll

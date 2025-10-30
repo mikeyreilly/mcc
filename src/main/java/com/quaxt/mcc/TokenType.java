@@ -27,6 +27,7 @@ public enum TokenType implements Token {
     ASM(),
     GCC_ATTRIBUTE(),
     BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
+    BUILTIN_OFFSETOF,
     UNSIGNED(), SIGNED(), ENUM(), GOTO(), CHAR(), SHORT(), FLOAT(), DOUBLE(), LONG(),
     NULLPTR(), INT(), RETURN(), SWITCH(),
     TYPEDEF(), TYPEOF(), CASE(),DEFAULT(),
@@ -124,6 +125,7 @@ public enum TokenType implements Token {
             case BUILTIN_C23_VA_START -> "__builtin_c23_va_start";
             case BUILTIN_VA_ARG -> "__builtin_va_arg";
             case BUILTIN_VA_END -> "__builtin_va_end";
+            case BUILTIN_OFFSETOF -> "__builtin_offsetof";
             case TYPEDEF -> "typedef";
             case TYPEOF -> "typeof";
             case UNION -> "union";

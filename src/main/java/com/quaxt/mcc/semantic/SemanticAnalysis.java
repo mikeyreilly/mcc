@@ -277,7 +277,7 @@ public class SemanticAnalysis {
                 && lastBF.type().equals(memberType)) {
 
             int lastEndBit = lastBF.bitOffset() + lastBF.bitWidth();
-            int lastUnitBits = 8 * (int) Mcc.size(lastBF.type());
+            int lastUnitBits = 8 * (int) size(lastBF.type());
 
             // If it fits in same unit → pack it
             if (lastBF.bitWidth() != 0 && lastEndBit + bitFieldWidth <= lastUnitBits) {
@@ -535,21 +535,9 @@ public class SemanticAnalysis {
             }
         }
         // when initializing a static pointer with a string
-        if (varType instanceof Pointer(Type referenced) && referenced == CHAR && decl.storageClass() != StorageClass.TYPEDEF) {
-            String uniqueName = makeTemporary(decl.name() + ".string.");
-            StringInit stringInit =
-                    (StringInit) ((Initial) initialValue).initList().getFirst();
-            SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(new Array(CHAR,
-                    new IntInit(stringInit.str().length() + 1)),
-                    new ConstantAttr(stringInit)));
-            StaticAttributes attrs = new StaticAttributes(initialValue, global, decl.storageClass());
-            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
-                    , attrs));
-        } else {
-            StaticAttributes attrs = new StaticAttributes(initialValue, global, decl.storageClass());
-            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
-                    , attrs));
-        }
+        StaticAttributes attrs = new StaticAttributes(initialValue, global, decl.storageClass());
+        SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
+                , attrs));
         return decl;
     }
 
@@ -1525,6 +1513,15 @@ public class SemanticAnalysis {
             }
             case BuiltinVaArg(Var ap, Type type) ->
                     new BuiltinVaArg(requireVaList(ap), type);
+            case Offsetof(Structure s, String member) -> {
+                validateTypeSpecifier(s);
+                StructDef structDef = TYPE_TABLE.get(s.tag());
+                MemberEntry me = structDef.findMember(member);
+                if (me == null) {
+                    throw new Err("Structure has no member with this name");
+                }
+                yield exp;
+            }
         };
     }
 
@@ -2120,6 +2117,8 @@ public class SemanticAnalysis {
                     new SizeOf(resolveExp(e, identifierMap, structureMap, enclosingFunction));
             case SizeOfT(Type type) ->
                     new SizeOfT(resolveType(type, identifierMap, structureMap, enclosingFunction));
+            case Offsetof(Structure structure, String member) ->
+                    new Offsetof((Structure) resolveType(structure, identifierMap, structureMap, enclosingFunction), member);
             case Arrow(Exp pointer, String member, Type type) ->
                     new Arrow(resolveExp(pointer, identifierMap,
                             structureMap, enclosingFunction), member, type);

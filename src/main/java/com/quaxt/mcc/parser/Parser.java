@@ -1507,6 +1507,25 @@ public class Parser {
                 expect(CLOSE_PAREN, tokens);
                 yield new BuiltinVaArg(new Var(identifier, null), type);
             }
+            case BUILTIN_OFFSETOF -> {
+                tokens.removeFirst();
+                expect(OPEN_PAREN, tokens);
+                
+
+                TypeName typeName = parseTypeName(tokens, typeAliases);
+                Type t = typeNameToType(typeName, tokens, typeAliases);
+                
+                expect(COMMA, tokens);
+                String member = expectIdentifier(tokens);
+
+                if (t instanceof Structure type) {
+                    expect(CLOSE_PAREN, tokens);
+                    yield new Offsetof(type, member);
+                } else {
+                    throw makeErr("request for member ‘" + member +
+                            "’ in something not a structure or union", tokens);
+                }
+            }
             case TokenWithValue(Token tokenType, String value) -> {
 
                 yield switch (tokenType) {
