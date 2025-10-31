@@ -98,8 +98,9 @@ public class Mcc {
 
     public static long size(Type type) {
         return switch (type) {
-            case Array(Type element, Constant arraySize) ->
-                    size(element) * arraySize.toLong();
+
+            case Array(Type element, Constant arraySize) -> arraySize == null ? 0L: // arraySize will be null for
+                size(element) * arraySize.toLong();
             case FunType _ -> 0;
             case Pointer _, NullptrT _ -> 8;
 

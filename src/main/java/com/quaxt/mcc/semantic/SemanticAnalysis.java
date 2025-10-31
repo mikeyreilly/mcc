@@ -202,7 +202,6 @@ public class SemanticAnalysis {
         if (TYPE_TABLE.containsKey(structDecl.tag())) {
             throw new Err("redefinition of struct");
         }
-        validateStructDefinition(structDecl);
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
         boolean isUnion = structDecl.isUnion();
         StructDef sd = new StructDef(isUnion,
@@ -222,6 +221,8 @@ public class SemanticAnalysis {
                 sd = addMemberToStruct(member.name(), member.type(), sd, toInteger(member.bitFieldWidth()));
             }
         }
+        validateStructDefinition(structDecl);
+
         int structSize = roundUp(sd.size(), sd.alignment());
         sd = new StructDef(sd.isUnion(),sd.alignment(), structSize, sd.members());
         TYPE_TABLE.put(structDecl.tag(), sd);

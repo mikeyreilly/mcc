@@ -236,6 +236,16 @@ class MccTest {
                 thrown.getMessage());
     }
 
+    @Test
+    void nested_struct() throws Exception {
+        outputs("nested_struct",
+                "sizeof(struct Outer) = 8\n" +
+                        "offsetof(struct Outer, inner) = 8\n" +
+                        "Outer.i = 42\n" + "  Inner[0]: j=0, s=\"string 0\"\n" +
+                        "  Inner[1]: j=10, s=\"string 1\"\n" +
+                        "  Inner[2]: j=20, s=\"string 2\"\n");
+    }
+
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {
