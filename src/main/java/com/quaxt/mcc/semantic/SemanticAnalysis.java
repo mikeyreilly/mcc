@@ -442,7 +442,7 @@ public class SemanticAnalysis {
                     }
                     StaticInit v = switch (exp) {
                         case Constant cc -> (StaticInit)convertConst(cc, targetType);
-                        default -> convertToStaticInit(exp);
+                        default -> convertToStaticInit(exp, targetType);
                     };
                     acc.add(v);
                 }
@@ -451,7 +451,12 @@ public class SemanticAnalysis {
         return null;
     }
 
-    private static StaticInit convertToStaticInit(Exp exp) {
+    private static StaticInit convertToStaticInit(Exp exp, Type targetType) {
+        if (exp instanceof Cast(Type type, Exp inner)){
+            if (type instanceof Pointer){
+                return convertToStaticInit(inner, targetType);
+            }
+        }
         if (exp instanceof AddrOf(Exp inner, Type _)) {
             if (inner instanceof Subscript(Var e1, Exp e2, Type _) && evaluateExpAsConstant(e2) instanceof Constant c) {
                 return new PointerInit(e1.name(),
@@ -464,9 +469,11 @@ public class SemanticAnalysis {
             } else if (inner instanceof Var v) {
                 return new PointerInit(v.name());
             }
-        } else {
-            throw new IllegalStateException("Unexpected value: " + exp);
         }
+        if (evaluateExpAsConstant(exp) instanceof Constant c) {
+            return (StaticInit) convertConst(c, targetType);
+        }
+
         throw new Err("Non constant initializer");
 
     }
@@ -1309,6 +1316,9 @@ public class SemanticAnalysis {
                 Exp typedE2 = typeCheckAndConvert(e2);
                 Type t1 = typedE1.type();
                 Type t2 = typedE2.type();
+                if (t1 == VOID && t2 == VOID) { // I guess we're dealing with comma operator
+                    yield new BinaryOp(op, typedE1, typedE2, VOID);
+                }
                 if (!t1.isScalar() || !t2.isScalar()) {
                     fail("Non-scalar operand illegal here");
                 }
