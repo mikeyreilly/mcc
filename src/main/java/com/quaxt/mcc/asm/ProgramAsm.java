@@ -1,6 +1,8 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.parser.Constant;
+import com.quaxt.mcc.parser.Var;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
@@ -115,7 +117,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case ULongInit(long l) -> ".quad " + Long.toUnsignedString(l);
             case ZeroInit(long l) -> ".zero " + l;
             case CharInit(byte i) -> ".byte " + (i & 0xff);
-            case PointerInit(String label) -> ".quad " + label;
+            case PointerInit(String label, long offset) -> offset == 0
+                    ? ".quad " + label
+                    : offset > 0
+                    ? ".quad " + label + " + " + offset
+                    : ".quad " + label + " - " + -offset;
             case StringInit(String s, boolean nullTerminated) -> {
                 StringBuilder sb = new StringBuilder();
                 sb.append(nullTerminated ? ".asciz \"" : ".ascii \"");

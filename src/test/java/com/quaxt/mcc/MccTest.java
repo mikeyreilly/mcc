@@ -245,6 +245,16 @@ class MccTest {
                         "  Inner[1]: j=10, s=\"string 1\"\n" +
                         "  Inner[2]: j=20, s=\"string 2\"\n");
     }
+    
+    @Test
+    void array_init() throws Exception {
+        outputs("array_init","BB\n");
+    }
+
+    @Test
+    void array_init2() throws Exception {
+        outputs("array_init2","BBB\n");
+    }
 
     @AfterAll
     static void tearDown() {

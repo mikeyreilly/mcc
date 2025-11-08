@@ -356,18 +356,30 @@ public class SemanticAnalysis {
                 final int initsSize = inits.size();
                 switch (targetType) {
                     case Array(Type inner, Constant arraySize) -> {
-                        long declaredLength = arraySize.toLong();
-                        if (declaredLength < initsSize) {
-                            throw new Err("Length of initializer (" + initsSize + ") exceeds declared length of array (" + arraySize + ")");
+                        long declaredLength =
+                                arraySize == null ? -1L : arraySize.toLong();
+                        if (arraySize != null && declaredLength < initsSize) {
+                            throw new Err(
+                                    "Length of initializer (" + initsSize +
+                                            ") exceeds declared length of " +
+                                            "array (" +
+                                            arraySize + ")");
                         }
                         inits.forEach(i -> convertCompoundInitializerToStaticInitList(i, inner, acc));
-                        if (declaredLength < initsSize) {
-                            throw new Err("Length of initializer (" + initsSize + ") exceeds declared length of array (" + arraySize + ")");
+                        if (arraySize != null && declaredLength < initsSize) {
+                            throw new Err(
+                                    "Length of initializer (" + initsSize +
+                                            ") exceeds declared length of " +
+                                            "array (" +
+                                            arraySize + ")");
                         }
-                        if (declaredLength > initsSize) {
+                        if (arraySize != null && declaredLength > initsSize) {
                             acc.add(createZeroInit(new Array(inner,
-                                    new ULongInit(declaredLength - initsSize))));
+                                    new ULongInit(
+                                    declaredLength - initsSize))));
                         }
+                        return arraySize ==
+                                null ? new IntInit(initsSize) : arraySize;
                     }
 
                     case Pointer _, NullptrT _, FunType _, Primitive _ ->
@@ -428,19 +440,35 @@ public class SemanticAnalysis {
                         throw new Err("Can't initialize structure with a " +
                                 "scalar");
                     }
-                    Constant v = switch (exp) {
-                        case ConstantExp cExp ->{
-                            throw new Err("Non constant initializer");
-                        }
-                        case Constant cc -> convertConst(cc, targetType);
-
-                        default -> throw new Err("Non constant initializer");
+                    StaticInit v = switch (exp) {
+                        case Constant cc -> (StaticInit)convertConst(cc, targetType);
+                        default -> convertToStaticInit(exp);
                     };
-                    acc.add((StaticInit)v);
+                    acc.add(v);
                 }
             }
         }
         return null;
+    }
+
+    private static StaticInit convertToStaticInit(Exp exp) {
+        if (exp instanceof AddrOf(Exp inner, Type _)) {
+            if (inner instanceof Subscript(Var e1, Exp e2, Type _) && evaluateExpAsConstant(e2) instanceof Constant c) {
+                return new PointerInit(e1.name(),
+                        c.toLong());
+            }
+            if (inner instanceof Subscript(Exp e2, Var e1, Type _)&& evaluateExpAsConstant(e2) instanceof Constant c) {
+                return new PointerInit(e1.name(),
+                        c.toLong());
+
+            } else if (inner instanceof Var v) {
+                return new PointerInit(v.name());
+            }
+        } else {
+            throw new IllegalStateException("Unexpected value: " + exp);
+        }
+        throw new Err("Non constant initializer");
+
     }
 
     static Map<String, String> STRING_TABLE = new HashMap<>();
@@ -1148,14 +1176,21 @@ public class SemanticAnalysis {
         };
     }
 
-    public static Constant evaluateConstantExp(ConstantExp c) {
+    public static Constant evaluateConstantExp(Constant c) {
+        if (c instanceof ConstantExp(Exp exp)) {
+            return evaluateExpAsConstant(exp);
+        }
+        return c;
+    }
+
+    private static Constant evaluateExpAsConstant(Exp exp) {
         List<InstructionIr> irs = new ArrayList<>();
-        var typeCheckedSize = typeCheckExpression(c.exp());
+        var typeCheckedSize = typeCheckExpression(exp);
         var r = new Return(typeCheckedSize);
         IrGen.compileStatement(r, irs);
         irs = optimizeInstructions(EnumSet.allOf(Optimization.class), irs);
-        if (irs.size() == 1 && irs.getFirst() instanceof ReturnIr(
-                Constant val)) {
+        if (irs.size() == 1 &&
+                irs.getFirst() instanceof ReturnIr(Constant val)) {
             return val;
         }
         return null;
