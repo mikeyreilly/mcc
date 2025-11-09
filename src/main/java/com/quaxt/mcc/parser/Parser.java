@@ -459,64 +459,94 @@ public class Parser {
 
         Token token = tokens.getFirst();
         Token tokenType = token.type();
-        if (RETURN == token.type()) {
-            tokens.removeFirst();
-            if (tokens.getFirst() == SEMICOLON) return new Return(null);
-            Exp exp = parseExp(tokens, 0, true, typeAliases);
-            expect(SEMICOLON, tokens);
-            return new Return(exp);
-        } else if (token == SEMICOLON) {
-            tokens.removeFirst();
-            return NULL_STATEMENT;
-        } else if (token == IF) {
-            tokens.removeFirst();
-            expect(OPEN_PAREN, tokens);
-            Exp condition = parseExp(tokens, 0, true, typeAliases);
-            expect(CLOSE_PAREN, tokens);
-            Statement ifTrue = parseStatement(tokens, labels, enclosingSwitch
-                    , typeAliases);
-            Statement ifFalse = switch (tokens.getFirst()) {
-                case ELSE -> {
-                    tokens.removeFirst();
-                    yield parseStatement(tokens, labels, enclosingSwitch,
-                            typeAliases);
-                }
-                default -> null;
-            };
-            return new If(condition, ifTrue, ifFalse);
+        switch (token) {
+            case TokenType.RETURN -> {
+                tokens.removeFirst();
+                if (tokens.getFirst() == SEMICOLON) return new Return(null);
+                Exp exp = parseExp(tokens, 0, true, typeAliases);
+                expect(SEMICOLON, tokens);
+                return new Return(exp);
+            }
+            case TokenType.SEMICOLON -> {
+                tokens.removeFirst();
+                return NULL_STATEMENT;
+            }
+            case TokenType.IF -> {
+                tokens.removeFirst();
+                expect(OPEN_PAREN, tokens);
+                Exp condition = parseExp(tokens, 0, true, typeAliases);
+                expect(CLOSE_PAREN, tokens);
+                Statement ifTrue =
+                        parseStatement(tokens, labels, enclosingSwitch, typeAliases);
+                Statement ifFalse = switch (tokens.getFirst()) {
+                    case ELSE -> {
+                        tokens.removeFirst();
+                        yield parseStatement(tokens, labels, enclosingSwitch, typeAliases);
+                    }
+                    default -> null;
+                };
+                return new If(condition, ifTrue, ifFalse);
+            }
+            case TokenType.OPEN_BRACE -> {
+                return parseBlock(tokens, labels, enclosingSwitch, typeAliases);
+            }
+            case TokenType.WHILE -> {
+                return parseWhile(tokens, labels, enclosingSwitch, typeAliases);
+            }
+            case TokenType.DO -> {
+                return parseDoWhile(tokens, labels, enclosingSwitch, typeAliases);
+            }
+            case TokenType.FOR -> {
+                tokens.removeFirst();
+                return parseFor(tokens, labels, enclosingSwitch, typeAliases);
+            }
+            case TokenType.SWITCH -> {
+                tokens.removeFirst();
+                return parseSwitch(tokens, labels, typeAliases);
+            }
+            case TokenType.BUILTIN_C23_VA_START -> {
+                tokens.removeFirst();
+                return parseBuiltinC23VaStart(tokens, labels, typeAliases);
+            }
+            case TokenType.BUILTIN_VA_END -> {
+                tokens.removeFirst();
+                return parseBuiltinVaEnd(tokens, labels, typeAliases);
+            }
+            case TokenType.BREAK -> {
+                tokens.removeFirst();
+                expect(SEMICOLON, tokens);
+                return new Break();
+            }
+            case TokenType.CONTINUE -> {
+                tokens.removeFirst();
+                expect(SEMICOLON, tokens);
+                return new Continue();
+            }
+            case TokenType.GOTO -> {
+                tokens.removeFirst();
+                var label = expectIdentifier(tokens);
+                expect(SEMICOLON, tokens);
+                return new Goto(label);
+            }
+             case TokenType.CASE -> {
+                tokens.removeFirst(); // CASE
+                Constant<?> c = parseConstExp(tokens, typeAliases);
+                expect(COLON, tokens);
+                return new CaseStatement(enclosingSwitch, c,
+                        parseStatement(tokens, labels, enclosingSwitch,
+                                typeAliases));
+            }
+            case TokenType.DEFAULT -> {
+                tokens.removeFirst(); // CASE
+                expect(COLON, tokens);
+                return new CaseStatement(enclosingSwitch, null,
+                        parseStatement(tokens, labels, enclosingSwitch,
+                                typeAliases));
+            }
+            default -> {}
+        }
 
-        } else if (token == OPEN_BRACE) {
-            return parseBlock(tokens, labels, enclosingSwitch, typeAliases);
-        } else if (token == WHILE) {
-            return parseWhile(tokens, labels, enclosingSwitch, typeAliases);
-        } else if (token == DO) {
-            return parseDoWhile(tokens, labels, enclosingSwitch, typeAliases);
-        } else if (token == FOR) {
-            tokens.removeFirst();
-            return parseFor(tokens, labels, enclosingSwitch, typeAliases);
-        } else if (token == SWITCH) {
-            tokens.removeFirst();
-            return parseSwitch(tokens, labels, typeAliases);
-        } else if (token == BUILTIN_C23_VA_START) {
-            tokens.removeFirst();
-            return parseBuiltinC23VaStart(tokens, labels, typeAliases);
-        } else if (token == BUILTIN_VA_END) {
-            tokens.removeFirst();
-            return parseBuiltinVaEnd(tokens, labels, typeAliases);
-        } else if (token == BREAK) {
-            tokens.removeFirst();
-            expect(SEMICOLON, tokens);
-            return new Break();
-        } else if (token == CONTINUE) {
-            tokens.removeFirst();
-            expect(SEMICOLON, tokens);
-            return new Continue();
-        } else if (token == GOTO) {
-            tokens.removeFirst();
-            var label = expectIdentifier(tokens);
-            expect(SEMICOLON, tokens);
-            return new Goto(label);
-        } else if (tokenType == IDENTIFIER && tokens.get(1) == COLON) {
+        if (tokenType == IDENTIFIER && tokens.get(1) == COLON) {
             tokens.removeFirst(); // LABEL
             tokens.removeFirst(); // has to be COLON because of how LABEL
             // regex is defined
@@ -529,19 +559,6 @@ public class Parser {
             labels.add(label);
             return new LabelledStatement(".L" + label, parseStatement(tokens,
                     labels, enclosingSwitch, typeAliases));
-        } else if (tokenType == CASE) {
-            tokens.removeFirst(); // CASE
-            Constant<?> c = parseConstExp(tokens, typeAliases);
-            expect(COLON, tokens);
-            return new CaseStatement(enclosingSwitch, c,
-                    parseStatement(tokens, labels, enclosingSwitch,
-                            typeAliases));
-        } else if (tokenType == DEFAULT) {
-            tokens.removeFirst(); // CASE
-            expect(COLON, tokens);
-            return new CaseStatement(enclosingSwitch, null,
-                    parseStatement(tokens, labels, enclosingSwitch,
-                            typeAliases));
         }
         Exp exp = parseExp(tokens, 0, true, typeAliases);
         if (tokens.getFirst() == OPEN_PAREN) {
@@ -1367,9 +1384,16 @@ public class Parser {
 
     private static Exp parsePostfixExp(TokenList tokens,
                                        ArrayList<Map<String, Type>> typeAliases) {
-        // <postfix-exp> ::= <primary-exp> { "[" <exp> "]" }
-        //                 | <primary-exp> { "." <identifier>  }
-        //                 | <primary-exp>  { "->" <identifier>  }
+        // postfix-expression:
+        //                    primary-expression
+        //                    postfix-expression [ expression ]
+        //                    postfix-expression ( argument-expression-listopt )
+        //                    postfix-expression . identifier
+        //                    postfix-expression -> identifier
+        //                    postfix-expression ++
+        //                    postfix-expression --
+        //                    compound-literal
+
         Exp exp = parsePrimaryExp(tokens, typeAliases);
         outer:
         while (true) {
@@ -1379,6 +1403,9 @@ public class Parser {
                     Exp subscript = parseExp(tokens, 0, true, typeAliases);
                     expect(CLOSE_BRACKET, tokens);
                     exp = new Subscript(exp, subscript, null);
+                    break;
+                case OPEN_PAREN:
+                    exp = parseFunctionCallArgs(exp, tokens, typeAliases);
                     break;
                 case DOT:
                     tokens.removeFirst();

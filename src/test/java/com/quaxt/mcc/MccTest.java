@@ -256,6 +256,12 @@ class MccTest {
         outputs("array_init2","BBB\n");
     }
 
+    @Test
+    void funcall_cast_to_void() throws Exception {
+        outputs("funcall_cast_to_void","hello\n");
+    }
+
+
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {
