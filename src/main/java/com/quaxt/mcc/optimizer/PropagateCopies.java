@@ -1,6 +1,7 @@
 package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
@@ -65,6 +66,8 @@ public class PropagateCopies {
                                 new Load(replaceOperand(ptr, reachingCopies), dst);
                         case Store(ValIr v, VarIr dst) ->
                                 new Store(replaceOperand(v, reachingCopies), dst);
+                        case AtomicStore(ValIr v, VarIr dst, MemoryOrder memOrder) ->
+                                new AtomicStore(replaceOperand(v, reachingCopies), dst, memOrder);
                         case GetAddress _, LabelIr _, Jump _, BuiltinC23VaStartIr _ -> instr;
                         case Ignore.IGNORE -> instr;
 
@@ -152,6 +155,8 @@ public class PropagateCopies {
                 case FunCall(String _, ArrayList<ValIr> _, boolean _, boolean _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()) || ((copy.src().equals(dst) || copy.dst().equals(dst))));
                 case Store(ValIr _, ValIr _) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()));
+                case AtomicStore(ValIr _, ValIr _, MemoryOrder _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()));
                 case UnaryIr(UnaryOperator _, ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));

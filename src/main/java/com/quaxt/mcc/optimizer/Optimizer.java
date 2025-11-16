@@ -4,6 +4,7 @@ import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.JmpCC;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
+import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
@@ -164,6 +165,11 @@ public class Optimizer {
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
                 case Store(ValIr v1, VarIr dst) -> {
+                    if (v1 instanceof VarIr var1 && var1.isStatic())
+                        aliasedVars.add(var1);
+                    if (dst.isStatic()) aliasedVars.add(dst);
+                }
+                case AtomicStore(ValIr v1, VarIr dst, MemoryOrder _) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);

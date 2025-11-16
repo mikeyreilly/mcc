@@ -1,6 +1,7 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.StorageClass;
@@ -84,7 +85,7 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-                RegisterAllocator.allocateRegisters(functionAsm);
+              //  RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
                 fixUpInstructions(offset, functionAsm);
@@ -149,6 +150,9 @@ public class Codegen {
                         oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
                         new Mov(typeAsm, dePseudo(src, varTable, offset),
+                                dePseudo(dst, varTable, offset));
+                case Xchg(TypeAsm typeAsm, Operand src, Operand dst) ->
+                        new Xchg(typeAsm, dePseudo(src, varTable, offset),
                                 dePseudo(dst, varTable, offset));
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
                            Operand operand) ->
@@ -1126,10 +1130,22 @@ public class Codegen {
                         Operand dst = new Memory(AX, 0);
                         copyBytes(ins, src, dst, size);
                     } else {
-                        ins.add(new Comment("store: " + src));
                         ins.add(new Mov(srcType, src, new Memory(AX, 0)));
                     }
                 }
+            case AtomicStore(ValIr srcV, ValIr ptrV, MemoryOrder memOrder) -> {
+                Operand src = toOperand(srcV);
+                Operand ptr = toOperand(ptrV);
+                ins.add(new Mov(QUADWORD, ptr, AX));
+                TypeAsm srcType = toTypeAsm(valToType(srcV));
+                switch (memOrder) {
+                    case ACQ_REL, SEQ_CST -> {
+                        ins.add(new Xchg(srcType, src, DX));
+                        ins.add(new Xchg(srcType, new Memory(AX, 0), DX));
+                    }
+                    default -> ins.add(new Mov(srcType, src, new Memory(AX, 0)));
+                }
+            }
                 case TruncateIr(ValIr srcV, VarIr dstV) -> {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);

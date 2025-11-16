@@ -100,7 +100,7 @@ public class Mcc {
         return switch (type) {
 
             case Array(Type element, Constant arraySize) -> arraySize == null ? 0L: // arraySize will be null for
-                size(element) * arraySize.toLong();
+                    size(element) * arraySize.toLong();
             case FunType _ -> 0;
             case Pointer _, NullptrT _ -> 8;
 
@@ -332,12 +332,13 @@ public class Mcc {
 
                 """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null,
                 null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null);
-        BUILTIN_VA_LIST = Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
+        BUILTIN_VA_LIST =
+                (Array) Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
         ArrayList<Declaration> declarations = new ArrayList<>();
 
         return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations);
     }
-    public static Type BUILTIN_VA_LIST = null;
+    public static Array BUILTIN_VA_LIST = null;
     private static int mccHelper(String cSource, Mode mode,
                                  EnumSet<Optimization> optimizations,
                                  Path srcFile, String bareFileName,

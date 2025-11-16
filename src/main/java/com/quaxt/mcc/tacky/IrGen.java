@@ -2,6 +2,7 @@ package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.Todo;
+import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.parser.StructOrUnionSpecifier;
 import com.quaxt.mcc.semantic.*;
@@ -745,6 +746,24 @@ public class IrGen {
                 VarIr dst = makeTemporary("tmp.", type);
                 instructions.add(new BuiltinVaArgIr(src, dst, type));
                 return new PlainOperand(dst);
+            }
+            case BuiltInFunctionCall(BuiltInFunction name, List<Exp> args,
+                                     Type type): {
+                switch (name) {
+                    case ATOMIC_STORE_N -> {
+                        ExpResult o = emitTacky(args.get(0), instructions);
+                        if (o instanceof PlainOperand(VarIr ptr)){
+                            ValIr val = emitTackyAndConvert(args.get(1), instructions);
+                            ValIr memOrder = emitTackyAndConvert(args.get(2), instructions);
+                            instructions.add(new AtomicStore(val, ptr, MemoryOrder.from(memOrder)));
+                            return null;
+                        } else throw new Todo();
+                    }
+                    case ATOMIC_LOAD_N -> {
+                        ValIr result = emitTackyAndConvert(args.get(0), instructions);
+                        return new DereferencedPointer((VarIr) result);
+                    }
+                }
             }
 
             default:

@@ -1565,7 +1565,7 @@ public class Parser {
                         tokens.removeFirst();
 
                         Var id = new Var(value, null);
-                        FunctionCall id1 =
+                        Exp id1 =
                                 parseFunctionCallArgs(id, tokens, typeAliases);
                         if (id1 != null) yield id1;
                         yield id;
@@ -1599,14 +1599,14 @@ public class Parser {
         };
     }
 
-    private static FunctionCall parseFunctionCallArgs(Exp id, TokenList tokens,
+    private static Exp parseFunctionCallArgs(Exp id, TokenList tokens,
                                                 ArrayList<Map<String, Type>> typeAliases) {
         if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
             tokens.removeFirst();
             Token current = tokens.getFirst();
             if (current == CLOSE_PAREN) {
                 tokens.removeFirst();
-                return new FunctionCall(id, Collections.emptyList(), false, null);
+                return newFunctionCall(id, Collections.emptyList(), false, null);
             }
             List<Exp> args = new ArrayList<>();
 
@@ -1626,10 +1626,23 @@ public class Parser {
                             "unexpected token while parsing " + "function call: " + current);
 
             }
-            return new FunctionCall(id, args, false, null);
+            return newFunctionCall(id, args, false, null);
 
         }
         return null;
+    }
+
+    private static Exp newFunctionCall(Exp name,
+                                    List<Exp> args,
+                                    boolean varargs,
+                                    Type type) {
+        if (name instanceof Var v) {
+            BuiltInFunction b = BuiltInFunction.fromIdentifier(v.name());
+            if (b!=null){
+                return new BuiltInFunctionCall(b, args, type);
+            }
+        }
+        return new FunctionCall(name, args, varargs, type);
     }
 
     private static String parseStr(TokenList tokens) {

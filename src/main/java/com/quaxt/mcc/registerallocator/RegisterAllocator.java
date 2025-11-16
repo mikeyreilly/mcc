@@ -64,6 +64,13 @@ public class RegisterAllocator {
                         instructions.set(copyTo++, new Mov(type, src, dst));
                     }
                 }
+                case Xchg(TypeAsm type, Operand src, Operand dst) -> {
+                    src = find(src, coalescedRegs);
+                    dst = find(dst, coalescedRegs);
+                    if (!src.equals(dst)) {
+                        instructions.set(copyTo++, new Xchg(type, src, dst));
+                    }
+                }
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _, Call _,
                      Comment _ -> instructions.set(copyTo++, oldInst);
                 case CallIndirect(Operand operand) -> {
@@ -477,6 +484,10 @@ public class RegisterAllocator {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, src, dst);
                 }
+                case Xchg(TypeAsm type, Operand src, Operand dst) -> {
+                    incrementSpillCost(interferenceGraph,
+                            interferenceGraphMmx, src, dst);
+                }
                 case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
                                    Operand src, Operand dst) -> {
                     incrementSpillCost(interferenceGraph,
@@ -694,6 +705,10 @@ public class RegisterAllocator {
                     maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
                 }
                 case Mov(TypeAsm _, Operand src, Operand dst) -> {
+                    maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);
+                    maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
+                }
+                case Xchg(TypeAsm _, Operand src, Operand dst) -> {
                     maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);
                     maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
                 }

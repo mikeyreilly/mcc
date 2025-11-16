@@ -2,6 +2,7 @@ package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.*;
+import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
@@ -143,6 +144,14 @@ See p. 606 */
                     currentLiveVars.addAll(aliasedVars);
                 }
                 case Store(ValIr src, ValIr dst) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                    if (dst instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case AtomicStore(ValIr src, ValIr dst, MemoryOrder _) -> {
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
                     }
@@ -442,6 +451,13 @@ See p. 606 */
                 return new Pair<>(used, Set.of(dst));
             }
             case Mov(TypeAsm type, Operand src, Operand dst) -> {
+                Set<Operand> used = new HashSet<>();
+                used.add(src);
+                addMemoryAndIndexedRegsToUsed(src, used);
+                addMemoryAndIndexedRegsToUsed(dst, used);
+                return new Pair<>(used, Set.of(dst));
+            }
+            case Xchg(TypeAsm type, Operand src, Operand dst) -> {
                 Set<Operand> used = new HashSet<>();
                 used.add(src);
                 addMemoryAndIndexedRegsToUsed(src, used);

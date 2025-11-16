@@ -882,7 +882,7 @@ public class SemanticAnalysis {
     private static Var requireVaList(Var ap) {
         Var typedAp = (Var) typeCheckExpression(ap);
         var t = typedAp.type();
-        if (!t.equals(BUILTIN_VA_LIST)) {
+        if (!t.equals(BUILTIN_VA_LIST) && !(t instanceof Pointer(Type referenced) && referenced.equals(BUILTIN_VA_LIST.element()))) {
             throw new Err(ap + " is of type " + t + " but va_list is required");
         }
         return typedAp;
@@ -1441,6 +1441,17 @@ public class SemanticAnalysis {
                             fail("variable " + name + " used as " +
                                     "function");
                 };
+            }
+            case BuiltInFunctionCall(BuiltInFunction name, List<Exp> args, Type _) -> {
+                int paramsSize = name.paramsSize();
+                if (paramsSize != args.size())
+                    fail("Function called with wrong number of " + "arguments");
+                for (int i = 0; i < args.size(); i++) {
+                    Exp arg = args.get(i);
+                    args.set(i, typeCheckAndConvert(arg));
+                }
+                Type r = name.determineReturnType(args);
+                yield  new BuiltInFunctionCall(name, args, r);
             }
             case Var(String name, Type _) -> {
                 var e = SYMBOL_TABLE.get(name);
@@ -2150,6 +2161,10 @@ public class SemanticAnalysis {
             case FunctionCall(Exp name, List<Exp> args, boolean varargs,
                               Type type) ->
                             new FunctionCall(resolveExp(name, identifierMap, structureMap, enclosingFunction), resolveArgs(identifierMap, structureMap, args, enclosingFunction), varargs, type);
+            case BuiltInFunctionCall(BuiltInFunction name, List<Exp> args,
+                                     Type type) ->
+                    new BuiltInFunctionCall(name,
+                            resolveArgs(identifierMap, structureMap, args, enclosingFunction), type);
             case Cast(Type type, Exp e) -> {
                 Type resolvedType = resolveType(type, identifierMap, structureMap, enclosingFunction);
                 yield new Cast(resolvedType, resolveExp(e, identifierMap,

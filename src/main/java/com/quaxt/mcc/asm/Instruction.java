@@ -24,6 +24,7 @@ public sealed interface Instruction extends AbstractInstruction permits Binary,
         SetCC,
         Test,
         Unary,
+        Xchg,
         Jump,
         LabelIr {
     default String format(TypeAsm t) {

@@ -253,6 +253,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Mov(TypeAsm t, Operand src, Operand dst) ->
                     instruction.format(t) + formatOperand(t, instruction,
                             src) + ", " + formatOperand(t, instruction, dst);
+            case Xchg(TypeAsm t, Operand src, Operand dst) ->
+                    instruction.format(t) + formatOperand(t, instruction,
+                            src) + ", " + formatOperand(t, instruction, dst);
             case Lea(Operand src, Operand dst) ->
                     "leaq\t" + formatOperand(QUADWORD, instruction, src) + ","
                             + " " + formatOperand(QUADWORD, instruction, dst);

@@ -119,15 +119,27 @@ class MccTest {
                 Mcc.startProcess("src/test/resources/" + testProgram));
     }
     private static void outputs(String testProgram,
-                                String expectedOutput) throws Exception {
-        assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c", "--optimize"));
-        assertEquals(expectedOutput,
-                startProcessAndCaptureOutput("src/test/resources/" + testProgram));
+                                String expectedOutput,
+                                boolean optimize) throws Exception {
+        if (optimize) {
+            assertEquals(0, Mcc.mcc(
+                    "src/test/resources/" + testProgram + ".c", "--optimize"));
+        } else {
+            assertEquals(0, Mcc.mcc(
+                    "src/test/resources/" + testProgram + ".c"));
+        }
+        assertEquals(expectedOutput, startProcessAndCaptureOutput(
+                "src/test/resources/" + testProgram));
     }
 
     @Test
     void uses_func()  throws Exception {
         outputs("uses_func", "main\n");
+    }
+
+    private void outputs(String testProgram,
+                         String expectedOutput) throws Exception {
+        outputs(testProgram,expectedOutput,true);
     }
 
     @Test
@@ -287,4 +299,11 @@ class MccTest {
     void array_size_expression() throws Exception {
         outputs("array_size_expression", "abcdefg\n");
     }
+
+    @Test
+    void atomic() throws Exception {
+        outputs("atomic", "x = 27, y = 27\n", false);
+    }
+
+
 }
