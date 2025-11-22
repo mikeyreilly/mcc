@@ -1185,11 +1185,16 @@ public class SemanticAnalysis {
         };
     }
 
-
+/**6.5.2.2/6 Function calls*
+ * The integer promotions are performed on each trailing argument,
+ * and trailing arguments that have type float are promoted to double. These are called the default
+ * argument promotions. No other conversions are performed implicitly.
+ */
     public static Exp typeCheckAndConvertWithDefaultArgumentPromotion(Exp exp) {
-        var typedE = typeCheckExpression(exp);
+        var typedE = typeCheckAndConvert(exp);
         return switch(typedE.type()){
             case BOOL, SCHAR, CHAR, UCHAR, SHORT, USHORT -> convertByAssignment(typedE, INT);
+            case FLOAT -> convertByAssignment(typedE, DOUBLE);
             default -> typedE;
         };
     }
