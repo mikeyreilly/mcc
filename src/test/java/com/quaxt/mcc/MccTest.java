@@ -307,7 +307,7 @@ class MccTest {
 
     @Test
     void bool() throws Exception {
-        outputs("bool", "true=1\n" + "false=0\n" + "sizeof(bool)=1\n", false);
+        outputs("bool", "true=1\n" + "false=0\n" + "sizeof(bool)=1\ncast=1\n");
     }
 
 

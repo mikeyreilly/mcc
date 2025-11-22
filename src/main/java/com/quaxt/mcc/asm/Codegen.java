@@ -1150,7 +1150,15 @@ public class Codegen {
                 case TruncateIr(ValIr srcV, VarIr dstV) -> {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);
-                    ins.add(new Mov(toTypeAsm(valToType(dstV)), src, dst));
+                    Type dstType = valToType(dstV);
+                    if (dstType == Primitive.BOOL){
+                        TypeAsm srcAsmType = toTypeAsm(valToType(srcV));
+                        ins.add(new Cmp(srcAsmType, new Imm(0), src));
+                        ins.add(new SetCC(NOT_EQUALS, true, dst));
+                    }else {
+                        TypeAsm targetType = toTypeAsm(dstType);
+                        ins.add(new Mov(targetType, src, dst));
+                    }
                 }
                 case UIntToDouble(ValIr srcV, ValIr dstV) -> {
                     var src = toOperand(srcV);

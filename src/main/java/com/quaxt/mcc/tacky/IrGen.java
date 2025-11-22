@@ -773,6 +773,9 @@ public class IrGen {
 
     private static void emitCast(List<InstructionIr> instructions, Type to,
                                  Type innerType, ValIr src, VarIr dst) {
+        if (to==BOOL){
+
+        }
         if (to == DOUBLE || to == FLOAT) {
             instructions.add(innerType.isSigned() ?
                     new IntToDouble(src, dst) : new UIntToDouble(src, dst));

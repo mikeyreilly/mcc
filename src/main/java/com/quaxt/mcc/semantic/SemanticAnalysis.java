@@ -1185,6 +1185,15 @@ public class SemanticAnalysis {
         };
     }
 
+
+    public static Exp typeCheckAndConvertWithDefaultArgumentPromotion(Exp exp) {
+        var typedE = typeCheckExpression(exp);
+        return switch(typedE.type()){
+            case BOOL, SCHAR, CHAR, UCHAR, SHORT, USHORT -> convertByAssignment(typedE, INT);
+            default -> typedE;
+        };
+    }
+
     public static Constant evaluateConstantExp(Constant c) {
         if (c instanceof ConstantExp(Exp exp)) {
             return evaluateExpAsConstant(exp);
@@ -1435,7 +1444,7 @@ public class SemanticAnalysis {
                                 Exp typedArg = typeCheckAndConvert(arg);
                                 args.set(i, convertByAssignment(typedArg, paramType));
                             } else
-                                args.set(i, typeCheckAndConvert(arg));
+                                args.set(i, typeCheckAndConvertWithDefaultArgumentPromotion(arg));
                         }
                         yield new FunctionCall(typeCheckExpression(name), args, varargs, ret);
                     }
