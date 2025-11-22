@@ -85,7 +85,7 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-              //  RegisterAllocator.allocateRegisters(functionAsm);
+                RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
                 fixUpInstructions(offset, functionAsm);
@@ -439,7 +439,7 @@ public class Codegen {
 
     private static TypeAsm toTypeAsm(Type type) {
         return switch (type) {
-            case Primitive.CHAR, UCHAR, Primitive.SCHAR -> BYTE;
+            case Primitive.CHAR, UCHAR, Primitive.SCHAR, Primitive.BOOL -> BYTE;
             case Primitive.SHORT, Primitive.USHORT -> WORD;
             case Primitive.INT, Primitive.UINT -> LONGWORD;
             case Primitive.LONG, Primitive.ULONG -> QUADWORD;
@@ -476,6 +476,7 @@ public class Codegen {
         return switch (val) {
             case CharInit(byte i) -> new Imm(i);
             case UCharInit(byte i) -> new Imm(i & 0xff);
+            case BoolInit(byte i) -> new Imm(i & 0xff);
             case ShortInit(short i) -> new Imm(i);
             case UShortInit(short i) -> new Imm(i & 0xffff);
             case IntInit(int i) -> new Imm(i);

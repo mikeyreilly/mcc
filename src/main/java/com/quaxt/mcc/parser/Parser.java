@@ -119,6 +119,7 @@ public class Parser {
         switch (tokens.getFirst()) {
             case VOID -> ts = PrimitiveTypeSpecifier.VOID;
             case FLOAT -> ts =PrimitiveTypeSpecifier.FLOAT;
+            case BOOL -> ts = PrimitiveTypeSpecifier.BOOL;
             case CHAR -> ts = PrimitiveTypeSpecifier.CHAR;
             case SHORT -> ts = PrimitiveTypeSpecifier.SHORT;
             case INT -> ts = PrimitiveTypeSpecifier.INT;
@@ -1085,11 +1086,18 @@ public class Parser {
                             type = Primitive.DOUBLE;
                         }
                         case FLOAT -> {
-                            if (type!=null|signedness!=0) {
+                            if (type != null | signedness!=0) {
                                 fail("can't combine float with other type specifiers");
                             }
                             type=Primitive.DOUBLE;
                             foundSolo=true;
+                        }
+                        case BOOL -> {
+                            if (type != null | signedness!=0) {
+                                fail("can't combine float with other type specifiers");
+                            }
+                            type = Primitive.BOOL;
+                            foundSolo = true;
                         }
                         case INT -> {
                             if (intCount != 0 || type == Primitive.CHAR ||
@@ -1192,10 +1200,10 @@ public class Parser {
         }
         Token first = tokens.get(start);
 
-        if (CHAR == first || INT == first || SHORT == first || LONG == first ||
+        if (BOOL == first || CHAR == first || INT == first || SHORT == first || LONG == first ||
                 UNSIGNED == first || SIGNED == first || DOUBLE == first ||
                 FLOAT == first || VOID == first || STRUCT == first ||
-                UNION == first || ENUM == first || TYPEOF==first) return true;
+                UNION == first || ENUM == first || TYPEOF == first) return true;
         return typeAliases != null &&
                 first instanceof TokenWithValue(Token type, String name) &&
                 type == IDENTIFIER && findTypeByName(typeAliases, name) != null;
@@ -1437,6 +1445,13 @@ public class Parser {
     private static Constant parseConst(TokenList tokens,
                                        boolean throwIfNotFound) {
         Token token = tokens.getFirst();
+        if (token == TRUE) {
+            tokens.removeFirst();
+            return BoolInit.TRUE;
+        } else if (token == FALSE) {
+            tokens.removeFirst();
+            return BoolInit.FALSE;
+        }
         if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
             tokens.removeFirst();
@@ -1553,6 +1568,7 @@ public class Parser {
                             "’ in something not a structure or union", tokens);
                 }
             }
+            case TRUE, FALSE -> parseConst(tokens, true);
             case TokenWithValue(Token tokenType, String value) -> {
 
                 yield switch (tokenType) {

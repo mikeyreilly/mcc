@@ -140,6 +140,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield sb;
             }
             case UCharInit(byte i) -> ".byte " + (i & 0xff);
+            case BoolInit(byte i) -> ".byte " + (i & 0xff);
         });
     }
 

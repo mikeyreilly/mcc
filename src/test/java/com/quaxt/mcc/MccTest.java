@@ -305,5 +305,10 @@ class MccTest {
         outputs("atomic", "x = 27, y = 27\n", false);
     }
 
+    @Test
+    void bool() throws Exception {
+        outputs("bool", "true=1\n" + "false=0\n" + "sizeof(bool)=1\n", false);
+    }
+
 
 }

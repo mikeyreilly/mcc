@@ -635,6 +635,7 @@ public class SemanticAnalysis {
             case IntInit(int i) -> i;
             case CharInit(byte i) -> i;
             case UCharInit(byte i) -> i & 0xff;
+            case BoolInit(byte i) -> i & 0xff;
             case ShortInit(short i) -> i;
             case UShortInit(short i) -> i & 0xffff;
             case LongInit(long l) -> l;
@@ -652,6 +653,7 @@ public class SemanticAnalysis {
             }
             case LONG -> new LongInit(initL);
             case INT -> new IntInit((int) initL);
+            case BOOL -> new BoolInit(initL==0?(byte)0:(byte)1);
             case ULONG -> new ULongInit(initL);
             case UINT -> new UIntInit((int) initL);
             case CHAR, SCHAR -> new CharInit((byte) initL);
@@ -1445,7 +1447,7 @@ public class SemanticAnalysis {
             case BuiltInFunctionCall(BuiltInFunction name, List<Exp> args, Type _) -> {
                 int paramsSize = name.paramsSize();
                 if (paramsSize != args.size())
-                    fail("Function called with wrong number of " + "arguments");
+                    fail("Function called with wrong number of arguments");
                 for (int i = 0; i < args.size(); i++) {
                     Exp arg = args.get(i);
                     args.set(i, typeCheckAndConvert(arg));

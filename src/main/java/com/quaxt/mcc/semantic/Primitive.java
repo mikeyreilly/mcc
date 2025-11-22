@@ -9,7 +9,8 @@ public enum Primitive implements Type {
     CHAR(new CharInit((byte) 0)), UCHAR(new UCharInit((byte) 0)),
     SCHAR(new CharInit((byte) 0)), INT(IntInit.ZERO), UINT(new UIntInit(0)),
     SHORT(new ShortInit((short)0)), USHORT(new UShortInit((short)0)), LONG(new LongInit(0)),
-    ULONG(new ULongInit(0)), DOUBLE(new DoubleInit(0)), FLOAT(new DoubleInit(0)), VOID(new UIntInit(0));
+    ULONG(new ULongInit(0)), DOUBLE(new DoubleInit(0)), FLOAT(new DoubleInit(0)), VOID(new UIntInit(0)),
+    BOOL(new BoolInit((byte)0));
 
     private final StaticInit zero;
     public Initializer zeroInitializer;

@@ -103,7 +103,7 @@ public class Mcc {
                     size(element) * arraySize.toLong();
             case FunType _ -> 0;
             case Pointer _, NullptrT _ -> 8;
-
+            case BOOL->1;
             case CHAR -> 1;
             case UCHAR -> 1;
             case SCHAR -> 1;
@@ -315,12 +315,6 @@ public class Mcc {
                 }
                 
                 void __sync_synchronize(void) {
-                }
-                void __atomic_store_n(int a, int b, int c) {
-                }
-                void __atomic_load_n(int a, int b, int c) {
-                }
-                void __builtin_add_overflow(int a, int b, int c) {
                 }
                 void __builtin_sub_overflow(int a, int b, int c) {
                 }

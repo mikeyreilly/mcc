@@ -116,6 +116,10 @@ public class Lexer {
                                 case "__asm__" -> ASM;
                                 case "__attribute__" -> GCC_ATTRIBUTE;
                                 case "break" -> BREAK;
+                                case "_Bool" -> BOOL;
+                                case "bool" -> BOOL;
+                                case "true" -> TRUE;
+                                case "false" -> FALSE;
                                 case "char" -> CHAR;
                                 case "continue" -> CONTINUE;
                                 case "do" -> DO;

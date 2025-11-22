@@ -22,6 +22,11 @@ public enum BuiltInFunction {
             }
             throw new Todo();
         }
+    },
+    BUILTIN_ADD_OVERFLOW("__builtin_add_overflow"){
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.VOID;
+        }
     };
 
     private final String identifier;
@@ -40,6 +45,7 @@ public enum BuiltInFunction {
     public abstract Type determineReturnType(List<Exp> args);
 
     public int paramsSize() {
-        return this == ATOMIC_STORE_N ? 3:2;
+        if (this == ATOMIC_STORE_N || this == BUILTIN_ADD_OVERFLOW) return 3;
+        return 2;
     }
 }
