@@ -25,7 +25,7 @@ public enum BuiltInFunction {
     },
     BUILTIN_ADD_OVERFLOW("__builtin_add_overflow"){
         public Type determineReturnType(List<Exp> args) {
-            return Primitive.VOID;
+            return Primitive.BOOL;
         }
     };
 

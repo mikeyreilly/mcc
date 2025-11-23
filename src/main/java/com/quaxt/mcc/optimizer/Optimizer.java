@@ -88,6 +88,16 @@ public class Optimizer {
                         aliasedVars.add(var2);
                     if (dstName.isStatic()) aliasedVars.add(dstName);
                 }
+                case BinaryWithOverflowIr(BinaryOperator _, ValIr v1, ValIr v2, ValIr result,
+                              VarIr overflow) -> {
+                    if (v1 instanceof VarIr var1 && var1.isStatic())
+                        aliasedVars.add(var1);
+                    if (v2 instanceof VarIr var2 && var2.isStatic())
+                        aliasedVars.add(var2);
+                    if (result instanceof VarIr var2 && var2.isStatic())
+                        aliasedVars.add(var2);
+                    if (overflow.isStatic()) aliasedVars.add(overflow);
+                }
                 case Copy(ValIr v1, VarIr dstName) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);

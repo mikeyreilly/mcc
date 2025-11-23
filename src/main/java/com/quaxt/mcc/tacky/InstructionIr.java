@@ -7,6 +7,7 @@ public sealed interface InstructionIr extends AbstractInstruction permits Ignore
         AddPtr,
         AtomicStore,
         BinaryIr,
+        BinaryWithOverflowIr,
         BuiltinC23VaStartIr,
         BuiltinVaArgIr,
         Compare,

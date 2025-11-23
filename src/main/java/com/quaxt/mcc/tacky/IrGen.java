@@ -378,20 +378,6 @@ public class IrGen {
                 return null;
             case Constant<?> c:
                 return new PlainOperand(c);
-//            case IntInit c:
-//                return new PlainOperand(c);
-//            case LongInit c:
-//                return new PlainOperand(c);
-//            case UIntInit c:
-//                return new PlainOperand(c);
-//            case ULongInit c:
-//                return new PlainOperand(c);
-//            case DoubleInit c:
-//                return new PlainOperand(c);
-//            case CharInit c:
-//                return new PlainOperand(c);
-//            case UCharInit c:
-//                return new PlainOperand(c);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
                 ValIr cond = emitTackyAndConvert(condition, instructions);
@@ -763,6 +749,20 @@ public class IrGen {
                         ValIr result = emitTackyAndConvert(args.get(0), instructions);
                         return new DereferencedPointer((VarIr) result);
                     }
+                    case BUILTIN_ADD_OVERFLOW -> {
+                        ValIr v1 =
+                                emitTackyAndConvert(args.get(0), instructions);
+                        ValIr v2 =
+                                emitTackyAndConvert(args.get(1), instructions);
+                        ValIr result =
+                                emitTackyAndConvert(args.get(2), instructions);
+                        VarIr overflow = makeTemporary("tmp.", expr.type());
+
+                        instructions.add(new BinaryWithOverflowIr(ADD, v1, v2
+                                , result, overflow));
+
+                        return new PlainOperand(overflow);
+                    }
                 }
             }
 
@@ -773,9 +773,6 @@ public class IrGen {
 
     private static void emitCast(List<InstructionIr> instructions, Type to,
                                  Type innerType, ValIr src, VarIr dst) {
-        if (to==BOOL){
-
-        }
         if (to == DOUBLE || to == FLOAT) {
             instructions.add(innerType.isSigned() ?
                     new IntToDouble(src, dst) : new UIntToDouble(src, dst));

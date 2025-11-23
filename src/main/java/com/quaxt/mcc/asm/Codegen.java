@@ -859,6 +859,21 @@ public class Codegen {
                         }
                     }
                 }
+
+                case BinaryWithOverflowIr(ArithmeticOperator op1, ValIr v1, ValIr v2, ValIr v3,
+                              VarIr dstName) -> {
+                    TypeAsm srcTypeAsm = toTypeAsm(valToType(v1));
+                    TypeAsm dstTypeAsm = toTypeAsm(valToType(dstName));
+
+                    ins.add(new Mov(srcTypeAsm, toOperand(v1),
+                            AX));
+                    ins.add(new Binary(convertOp(op1, srcTypeAsm),
+                            srcTypeAsm, toOperand(v2),
+                            AX));
+                    Operand dst = toOperand(dstName);
+                    ins.add(new Mov(dstTypeAsm, Imm.ZERO, dst));
+
+                }
                 case BinaryIr(ArithmeticOperator op1, ValIr v1, ValIr v2,
                               VarIr dstName) -> {
                     Type type = valToType(v1);

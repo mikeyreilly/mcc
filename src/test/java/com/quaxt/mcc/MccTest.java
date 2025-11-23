@@ -310,5 +310,16 @@ class MccTest {
         outputs("bool", "true=1\n" + "false=0\n" + "sizeof(bool)=1\ncast=1\n");
     }
 
+    @Test
+    void add_overflow() throws Exception {
+        outputs("add_overflow", "sum=3, overflow=0\n" +
+                "sum=-2147483648, overflow=1\n");
+
+    }
+
+    @Test
+    void add() throws Exception {
+        returns("add", 3);
+    }
 
 }

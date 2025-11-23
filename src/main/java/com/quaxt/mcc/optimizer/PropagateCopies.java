@@ -47,6 +47,14 @@ public class PropagateCopies {
                         case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
                                       VarIr dst) ->
                                 new BinaryIr(op, replaceOperand(v1, reachingCopies), replaceOperand(v2, reachingCopies), dst);
+                        case BinaryWithOverflowIr(ArithmeticOperator op, ValIr v1,
+                                                  ValIr v2, ValIr v3,
+                                                  VarIr dst) ->
+                                new BinaryWithOverflowIr(op,
+                                        replaceOperand(v1, reachingCopies),
+                                        replaceOperand(v2, reachingCopies),
+                                        replaceOperand(v3, reachingCopies),
+                                        dst);
                         case Compare(Type t, ValIr v1, ValIr v2) ->
                                 new Compare(t, replaceOperand(v1, reachingCopies), replaceOperand(v2, reachingCopies));
                         case ReturnIr(ValIr v) ->
@@ -161,6 +169,8 @@ public class PropagateCopies {
                 case UnaryIr(UnaryOperator _, ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case BinaryIr(BinaryOperator _, ValIr _, ValIr _, VarIr dst) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case BinaryWithOverflowIr(BinaryOperator _, ValIr _, ValIr _, ValIr _, VarIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case Load(ValIr _, VarIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));

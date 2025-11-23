@@ -117,6 +117,19 @@ See p. 606 */
                         currentLiveVars.add(v2);
                     }
                 }
+                case BinaryWithOverflowIr(BinaryOperator _, ValIr src1, ValIr src2, ValIr src3,
+                              VarIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src1 instanceof VarIr v1) {
+                        currentLiveVars.add(v1);
+                    }
+                    if (src2 instanceof VarIr v2) {
+                        currentLiveVars.add(v2);
+                    }
+                    if (src3 instanceof VarIr v3) {
+                        currentLiveVars.add(v3);
+                    }
+                }
                 case Compare(Type _, ValIr src1, ValIr src2) -> {
                     if (src1 instanceof VarIr v1) {
                         currentLiveVars.add(v1);
