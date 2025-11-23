@@ -1,13 +1,12 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.parser.Constant;
-import com.quaxt.mcc.parser.Var;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
+import java.util.Locale;
 
 import static com.quaxt.mcc.ArithmeticOperator.SUB;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
@@ -288,17 +287,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case SetCC(CmpOperator cmpOperator, boolean unsigned, Operand o) ->
                     "set" + (unsigned ? cmpOperator.unsignedCode :
                             cmpOperator.code) + "\t" + formatOperand(instruction, o);
-            case JmpCC(CmpOperator cmpOperator, boolean unsigned,
-                       String label) -> // cmpOperator = null is used for
-                // jump parity (ie. jump if last comparison was unordered) or
-                // jump not parity (unsigned true - parity, unsigned false
-                // -not parity). This violation of the principal of least
-                // astonishment
-                // is to spare me from adding a new CmpOperator just to deal
-                // with NaN
-                    "j" + (cmpOperator == null ? (unsigned ? "p" : "np") :
-                            unsigned ? cmpOperator.unsignedCode :
-                                    cmpOperator.code) + "\t" + label;
+            case JmpCC(CC cc,
+                       String label) ->
+                    "j" + cc.name().toLowerCase(Locale.ENGLISH) + "\t" +label;
             case Call(String functionName) ->
                     "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
                             functionName : functionName + "@PLT");

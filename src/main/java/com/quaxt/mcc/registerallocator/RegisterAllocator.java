@@ -9,7 +9,6 @@ import com.quaxt.mcc.tacky.*;
 
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.IntegerReg.*;
-import static com.quaxt.mcc.asm.PrimitiveTypeAsm.DOUBLE;
 import static com.quaxt.mcc.optimizer.LivenessAnalyzer.findUsedAndUpdated;
 import static com.quaxt.mcc.optimizer.Optimizer.makeCFG;
 

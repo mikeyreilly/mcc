@@ -6,7 +6,6 @@ import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.StorageClass;
 import com.quaxt.mcc.parser.Var;
-import com.quaxt.mcc.registerallocator.RegisterAllocator;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
@@ -20,6 +19,7 @@ import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
 import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.UnaryOperator.UNARY_SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
+import static com.quaxt.mcc.asm.JmpCC.newJmpCC;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 import static com.quaxt.mcc.asm.IntegerReg.*;
@@ -85,7 +85,7 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-                RegisterAllocator.allocateRegisters(functionAsm);
+             //   RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
                 fixUpInstructions(offset, functionAsm);
@@ -863,16 +863,26 @@ public class Codegen {
                 case BinaryWithOverflowIr(ArithmeticOperator op1, ValIr v1, ValIr v2, ValIr v3,
                               VarIr dstName) -> {
                     TypeAsm srcTypeAsm = toTypeAsm(valToType(v1));
-                    TypeAsm dstTypeAsm = toTypeAsm(valToType(dstName));
 
+                    // do the arithmatic in DX
                     ins.add(new Mov(srcTypeAsm, toOperand(v1),
-                            AX));
-                    ins.add(new Binary(convertOp(op1, srcTypeAsm),
+                            DX));
+                    ins.add(new Binary(
+                            convertOp(op1, srcTypeAsm),
                             srcTypeAsm, toOperand(v2),
-                            AX));
-                    Operand dst = toOperand(dstName);
-                    ins.add(new Mov(dstTypeAsm, Imm.ZERO, dst));
+                            DX));
 
+
+                    ins.add(new Mov(QUADWORD, toOperand(v3), AX));
+                    ins.add(new Mov(QUADWORD, DX, new Memory(AX, 0)));
+
+                    Operand dst = toOperand(dstName);
+                    LabelIr label1 = newLabel(Mcc.makeTemporary(".Lno."));
+                    ins.add(new Mov(PrimitiveTypeAsm.BYTE, Imm.ZERO, dst));
+
+                    ins.add(new JmpCC(CC.NO, label1.label()));
+                    ins.add(new Mov(PrimitiveTypeAsm.BYTE, Imm.ONE, dst));
+                    ins.add(label1);
                 }
                 case BinaryIr(ArithmeticOperator op1, ValIr v1, ValIr v2,
                               VarIr dstName) -> {
@@ -1036,8 +1046,8 @@ public class Codegen {
                         LabelIr label2 = newLabel(Mcc.makeTemporary(".LendCmp"
                                 + "."));
                         ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
-                        ins.add(new JmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,
-                                true, label1.label()));
+                        ins.add(new OldJmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,
+                                true, label1.label()).toJmpCC2());
                         ins.add(new Cvt(srcAsmType, QUADWORD, toOperand(src),
                                 toOperand(dst)));
                         ins.add(new Jump(label2.label()));
@@ -1082,11 +1092,11 @@ public class Codegen {
                     } else {
                         ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
                     }
-                    ins.add(new JmpCC(NOT_EQUALS,
-                            type.unsignedOrDoubleOrPointer(), label));
+                    ins.add(new OldJmpCC(NOT_EQUALS,
+                            type.unsignedOrDoubleOrPointer(), label).toJmpCC2());
                     if (typeAsm == DOUBLE) // v is NaN which is not equal to
                         // zero (but jne treats it like it is)
-                        ins.add(new JmpCC(null, true, label));
+                        ins.add(new OldJmpCC(null, true, label).toJmpCC2());
                 }
                 case JumpIfZero(ValIr v, String label) -> {
                     if (v != null) {
@@ -1098,19 +1108,19 @@ public class Codegen {
                             ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
                             LabelIr endLabel = newLabel(Mcc.makeTemporary(
                                     ".Lend."));
-                            ins.add(new JmpCC(null, true, endLabel.label()));
+                            ins.add(newJmpCC(null, true, endLabel.label()));
 
-                            ins.add(new JmpCC(EQUALS, true, label));
+                            ins.add(newJmpCC(EQUALS, true, label));
                             ins.add(endLabel);
                         } else {
                             ins.add(new Cmp(typeAsm, new Imm(0), toOperand(v)));
-                            ins.add(new JmpCC(EQUALS,
+                            ins.add(newJmpCC(EQUALS,
                                     type.unsignedOrDoubleOrPointer(), label));
                         }
 
 
                     } else {
-                        ins.add(new JmpCC(EQUALS, false, label));
+                        ins.add(newJmpCC(EQUALS, false, label));
                     }
 
                 }
@@ -1202,7 +1212,7 @@ public class Codegen {
                         var asmSrcType = srcType == Primitive.UINT ?
                                 LONGWORD : QUADWORD;
                         ins.add(new Cmp(QUADWORD, new Imm(0), src));
-                        ins.add(new JmpCC(CmpOperator.LESS_THAN, false,
+                        ins.add(newJmpCC(CmpOperator.LESS_THAN, false,
                                 label1.label()));
                         ins.add(new Cvt(asmSrcType, dstType, src, dst));
                         ins.add(new Jump(label2.label()));
@@ -1362,13 +1372,13 @@ public class Codegen {
                 // is register available?
                 ins.add(new Cmp(LONGWORD, new Imm(48 - numGp * 8L), gpOffset));
                 // if not use stack
-                ins.add(new JmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
+                ins.add(newJmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
             }
             if (numFp>0) {
                 // is register available?
                 ins.add(new Cmp(LONGWORD, new Imm(176 - numFp * 16L), fpOffset));
                 // if not use stack
-                ins.add(new JmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
+                ins.add(newJmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
             }
 // 4. Fetch type from l->reg_save_area with an offset of l->gp_offset and/or
 // l->fp_offset. This may require copying to a temporary location in case the
@@ -1434,7 +1444,7 @@ public class Codegen {
         if (op1 == EQUALS || op1 == NOT_EQUALS) {
             LabelIr isANLabel = newLabel(Mcc.makeTemporary(".Lan."));
 
-            ins.add(new JmpCC(null, false, // null false -> jnp (i.e. jump if
+            ins.add(newJmpCC(null, false, // null false -> jnp (i.e. jump if
                     // not NaN)
                     isANLabel.label()));
             // for NaN : == is always false and != is always true
@@ -1451,7 +1461,7 @@ public class Codegen {
         } else {
             ins.add(new Mov(LONGWORD, Imm.ZERO, dst));
             LabelIr isNaNLabel = newLabel(Mcc.makeTemporary(".Lnan."));
-            ins.add(new JmpCC(null, true, isNaNLabel.label()));
+            ins.add(new OldJmpCC(null, true, isNaNLabel.label()).toJmpCC2());
             ins.add(new SetCC(op1, true, dst));
             ins.add(isNaNLabel);
         }

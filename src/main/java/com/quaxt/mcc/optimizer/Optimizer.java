@@ -1,9 +1,7 @@
 package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.JmpCC;
-import com.quaxt.mcc.asm.Nullary;
-import com.quaxt.mcc.asm.Todo;
+import com.quaxt.mcc.asm.*;
 import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
@@ -378,7 +376,7 @@ public class Optimizer {
                 case Nullary _, ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
                 case Jump(String label) ->
                         addEdge(nodes, nodeId, labelToNodeId.get(label));
-                case JmpCC(CmpOperator cmpOperator, boolean unsigned,
+                case JmpCC(CC _,
                            String label) -> {
                     addEdge(nodes, nodeId, labelToNodeId.get(label));
                     addEdge(nodes, nodeId, nextId);
