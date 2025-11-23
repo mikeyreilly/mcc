@@ -316,10 +316,13 @@ class MccTest {
                 "sum=-2147483648, overflow=1\n");
 
     }
-
     @Test
-    void add() throws Exception {
-        returns("add", 3);
+    void double_to_uint() throws Exception {
+        outputs("double_to_uint", "long\n" + "18446744073709551615\n" + "1\n" +
+                "10000000000\n" + "0\n" + "0\n" + "int\n" + "4294967295\n" +
+                "1\n" + "1410065408\n" + "0\n" + "0\n" + "short\n" + "65535\n" +
+                "1\n" + "0\n" + "0\n" + "0\n" + "char\n" + "255\n" + "1\n" +
+                "0\n" + "0\n" + "0\n", false);
     }
 
 }

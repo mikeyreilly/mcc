@@ -217,8 +217,8 @@ public class Codegen {
                 }
                 case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
                                    Operand src, Operand dst) -> {
-                    // if srcType is not byte we rewrite as Mov
-                    if (srcType == BYTE) {
+                    // if srcType is not byte or word we rewrite as Mov
+                    if (srcType == BYTE || srcType == WORD) {
                         //   boolean mustFixSrc = src instanceof Imm;
                         boolean mustFixDst = !(dst instanceof IntegerReg);
 
@@ -1036,7 +1036,10 @@ public class Codegen {
                     if (dstType == UCHAR) {
                         ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
                         ins.add(new Mov(BYTE, AX, toOperand(dst)));
-                    } else if (dstType == Primitive.INT) {
+                    } else if (dstType == Primitive.USHORT) {
+                        ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
+                        ins.add(new Mov(WORD, AX, toOperand(dst)));
+                    } else if (dstType == Primitive.UINT) {
                         ins.add(new Cvt(valToAsmType(src), QUADWORD, toOperand(src), AX));
                         ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
                     } else {
