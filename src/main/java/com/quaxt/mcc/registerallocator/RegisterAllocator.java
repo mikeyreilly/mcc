@@ -336,6 +336,9 @@ public class RegisterAllocator {
                 case Unary(UnaryOperator op, TypeAsm type, Operand operand) ->
                         new Unary(op, type, replaceOperand(operand,
                                 registerMap));
+                case Xchg(TypeAsm type, Operand src, Operand dst) ->
+                        new Xchg(type, replaceOperand(src, registerMap),
+                                replaceOperand(dst, registerMap));
                 default -> instr;
             });
         }
