@@ -871,7 +871,12 @@ public class Codegen {
 
                 case BinaryWithOverflowIr(ArithmeticOperator op1, ValIr v1, ValIr v2, ValIr v3,
                               VarIr dstName) -> {
-                    TypeAsm srcTypeAsm = toTypeAsm(valToType(v1));
+                    Type inputType = valToType(v1);
+                    Type outputType = valToType(v3);
+                    if (outputType instanceof Pointer(Type referenced))
+                        outputType = referenced;
+                    TypeAsm srcTypeAsm = toTypeAsm(inputType);
+                    TypeAsm dstTypeAsm = toTypeAsm(outputType);
 
                     // do the arithmatic in DX
                     ins.add(new Mov(srcTypeAsm, toOperand(v1),
@@ -882,8 +887,6 @@ public class Codegen {
                             DX));
 
 
-                    ins.add(new Mov(QUADWORD, toOperand(v3), AX));
-                    ins.add(new Mov(QUADWORD, DX, new Memory(AX, 0)));
 
                     Operand dst = toOperand(dstName);
                     LabelIr label1 = newLabel(Mcc.makeTemporary(".Lno."));
@@ -892,6 +895,18 @@ public class Codegen {
                     ins.add(new JmpCC(CC.NO, label1.label()));
                     ins.add(new Mov(PrimitiveTypeAsm.BYTE, Imm.ONE, dst));
                     ins.add(label1);
+                    // if we have to downcast and result can't fit then that is overflow
+                    if (Mcc.size(outputType) < Mcc.size(inputType)) {
+                        LabelIr label2 = newLabel(Mcc.makeTemporary(".Lno."));
+                        ins.add(new Movsx(dstTypeAsm, srcTypeAsm, DX, AX));
+                        ins.add(new Cmp(QUADWORD, DX, AX));
+                        ins.add(new JmpCC(CC.E, label2.label()));
+                        ins.add(new Mov(PrimitiveTypeAsm.BYTE, Imm.ONE, dst));
+                        ins.add(label2);
+                    }
+                    ins.add(new Mov(QUADWORD, toOperand(v3), AX));
+                    ins.add(new Mov(toTypeAsm(outputType), DX, new Memory(AX, 0)));
+
                 }
                 case BinaryIr(ArithmeticOperator op1, ValIr v1, ValIr v2,
                               VarIr dstName) -> {

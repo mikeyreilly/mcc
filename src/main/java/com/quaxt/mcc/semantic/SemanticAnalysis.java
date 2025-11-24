@@ -1468,9 +1468,24 @@ public class SemanticAnalysis {
                         name == BUILTIN_SUB_OVERFLOW) {
                     Exp typedArg1 = typeCheckAndConvert(args.get(0));
                     Exp typedArg2 = typeCheckAndConvert(args.get(1));
+                    Exp typedArg3 = typeCheckAndConvert(args.get(2));
+
                     Type t1 = typedArg1.type();
                     Type t2 = typedArg2.type();
+                    Type t3 = typedArg3.type();
+                    if (t3 instanceof Pointer(Type referenced)){
+                        t3=referenced;
+                    } else {
+                        t3=null;
+                    }
+                    if (!t1.isInteger() || !t2.isInteger() || t3 == null ||
+                            !t3.isInteger()) {
+                        throw new Err(
+                                "argument to " + name + " has incorrect type");
+                    }
+
                     Type commonType = getCommonType(t1, t2);
+                    commonType = getCommonType(commonType, t3);
                     args.set(0, convertByAssignment(typedArg1, commonType));
                     args.set(1, convertByAssignment(typedArg2, commonType));
                     args.set(2, typeCheckAndConvert(args.get(2)));
