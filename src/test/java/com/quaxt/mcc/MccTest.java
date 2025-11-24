@@ -323,6 +323,12 @@ class MccTest {
                 "sum=2147483647, overflow=1\n");
 
     }
+    @Test
+    void mul_overflow() throws Exception {
+        outputs("mul_overflow", "product=42, overflow=0\n" +
+                "product=-2, overflow=1\n");
+
+    }
 
 
     @Test

@@ -34,6 +34,11 @@ public enum BuiltInFunction {
             return Primitive.BOOL;
         }
     },
+    BUILTIN_MUL_OVERFLOW("__builtin_mul_overflow") {
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.BOOL;
+        }
+    },
     BUILTIN_BSWAP64("__builtin_bswap64"){
         public Type determineReturnType(List<Exp> args) {
             return Primitive.ULONG;
@@ -81,7 +86,7 @@ public enum BuiltInFunction {
     public abstract Type determineReturnType(List<Exp> args);
 
     public int paramsSize() {
-        if (this == ATOMIC_STORE_N || this == BUILTIN_ADD_OVERFLOW|| this == BUILTIN_SUB_OVERFLOW) return 3;
+        if (this == ATOMIC_STORE_N || this == BUILTIN_ADD_OVERFLOW|| this == BUILTIN_SUB_OVERFLOW||this == BUILTIN_MUL_OVERFLOW) return 3;
         if (this == BUILTIN_BSWAP64) return 1;
         return 2;
     }

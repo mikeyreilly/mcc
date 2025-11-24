@@ -755,7 +755,9 @@ public class IrGen {
                     case BUILTIN_SUB_OVERFLOW -> {
                         return emitOverflowArithmetic(SUB, expr, instructions, args);
                     }
-
+                    case BUILTIN_MUL_OVERFLOW -> {
+                        return emitOverflowArithmetic(IMUL, expr, instructions, args);
+                    }
                     case BUILTIN_BSWAP64 -> {
                         ValIr v1 =
                                 emitTackyAndConvert(args.get(0), instructions);
