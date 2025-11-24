@@ -6,6 +6,7 @@ import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.StorageClass;
 import com.quaxt.mcc.parser.Var;
+import com.quaxt.mcc.registerallocator.RegisterAllocator;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
@@ -85,7 +86,7 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-             //   RegisterAllocator.allocateRegisters(functionAsm);
+                RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
                 fixUpInstructions(offset, functionAsm);
@@ -268,6 +269,14 @@ public class Codegen {
                                 srcReg(typeAsm)));
                         instructions.add(i + 1, new Unary(op, typeAsm,
                                 srcReg(typeAsm)));
+                    }
+                    if (op == UnaryOperator.BSWAP&& isRam(operand)) {
+                            instructions.set(i, new Mov(typeAsm, operand,
+                                    dstReg(typeAsm)));
+                            instructions.add(i + 1, new Unary(op,
+                                    typeAsm, dstReg(typeAsm)));
+                            instructions.add(i + 2, new Mov(typeAsm, dstReg(typeAsm), operand));
+
                     }
                 }
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) -> {
@@ -1318,6 +1327,10 @@ public class Codegen {
                 case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) -> {
                     emitBuiltInVarArg(vaList, dst, ins, type);
                 }
+//                case BswapIr(ValIr src, VarIr dst) ->
+//                        ins.add(new Bswap(valToAsmType(src),
+//                                toOperand(src),
+//                                toOperand(dst)));
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
             }

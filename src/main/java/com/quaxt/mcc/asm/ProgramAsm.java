@@ -267,6 +267,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 printIndent(out, "popq\t%rbp");
                 yield "ret";
             }
+            case Nullary.MFENCE -> "mfence";
             case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
                     instruction.format(t) + formatOperand(t, instruction,
                             operand);

@@ -15,6 +15,7 @@ public record Unary(UnaryOperator op, TypeAsm type,
             case UNARY_MINUS -> "neg";
             case NOT -> "not";
             case UNARY_SHR -> "shr";
+            case BSWAP -> "bswap";
             default ->
                     throw new AssertionError("can't format " + op + " in assembly");
         } + (type == QUADWORD ? "q" : "l") + "\t";

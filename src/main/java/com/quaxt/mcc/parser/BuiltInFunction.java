@@ -23,9 +23,45 @@ public enum BuiltInFunction {
             throw new Todo();
         }
     },
-    BUILTIN_ADD_OVERFLOW("__builtin_add_overflow"){
+    BUILTIN_ADD_OVERFLOW("__builtin_add_overflow") {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.BOOL;
+        }
+    },
+
+    BUILTIN_SUB_OVERFLOW("__builtin_sub_overflow") {
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.BOOL;
+        }
+    },
+    BUILTIN_BSWAP64("__builtin_bswap64"){
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.ULONG;
+        }
+
+        public Type getParamType(int i) {
+            return Primitive.ULONG;
+        }
+    },
+    BUILTIN_BSWAP32("__builtin_bswap32"){
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.UINT;
+        }
+
+        public Type getParamType(int i) {
+            return Primitive.UINT;
+        }
+    }, BUILTIN_BSWAP16("__builtin_bswap16") {
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.USHORT;
+        }
+
+        public Type getParamType(int i) {
+            return Primitive.USHORT;
+        }
+    }, SYNC_SYNCHRONIZE("__sync_synchronize") {
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.VOID;
         }
     };
 
@@ -45,7 +81,12 @@ public enum BuiltInFunction {
     public abstract Type determineReturnType(List<Exp> args);
 
     public int paramsSize() {
-        if (this == ATOMIC_STORE_N || this == BUILTIN_ADD_OVERFLOW) return 3;
+        if (this == ATOMIC_STORE_N || this == BUILTIN_ADD_OVERFLOW|| this == BUILTIN_SUB_OVERFLOW) return 3;
+        if (this == BUILTIN_BSWAP64) return 1;
         return 2;
+    }
+
+    public Type getParamType(int i) {
+        return null;
     }
 }

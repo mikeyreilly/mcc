@@ -212,7 +212,7 @@ class MccTest {
 
     @Test
     void bytes_swap()  throws Exception {
-        outputs("bytes_swap", "EFCDAB8967452301\n");
+        outputs("bytes_swap", "EFCDAB8967452301\n", false);
     }
     @Test
     void extern2_test()  throws Exception {
@@ -316,6 +316,15 @@ class MccTest {
                 "sum=-2147483648, overflow=1\n");
 
     }
+
+    @Test
+    void sub_overflow() throws Exception {
+        outputs("sub_overflow", "sum=1, overflow=0\n" +
+                "sum=2147483647, overflow=1\n");
+
+    }
+
+
     @Test
     void double_to_uint() throws Exception {
         outputs("double_to_uint", "long\n" + "18446744073709551615\n" + "1\n" +

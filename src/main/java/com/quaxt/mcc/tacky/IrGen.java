@@ -750,18 +750,19 @@ public class IrGen {
                         return new DereferencedPointer((VarIr) result);
                     }
                     case BUILTIN_ADD_OVERFLOW -> {
+                        return emitOverflowArithmetic(ADD, expr, instructions, args);
+                    }
+                    case BUILTIN_SUB_OVERFLOW -> {
+                        return emitOverflowArithmetic(SUB, expr, instructions, args);
+                    }
+
+                    case BUILTIN_BSWAP64 -> {
                         ValIr v1 =
                                 emitTackyAndConvert(args.get(0), instructions);
-                        ValIr v2 =
-                                emitTackyAndConvert(args.get(1), instructions);
-                        ValIr result =
-                                emitTackyAndConvert(args.get(2), instructions);
-                        VarIr overflow = makeTemporary("tmp.", expr.type());
+                        VarIr result = makeTemporary("tmp.", expr.type());
 
-                        instructions.add(new BinaryWithOverflowIr(ADD, v1, v2
-                                , result, overflow));
-
-                        return new PlainOperand(overflow);
+                        instructions.add(new UnaryIr(UnaryOperator.BSWAP, v1, result));
+                        return new PlainOperand(result);
                     }
                 }
             }
@@ -769,6 +770,23 @@ public class IrGen {
             default:
                 throw new IllegalStateException("Unexpected value: " + expr);
         }
+    }
+
+    private static PlainOperand emitOverflowArithmetic(ArithmeticOperator op, Exp expr,
+                                                List<InstructionIr> instructions,
+                                                List<Exp> args) {
+        ValIr v1 =
+                emitTackyAndConvert(args.get(0), instructions);
+        ValIr v2 =
+                emitTackyAndConvert(args.get(1), instructions);
+        ValIr result =
+                emitTackyAndConvert(args.get(2), instructions);
+        VarIr overflow = makeTemporary("tmp.", expr.type());
+
+        instructions.add(new BinaryWithOverflowIr(op, v1, v2
+                , result, overflow));
+
+        return new PlainOperand(overflow);
     }
 
     private static void emitCast(List<InstructionIr> instructions, Type to,

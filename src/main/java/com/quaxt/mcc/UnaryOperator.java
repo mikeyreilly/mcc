@@ -7,5 +7,6 @@ public enum UnaryOperator {
     NOT, // logical not !
     UNARY_SHR,
     POST_INCREMENT,
-    POST_DECREMENT
+    POST_DECREMENT,
+    BSWAP
 }

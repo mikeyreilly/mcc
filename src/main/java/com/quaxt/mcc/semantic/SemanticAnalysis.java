@@ -18,6 +18,8 @@ import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
 import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.UnaryOperator.*;
 import static com.quaxt.mcc.optimizer.Optimizer.optimizeInstructions;
+import static com.quaxt.mcc.parser.BuiltInFunction.BUILTIN_ADD_OVERFLOW;
+import static com.quaxt.mcc.parser.BuiltInFunction.BUILTIN_SUB_OVERFLOW;
 import static com.quaxt.mcc.parser.Nullptr.NULLPTR;
 import static com.quaxt.mcc.parser.StorageClass.EXTERN;
 import static com.quaxt.mcc.parser.StorageClass.STATIC;
@@ -1462,9 +1464,28 @@ public class SemanticAnalysis {
                 int paramsSize = name.paramsSize();
                 if (paramsSize != args.size())
                     fail("Function called with wrong number of arguments");
-                for (int i = 0; i < args.size(); i++) {
-                    Exp arg = args.get(i);
-                    args.set(i, typeCheckAndConvert(arg));
+                if (name == BUILTIN_ADD_OVERFLOW ||
+                        name == BUILTIN_SUB_OVERFLOW) {
+                    Exp typedArg1 = typeCheckAndConvert(args.get(0));
+                    Exp typedArg2 = typeCheckAndConvert(args.get(1));
+                    Type t1 = typedArg1.type();
+                    Type t2 = typedArg2.type();
+                    Type commonType = getCommonType(t1, t2);
+                    args.set(0, convertByAssignment(typedArg1, commonType));
+                    args.set(1, convertByAssignment(typedArg2, commonType));
+                    args.set(2, typeCheckAndConvert(args.get(2)));
+                } else {
+                    for (int i = 0; i < args.size(); i++) {
+                        Exp arg = args.get(i);
+                        Type paramType = name.getParamType(i);
+                        if (paramType == null) {
+                            args.set(i, typeCheckAndConvert(arg));
+                        } else {
+                            Exp typedArg = typeCheckAndConvert(arg);
+                            args.set(i, convertByAssignment(typedArg,
+                                    paramType));
+                        }
+                    }
                 }
                 Type r = name.determineReturnType(args);
                 yield  new BuiltInFunctionCall(name, args, r);
