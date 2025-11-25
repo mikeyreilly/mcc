@@ -229,6 +229,11 @@ class MccTest {
         returns("extern2", 0);
     }
     @Test
+    void subscript_then_cast_test()  throws Exception {
+        returns("subscript_then_cast", 0);
+    }
+
+    @Test
     void offsetof_test()  throws Exception {
         outputs("offsetof", "the first element is at offset 0\n" +
                 "the double is at offset 8\n");

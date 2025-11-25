@@ -18,11 +18,15 @@ public sealed interface Type permits Array, FunType, NullptrT, Pointer, Primitiv
     }
 
     default boolean isSigned() {
-        return this == INT || this == LONG || this == DOUBLE || this == CHAR || this == SCHAR;
+        return this == INT || this == LONG || this == LONGLONG ||
+                this == DOUBLE || this == CHAR || this == SCHAR||this == SHORT;
     }
 
     default boolean isInteger() {
-        return this.isCharacter() || this == INT || this == LONG || this == UINT || this == ULONG || this == CHAR || this == SCHAR || this == UCHAR;
+        return this.isCharacter() || this == INT || this == LONG ||
+                this == LONGLONG || this == UINT || this == ULONG ||
+                this == ULONGLONG || this == CHAR || this == SCHAR ||
+                this == UCHAR || this == SHORT || this == USHORT;
     }
 
     default boolean isCharacter() {

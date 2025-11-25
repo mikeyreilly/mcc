@@ -475,6 +475,9 @@ public class SemanticAnalysis {
         if (evaluateExpAsConstant(exp) instanceof Constant c) {
             return (StaticInit) convertConst(c, targetType);
         }
+        if (exp instanceof Var(String name, Type type) && targetType instanceof Pointer(Type referenced)  && referenced instanceof FunType){
+            return new PointerInit(name);
+        }
 
         throw new Err("Non constant initializer");
 
@@ -1471,7 +1474,7 @@ public class SemanticAnalysis {
             case BuiltInFunctionCall(BuiltInFunction name, List<Exp> args, Type _) -> {
                 int paramsSize = name.paramsSize();
                 if (paramsSize != args.size())
-                    fail("Function called with wrong number of arguments");
+                    fail("Function " + name +" called with wrong number of arguments");
                 if (name == BUILTIN_ADD_OVERFLOW ||
                         name == BUILTIN_SUB_OVERFLOW) {
                     Exp typedArg1 = typeCheckAndConvert(args.get(0));

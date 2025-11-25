@@ -89,6 +89,8 @@ public class Mcc {
             case FLOAT -> 4;
             case LONG -> 8;
             case ULONG -> 8;
+            case LONGLONG -> 8;
+            case ULONGLONG -> 8;
             case DOUBLE -> 8;
             case VOID -> 1;
             case Structure(boolean isUnion, String tag, StructDef _) -> TYPE_TABLE.get(tag).alignment();

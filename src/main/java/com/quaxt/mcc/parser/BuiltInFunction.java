@@ -58,7 +58,7 @@ public enum BuiltInFunction {
             return Primitive.ULONG;
         }
     },
-    BUILTIN_BSWAP32("__builtin_bswap32", 3){
+    BUILTIN_BSWAP32("__builtin_bswap32", 1){
         public Type determineReturnType(List<Exp> args) {
             return Primitive.UINT;
         }
@@ -66,7 +66,7 @@ public enum BuiltInFunction {
         public Type getParamType(int i) {
             return Primitive.UINT;
         }
-    }, BUILTIN_BSWAP16("__builtin_bswap16", 3) {
+    }, BUILTIN_BSWAP16("__builtin_bswap16", 1) {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.USHORT;
         }
@@ -74,7 +74,7 @@ public enum BuiltInFunction {
         public Type getParamType(int i) {
             return Primitive.USHORT;
         }
-    }, SYNC_SYNCHRONIZE("__sync_synchronize", 3) {
+    }, SYNC_SYNCHRONIZE("__sync_synchronize", 0) {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.VOID;
         }
