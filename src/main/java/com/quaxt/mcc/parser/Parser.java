@@ -1121,9 +1121,12 @@ public class Parser {
                         }
                         case LONG -> {
                             // Note this compiler treats long long the same as long
-                            if (foundSolo || (type!=null && type!=Primitive.INT && type!=Primitive.LONG))
+                            if (foundSolo || (type!=null && type!=Primitive.INT && type != Primitive.LONG))
                                 fail("invalid type specifier");
-                            else type=Primitive.LONG;
+                            else if (type == Primitive.LONG) {
+                                type = Primitive.LONGLONG;
+                            }
+                            else type = Primitive.LONG;
                         }
                         case SIGNED -> {
                             if (foundSolo || signedness!=0)
@@ -1176,7 +1179,8 @@ public class Parser {
         }
 
         if (signedness == -1) {
-            if (type == Primitive.LONG) type = Primitive.ULONG;
+            if (type == Primitive.LONGLONG) type = Primitive.ULONGLONG;
+            else if (type == Primitive.LONG) type = Primitive.ULONG;
             else if (type == Primitive.SHORT) type = Primitive.USHORT;
             else if (type == Primitive.CHAR) type = Primitive.UCHAR;
             else if (type == Primitive.INT) type = Primitive.UINT;

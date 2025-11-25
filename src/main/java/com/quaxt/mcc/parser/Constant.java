@@ -10,10 +10,12 @@ sealed public interface Constant<C extends Constant<C>> extends Exp, ValIr permi
         FloatInit,
         IntInit,
         LongInit,
+        LongLongInit,
         ShortInit,
         UCharInit,
         UIntInit,
         ULongInit,
+        ULongLongInit,
         UShortInit,
         Nullptr {
     long toLong();
