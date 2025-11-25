@@ -118,6 +118,7 @@ class MccTest {
         assertEquals(expectedExitCode,
                 Mcc.startProcess("src/test/resources/" + testProgram));
     }
+
     private static void outputs(String testProgram,
                                 String expectedOutput,
                                 boolean optimize) throws Exception {
@@ -330,6 +331,21 @@ class MccTest {
 
     }
 
+
+    @Test
+    void clzll() throws Exception {
+        returns("clzll", 63);
+    }
+
+    @Test
+    void longlong() throws Exception{
+        outputs("longlong", "long\n" + "long long\n");
+    }
+
+    @Test
+    void generic() throws Exception{
+        outputs("generic", "int\n" + "long\n");
+    }
 
     @Test
     void double_to_uint() throws Exception {

@@ -1631,6 +1631,20 @@ public class SemanticAnalysis {
                 }
                 yield exp;
             }
+            case Generic(Exp controllingExp, ArrayList<Cast> genericAssocList,
+                         Exp defaultExp) -> {
+                Type controllingType= typeCheckExpression(controllingExp).type();
+                for(Cast genericAssoc : genericAssocList) {
+                    if (genericAssoc.type().equals(controllingType)) {
+                        yield typeCheckExpression(genericAssoc.exp());
+                    }
+                }
+                if (defaultExp == null) {
+                    throw new Err("Selector of type " + controllingType +
+                            " is not compatible with any association");
+                }
+                yield defaultExp;
+            }
         };
     }
 
@@ -2212,7 +2226,8 @@ public class SemanticAnalysis {
                             structureMap, enclosingFunction), type);
             case FunctionCall(Exp name, List<Exp> args, boolean varargs,
                               Type type) ->
-                            new FunctionCall(resolveExp(name, identifierMap, structureMap, enclosingFunction), resolveArgs(identifierMap, structureMap, args, enclosingFunction), varargs, type);
+                            new FunctionCall(resolveExp(name, identifierMap, structureMap, enclosingFunction),
+                                    resolveArgs(identifierMap, structureMap, args, enclosingFunction), varargs, type);
             case BuiltInFunctionCall(BuiltInFunction name, List<Exp> args,
                                      Type type) ->
                     new BuiltInFunctionCall(name,
@@ -2242,6 +2257,20 @@ public class SemanticAnalysis {
                 Type resolvedType = resolveType(type, identifierMap, structureMap, enclosingFunction);
                 yield new BuiltinVaArg((Var) resolveExp(e, identifierMap,
                         structureMap, enclosingFunction), resolvedType);
+            }
+            case Generic(Exp controllingExp, ArrayList<Cast> genericAssocList,
+                         Exp defaultExp) -> {
+                for(int i =0;i< genericAssocList.size();i++){
+                    Cast genericAssoc = genericAssocList.get(i);
+                    Type resolvedType = resolveType(genericAssoc.type(), identifierMap, structureMap, enclosingFunction);
+                    genericAssocList.set(i, new Cast(resolvedType,
+                            resolveExp(genericAssoc.exp(), identifierMap,
+                            structureMap, enclosingFunction)));
+                }
+                yield new Generic(resolveExp(controllingExp, identifierMap,
+                        structureMap, enclosingFunction),genericAssocList,
+                        resolveExp(defaultExp, identifierMap,
+                                structureMap, enclosingFunction));
             }
         };
         return r;

@@ -23,17 +23,13 @@ public enum TokenType implements Token {
             "[^\\w.]", 1),
     HEX_INT_LITERAL("0x([a-fA-F0-9]+)[^\\w.]", 1),INT_LITERAL("([0-9]+)[^\\w.]", 1)
     , SEMICOLON(";"), SINGLE_LINE_COMMENT("//.*|#\\s*pragma\\b.*"),
-    MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0),
-    ASM(),
-    GCC_ATTRIBUTE(),
-    BUILTIN_C23_VA_START(), BUILTIN_VA_ARG(), BUILTIN_VA_END(),
-    BUILTIN_OFFSETOF,
-    UNSIGNED(), SIGNED(), ENUM(), GOTO(), BOOL(), TRUE(), FALSE(), CHAR(), SHORT(), FLOAT(), DOUBLE(), LONG(),
-    NULLPTR(), INT(), RETURN(), SWITCH(),
-    TYPEDEF(), TYPEOF(), CASE(),DEFAULT(),
-    CONST(), VOLATILE(), RESTRICT(), ATOMIC(),
-    VOID(), ELSE(), IF(), BREAK(), CONTINUE(), WHILE(), DO(), FOR(), EXTERN()
-    , SIZEOF(), STATIC(), REGISTER(), STRUCT(), UNION(), DECREMENT("--"), INCREMENT("\\+\\+"),
+    MULTILINE_COMMENT(Pattern.compile("/\\*.*\\*/", Pattern.DOTALL), 0), ASM,
+    ATOMIC, BOOL, BREAK, BUILTIN_C23_VA_START, BUILTIN_OFFSETOF,
+    BUILTIN_VA_ARG, BUILTIN_VA_END, CASE, CHAR, CONST, CONTINUE, DEFAULT, DO,
+    DOUBLE, ELSE, ENUM, EXTERN, FALSE, FLOAT, FOR, GCC_ATTRIBUTE, GENERIC,
+    GOTO, IF, INT, LONG, NULLPTR, REGISTER, RESTRICT, RETURN, SHORT, SIGNED,
+    SIZEOF, STATIC, STRUCT, SWITCH, TRUE, TYPEDEF, TYPEOF, UNION, UNSIGNED,
+    VOID, VOLATILE, WHILE, DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
     OPEN_BRACKET("\\["), CLOSE_BRACKET("\\]"), ARROW("->"),
     ELLIPSIS("\\.\\.\\."), DOT("([.])[^0-9]", 1);
@@ -89,6 +85,7 @@ public enum TokenType implements Token {
             case DOT -> ".";
             case DOUBLE -> "double";
             case FLOAT -> "float";
+            case GENERIC -> "_Generic";
             case DOUBLE_LITERAL -> "double_literal";
             case ELLIPSIS -> "ellipsis";
             case ELSE -> "else";

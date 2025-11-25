@@ -348,7 +348,7 @@ public class Parser {
     private static String generatePseudoIdentifier() {
         return makeTemporary("tag.");
     }
-    
+
     private static StorageClass parseStorageClassSpecifier(TokenList tokens) {
         skipRestrictAndConst(tokens);
         StorageClass sc;
@@ -1533,8 +1533,13 @@ public class Parser {
 
     private static Exp parsePrimaryExp(TokenList tokens,
                                        ArrayList<Map<String, Type>> typeAliases) {
-        // <primary-exp> ::= <const> | <identifier> | "(" <exp> ")"
-        //                 | <identifier> "(" [ <argument-list> ] ")"
+        // primary-expression:
+        //                   identifier
+        //                           constant
+        //                   string-literal
+        //                           ( expression )
+        //                   generic-selection
+
         while (tokens.getFirst() == GCC_ATTRIBUTE) {
             stripGccAttribute(tokens);
         }
@@ -1552,11 +1557,11 @@ public class Parser {
             case BUILTIN_OFFSETOF -> {
                 tokens.removeFirst();
                 expect(OPEN_PAREN, tokens);
-                
+
 
                 TypeName typeName = parseTypeName(tokens, typeAliases);
                 Type t = typeNameToType(typeName, tokens, typeAliases);
-                
+
                 expect(COMMA, tokens);
                 String member = expectIdentifier(tokens);
 
@@ -1608,6 +1613,37 @@ public class Parser {
                 // MR-TODO: c has unary plus - going to add it later for now just negate twice
                 tokens.removeFirst();
                 yield new UnaryOp(UnaryOperator.UNARY_MINUS, new UnaryOp(UnaryOperator.UNARY_MINUS, parsePrimaryExp(tokens, typeAliases), null), null);
+            }
+            case GENERIC -> {
+                tokens.removeFirst();
+                expect(OPEN_PAREN, tokens);
+                Exp controllingExp  = parseExp(tokens, 0, false, typeAliases);
+                Exp defaultExp = null;
+                expect(COMMA, tokens);
+                ArrayList<Cast> genericAssocList = new ArrayList<>();
+                while (true) {
+                    if (defaultExp == null && tokens.getFirst() == DEFAULT) {
+                        tokens.removeFirst();
+                        expect(COLON, tokens);
+                        defaultExp = parseExp(tokens, 0, false, typeAliases);
+                    } else {
+                        TypeName typeName = parseTypeName(tokens, typeAliases);
+                        Type type =
+                                typeNameToType(typeName, tokens, typeAliases);
+                        expect(COLON, tokens);
+                        Exp assignmentExp =
+                                parseExp(tokens, 0, false, typeAliases);
+                        genericAssocList.add(new Cast(type, assignmentExp));
+                    }
+                    Token t = tokens.removeFirst();
+                    if (t == CLOSE_PAREN) break;
+                    else if (t != COMMA) {
+                        tokens.back();
+                        expect(COMMA, tokens);
+                    }
+                }
+                yield new Generic(controllingExp,genericAssocList,defaultExp);
+
             }
             default ->
                     throw makeErr("Expected either identifier, constant or (,"

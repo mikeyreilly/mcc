@@ -1,14 +1,14 @@
 extern int printf (const char *__restrict __format, ...);
 
 int main(void) {
-    printf("%s\n", _Generic((long)0,
+    printf("%s\n", _Generic(0,
                             long: "long",
-                            long long: "long long",
+                            int: "int",
                             default: "other"));
 
-    printf("%s\n", _Generic((long long)0,
+    printf("%s\n", _Generic(0L,
                             long: "long",
-                            long long: "long long",
+                            int: "int",
                             default: "other"));
     return 0;
 }
