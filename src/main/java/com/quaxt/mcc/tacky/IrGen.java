@@ -766,6 +766,14 @@ public class IrGen {
                         instructions.add(new UnaryIr(UnaryOperator.BSWAP, v1, result));
                         return new PlainOperand(result);
                     }
+                    case BUILTIN_CLZLL -> {
+                        ValIr v1 =
+                                emitTackyAndConvert(args.get(0), instructions);
+                        VarIr result = makeTemporary("tmp.", expr.type());
+
+                        instructions.add(new UnaryIr(UnaryOperator.CLZ, v1, result));
+                        return new PlainOperand(result);
+                    }
                 }
             }
 

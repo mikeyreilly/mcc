@@ -112,8 +112,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case UShortInit(short l) -> ".value " + Integer.toUnsignedString(l & 0xffff);
             case IntInit(int l) -> ".long " + l;
             case LongInit(long l) -> ".quad " + l;
+            case LongLongInit(long l) -> ".quad " + l;
             case UIntInit(int l) -> ".long " + Integer.toUnsignedString(l);
             case ULongInit(long l) -> ".quad " + Long.toUnsignedString(l);
+            case ULongLongInit(long l) -> ".quad " + Long.toUnsignedString(l);
             case ZeroInit(long l) -> ".zero " + l;
             case CharInit(byte i) -> ".byte " + (i & 0xff);
             case PointerInit(String label, long offset) -> offset == 0
@@ -268,9 +270,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield "ret";
             }
             case Nullary.MFENCE -> "mfence";
+
             case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
-                    instruction.format(t) + formatOperand(t, instruction,
-                            operand);
+                    instruction.format(t) +
+                        formatOperand(t, instruction, operand);
             case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
                     instruction.format(t) + formatOperand(t, instruction,
                             subtrahend) + ", " + formatOperand(t, instruction

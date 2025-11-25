@@ -1294,7 +1294,8 @@ public class Parser {
         return new While(condition, body, null);
     }
 
-    private static Constant parseConst(String value, Type type, boolean hex) {
+    private static Constant parseConst(String value, Type type, boolean hex,
+                                       boolean isLongLong) {
         int base = hex ? 16 : 10;
         if (type == Primitive.DOUBLE)
             return new DoubleInit(Double.parseDouble(value));
@@ -1304,12 +1305,12 @@ public class Parser {
             long v = Long.parseLong(value, base);
             if (v < 1L << 31 && type == Primitive.INT)
                 return new IntInit((int) v);
-            else return new LongInit(v);
+            else return isLongLong ? new LongLongInit(v) : new LongInit(v);
         }
         long v = Long.parseUnsignedLong(value, base);
         if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && (type == Primitive.INT || type == Primitive.UINT))
             return new UIntInit((int) v);
-        else return new ULongInit(v);
+        else return isLongLong ?new ULongLongInit(v) : new ULongInit(v);
     }
 
     private static Type processAbstractDeclarator(
@@ -1456,6 +1457,7 @@ public class Parser {
             tokens.removeFirst();
             return BoolInit.FALSE;
         }
+        boolean isLongLong = false;
         if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
             tokens.removeFirst();
@@ -1465,14 +1467,15 @@ public class Parser {
                     HEX_INT_LITERAL == token.type();
 
             switch (token.type()) {
+                case HEX_LONG_LITERAL:
+                case UNSIGNED_LONG_LITERAL:
+                case LONG_LITERAL:
+                    if (value.endsWith("LL")||value.endsWith("ll")) isLongLong = true;
                 case FLOAT_LITERAL:
                 case DOUBLE_LITERAL:
-                case UNSIGNED_LONG_LITERAL:
                 case UNSIGNED_INT_LITERAL:
                 case UNSIGNED_HEX_INT_LITERAL:
-                case LONG_LITERAL:
                 case UNSIGNED_HEX_LONG_LITERAL:
-                case HEX_LONG_LITERAL:
                 case HEX_INT_LITERAL:
                 case INT_LITERAL: {
                     Type t = Primitive.fromTokenType((TokenType) tokenType);
@@ -1488,7 +1491,7 @@ public class Parser {
                    }
 
                     return parseConst(value.substring(start, end), t,
-                            isHex);
+                            isHex, isLongLong);
                 }
                 case CHAR_LITERAL: {
                     return new IntInit(parseChar(value));

@@ -7,7 +7,7 @@ public enum ArithmeticOperator implements BinaryOperator {
     SUB("-"), ADD("\\+"), IMUL("\\*"), DIVIDE("/"), REMAINDER("%"), AND("&&"),
     BITWISE_AND("&"), OR("\\|\\|"), BITWISE_OR("\\|"), BITWISE_XOR("\\^"), BECOMES("="),
     SHL("<<"), SAR(">>"),
-    COMMA(","),
+    COMMA(","),BSR("bsr"),
     // These DOUBLE_FOO operators are used in asm but not before, so in parser and tacky SUB is used
     // for both integer and double subtraction.
     DOUBLE_SUB(), DOUBLE_ADD(), DOUBLE_MUL(), DOUBLE_DIVIDE(),

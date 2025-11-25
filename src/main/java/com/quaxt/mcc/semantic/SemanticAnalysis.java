@@ -602,8 +602,10 @@ public class SemanticAnalysis {
                 case DOUBLE -> (DoubleInit) init;
                 case FLOAT -> new FloatInit((float) d);
                 case LONG -> new LongInit((long) d);
+                case LONGLONG -> new LongLongInit((long) d);
                 case INT -> new IntInit((int) d);
                 case ULONG -> new ULongInit(doubleToUnsignedLong(d));
+                case ULONGLONG -> new ULongLongInit(doubleToUnsignedLong(d));
                 // casting directly to int would be wrong result for doubles
                 // > 2^31
                 case UINT -> new UIntInit((int) (long) d);
@@ -620,8 +622,10 @@ public class SemanticAnalysis {
                 case DOUBLE -> new DoubleInit(d);
                 case FLOAT -> (FloatInit) init;
                 case LONG -> new LongInit((long) d);
+                case LONGLONG -> new LongLongInit((long) d);
                 case INT -> new IntInit((int) d);
                 case ULONG -> new ULongInit(doubleToUnsignedLong(d));
+                case ULONGLONG -> new ULongLongInit(doubleToUnsignedLong(d));
                 // casting directly to int would be wrong result for floats
                 // > 2^31
                 case UINT -> new UIntInit((int) (long) d);
@@ -641,8 +645,10 @@ public class SemanticAnalysis {
             case ShortInit(short i) -> i;
             case UShortInit(short i) -> i & 0xffff;
             case LongInit(long l) -> l;
+            case LongLongInit(long l) -> l;
             case UIntInit(int i) -> Integer.toUnsignedLong(i);
             case ULongInit(long l) -> l;
+            case ULongLongInit(long l) -> l;
             case Nullptr _-> 0L;
             default ->
                     throw new IllegalArgumentException("not a const:" + init);
@@ -654,9 +660,11 @@ public class SemanticAnalysis {
                 yield new DoubleInit(d);
             }
             case LONG -> new LongInit(initL);
+            case LONGLONG -> new LongLongInit(initL);
             case INT -> new IntInit((int) initL);
             case BOOL -> new BoolInit(initL==0?(byte)0:(byte)1);
             case ULONG -> new ULongInit(initL);
+            case ULONGLONG -> new ULongLongInit(initL);
             case UINT -> new UIntInit((int) initL);
             case CHAR, SCHAR -> new CharInit((byte) initL);
             case UCHAR -> new UCharInit((byte) initL);

@@ -27,7 +27,11 @@ public sealed interface Instruction extends AbstractInstruction permits Binary,
         Jump,
         LabelIr {
     default String format(TypeAsm t) {
-        return this.getClass().getSimpleName().toLowerCase() + switch (t) {
+        return format(this.getClass().getSimpleName().toLowerCase(), t);
+    }
+
+    public static String format(String instruction, TypeAsm t) {
+        return instruction + switch (t) {
             case ByteArray byteArray -> "q";
             case BYTE -> "b";
             case WORD -> "w";

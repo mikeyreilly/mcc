@@ -28,6 +28,7 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case SHL -> "shlq	";
             case SAR -> "sarq	";
             case UNSIGNED_RIGHT_SHIFT -> "shrq  ";
+            case BSR -> "bsrq\t";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
         } : t == LONGWORD ? switch (op) {
@@ -46,6 +47,7 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case SHL -> "shll	";
             case SAR -> "sarl	";
             case UNSIGNED_RIGHT_SHIFT -> "shrl  ";
+            case BSR -> "bsrl\t";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
         } : t == DOUBLE ? switch (op) {

@@ -8,11 +8,11 @@ import com.quaxt.mcc.semantic.Type;
 import java.util.List;
 
 public enum BuiltInFunction {
-    ATOMIC_STORE_N("__atomic_store_n"){
+    ATOMIC_STORE_N("__atomic_store_n", 3){
         public Type determineReturnType(List<Exp> args) {
             return Primitive.VOID;
         }
-    }, ATOMIC_LOAD_N("__atomic_load_n") {
+    }, ATOMIC_LOAD_N("__atomic_load_n", 2) {
         @Override
         public Type determineReturnType(List<Exp> args) {
             Exp x = args.get(0);
@@ -23,23 +23,33 @@ public enum BuiltInFunction {
             throw new Todo();
         }
     },
-    BUILTIN_ADD_OVERFLOW("__builtin_add_overflow") {
+    BUILTIN_ADD_OVERFLOW("__builtin_add_overflow", 3) {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.BOOL;
         }
     },
 
-    BUILTIN_SUB_OVERFLOW("__builtin_sub_overflow") {
+    BUILTIN_SUB_OVERFLOW("__builtin_sub_overflow", 3) {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.BOOL;
         }
     },
-    BUILTIN_MUL_OVERFLOW("__builtin_mul_overflow") {
+    BUILTIN_MUL_OVERFLOW("__builtin_mul_overflow", 3) {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.BOOL;
         }
     },
-    BUILTIN_BSWAP64("__builtin_bswap64"){
+    BUILTIN_CLZLL("__builtin_clzll", 1){
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.ULONGLONG;
+        }
+
+        public Type getParamType(int i) {
+            return Primitive.ULONGLONG;
+        }
+    },
+
+    BUILTIN_BSWAP64("__builtin_bswap64", 1){
         public Type determineReturnType(List<Exp> args) {
             return Primitive.ULONG;
         }
@@ -48,7 +58,7 @@ public enum BuiltInFunction {
             return Primitive.ULONG;
         }
     },
-    BUILTIN_BSWAP32("__builtin_bswap32"){
+    BUILTIN_BSWAP32("__builtin_bswap32", 3){
         public Type determineReturnType(List<Exp> args) {
             return Primitive.UINT;
         }
@@ -56,7 +66,7 @@ public enum BuiltInFunction {
         public Type getParamType(int i) {
             return Primitive.UINT;
         }
-    }, BUILTIN_BSWAP16("__builtin_bswap16") {
+    }, BUILTIN_BSWAP16("__builtin_bswap16", 3) {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.USHORT;
         }
@@ -64,16 +74,18 @@ public enum BuiltInFunction {
         public Type getParamType(int i) {
             return Primitive.USHORT;
         }
-    }, SYNC_SYNCHRONIZE("__sync_synchronize") {
+    }, SYNC_SYNCHRONIZE("__sync_synchronize", 3) {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.VOID;
         }
     };
 
     private final String identifier;
+    private final int paramsSize;
 
-    BuiltInFunction(String identifier) {
+    BuiltInFunction(String identifier, int paramSize) {
         this.identifier = identifier;
+        this.paramsSize = paramSize;
     }
 
     static BuiltInFunction fromIdentifier(String identifier) {
@@ -86,10 +98,9 @@ public enum BuiltInFunction {
     public abstract Type determineReturnType(List<Exp> args);
 
     public int paramsSize() {
-        if (this == ATOMIC_STORE_N || this == BUILTIN_ADD_OVERFLOW|| this == BUILTIN_SUB_OVERFLOW||this == BUILTIN_MUL_OVERFLOW) return 3;
-        if (this == BUILTIN_BSWAP64) return 1;
-        return 2;
+        return paramsSize;
     }
+
 
     public Type getParamType(int i) {
         return null;

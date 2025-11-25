@@ -86,7 +86,7 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-                RegisterAllocator.allocateRegisters(functionAsm);
+                //RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
                 fixUpInstructions(offset, functionAsm);
@@ -270,7 +270,7 @@ public class Codegen {
                         instructions.add(i + 1, new Unary(op, typeAsm,
                                 srcReg(typeAsm)));
                     }
-                    if (op == UnaryOperator.BSWAP&& isRam(operand)) {
+                    if ((op == UnaryOperator.BSWAP) && isRam(operand)) {
                             instructions.set(i, new Mov(typeAsm, operand,
                                     dstReg(typeAsm)));
                             instructions.add(i + 1, new Unary(op,
@@ -339,7 +339,7 @@ public class Codegen {
 
                             }
                             case IMUL, DOUBLE_SUB, DOUBLE_ADD, DOUBLE_MUL,
-                                 DOUBLE_DIVIDE, BITWISE_XOR -> {
+                                 DOUBLE_DIVIDE, BITWISE_XOR, BSR -> {
                                 if (isRam(dst)) {
                                     instructions.set(i, new Mov(typeAsm, dst,
                                             dstReg(typeAsm)));
@@ -451,7 +451,7 @@ public class Codegen {
             case Primitive.CHAR, UCHAR, Primitive.SCHAR, Primitive.BOOL -> BYTE;
             case Primitive.SHORT, Primitive.USHORT -> WORD;
             case Primitive.INT, Primitive.UINT -> LONGWORD;
-            case Primitive.LONG, Primitive.ULONG -> QUADWORD;
+            case Primitive.LONG, Primitive.ULONG, Primitive.LONGLONG, Primitive.ULONGLONG  -> QUADWORD;
             case Primitive.DOUBLE -> DOUBLE;
             case Primitive.FLOAT -> FLOAT;
             case Pointer _, FunType _ -> QUADWORD;
@@ -504,8 +504,10 @@ public class Codegen {
                 }, ste.aliased);
             }
             case LongInit(long l) -> new Imm(l);
+            case LongLongInit(long l) -> new Imm(l);
             case UIntInit(int i) -> new Imm(Integer.toUnsignedLong(i));
             case ULongInit(long l) -> new Imm(l);
+            case ULongLongInit(long l) -> new Imm(l);
             case DoubleInit(double d) -> resolveConstantDouble(d);
             case FloatInit(float d) -> resolveConstantFloat(d);
             default ->
@@ -1276,6 +1278,12 @@ public class Codegen {
                         ins.add(new Mov(typeAsm, src1, dst1));
                         ins.add(new Binary(BITWISE_XOR, typeAsm,
                                 NEGATIVE_ZERO, dst1));
+                    } else if (op1 == UnaryOperator.CLZ) {
+                        ins.add(new Mov(typeAsm, src1, dst1));
+                        ins.add(new Binary(BSR, typeAsm, dst1 , dst1));
+                        long bits = typeAsm.size() * 8 - 1;
+                        ins.add(new Binary(BITWISE_XOR, typeAsm,
+                                new Imm(bits), dst1));
                     } else {
                         ins.add(new Mov(typeAsm, src1, dst1));
                         ins.add(new Unary(op1, typeAsm, dst1));

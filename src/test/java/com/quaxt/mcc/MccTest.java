@@ -112,9 +112,18 @@ class MccTest {
     void multipleInitDeclarators() throws Exception {
         returns("multiple_init_declarators", 0);
     }
+
+
     private static void returns(String testProgram,
                                 int expectedExitCode) throws Exception {
-        assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c", "--optimize"));
+        returns(testProgram, expectedExitCode, true);
+    }
+
+
+    private static void returns(String testProgram,
+                                int expectedExitCode, boolean optimize) throws Exception {
+        if (optimize) assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c", "--optimize"));
+        else assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c"));
         assertEquals(expectedExitCode,
                 Mcc.startProcess("src/test/resources/" + testProgram));
     }
@@ -334,7 +343,7 @@ class MccTest {
 
     @Test
     void clzll() throws Exception {
-        returns("clzll", 63);
+        returns("clzll", 63, false);
     }
 
     @Test
