@@ -230,7 +230,7 @@ class MccTest {
     }
     @Test
     void subscript_then_cast_test()  throws Exception {
-        returns("subscript_then_cast", 0);
+        returns("subscript_then_cast", 42);
     }
 
     @Test

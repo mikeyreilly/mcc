@@ -1151,10 +1151,12 @@ public class SemanticAnalysis {
     private static Exp convertTo(Exp e, Type t) {
         if (e == null || e.type() == t) return e;
         if (e instanceof Constant c) {
-            return (Exp) convertConst(c, t);
+            var r = convertConst(c, t);
+            if (r != null) return r;
         }
         return new Cast(t, e);
     }
+
 
     private static Exp convertByAssignment(Exp e, Type targetType) {
         if (e.type() instanceof FunType) {
@@ -1619,7 +1621,9 @@ public class SemanticAnalysis {
                 throw new Err("Tried to get member of non-structure");
             }
             case Dot(Exp structure, String member, Type _) -> {
-                Exp typedStructure = typeCheckAndConvert(structure);
+                Exp typedStructure = structure;
+                if (!(typedStructure.type() instanceof Structure))
+                    typedStructure = typeCheckAndConvert(structure);
                 if (typedStructure.type() instanceof Structure(boolean isUnion,
                                                                String tag, StructDef _)) {
                     StructDef structDef = TYPE_TABLE.get(tag);
