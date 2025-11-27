@@ -233,6 +233,11 @@ class MccTest {
         returns("subscript_then_cast", 42);
     }
 
+
+    @Test
+    void conditional_fptr_and_null()  throws Exception {
+        returns("conditional_fptr_and_null", 42);
+    }
     @Test
     void offsetof_test()  throws Exception {
         outputs("offsetof", "the first element is at offset 0\n" +

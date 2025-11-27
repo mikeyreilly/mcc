@@ -1149,7 +1149,7 @@ public class SemanticAnalysis {
     }
 
     private static Exp convertTo(Exp e, Type t) {
-        if (e == null || e.type() == t) return e;
+        if (e == null || e.type().equals(t)) return e;
         if (e instanceof Constant c) {
             var r = convertConst(c, t);
             if (r != null) return r;
@@ -1160,7 +1160,11 @@ public class SemanticAnalysis {
 
     private static Exp convertByAssignment(Exp e, Type targetType) {
         if (e.type() instanceof FunType) {
-            e = typeCheckExpression(new AddrOf(e, null));
+            if (e instanceof Conditional(Exp condition, Exp ifTrue, Exp ifFalse, Type type)){
+                ifTrue = isNullPointerConstant(ifTrue) ? ifTrue: typeCheckExpression(new AddrOf(ifTrue, null));
+                ifFalse= isNullPointerConstant(ifFalse) ? ifFalse:  typeCheckExpression(new AddrOf(ifFalse, null));
+                e = new Conditional(condition, ifTrue, ifFalse, ifTrue.type());
+            }else e = typeCheckExpression(new AddrOf(e, null));
         }
         Type t = e.type();
 
@@ -1424,7 +1428,9 @@ public class SemanticAnalysis {
                 Type t1 = typedIfTrue.type();
                 Type t2 = typedIfFalse.type();
                 Type commonType;
-                if (t1 == VOID && t2 == VOID) commonType = VOID;
+                if (t1.equals(t2)){
+                    commonType=t1;
+                } else if (t1 == VOID && t2 == VOID) commonType = VOID;
                 else if (t1 instanceof Pointer || t2 instanceof Pointer)
                     commonType = getCommonPointerType(typedIfTrue,
                             typedIfFalse);
@@ -1434,6 +1440,12 @@ public class SemanticAnalysis {
                                                  String tag1, StructDef _) && t2 instanceof Structure(
                         boolean isUnion2, String tag2, StructDef _) && tag1.equals(tag2)) {
                     commonType = t1;
+                } else if (t1 instanceof FunType &&
+                        isNullPointerConstant(typedIfFalse)) {
+                    yield new Conditional(typedCondition, typedIfTrue, typedIfFalse, t1);
+                } else if (t2 instanceof FunType &&
+                        isNullPointerConstant(typedIfTrue)) {
+                    yield new Conditional(typedCondition, typedIfTrue, typedIfFalse, t2);
                 } else
                     throw new Err("Can't convert branches of conditional to " + "a" + " common type");
                 yield new Conditional(typedCondition, convertTo(typedIfTrue,
@@ -1663,6 +1675,10 @@ public class SemanticAnalysis {
         };
     }
 
+    private static Type decayFunType(Type t) {
+        return t instanceof FunType ? new Pointer(t) : t;
+    }
+
     private static Type completeType(Type t) {
         if (t instanceof Array(Type refType, ConstantExp c)){
             Constant val = evaluateConstantExp(c);
@@ -1727,6 +1743,7 @@ public class SemanticAnalysis {
             case LongInit(long l) -> l == 0L;
             case UIntInit(int i) -> i == 0;
             case ULongInit(long l) -> l == 0;
+            case Cast(Type type, Exp exp) -> isNullPointerConstant(exp);
             default -> false;
         };
     }
