@@ -233,11 +233,21 @@ class MccTest {
         returns("subscript_then_cast", 42);
     }
 
-
     @Test
     void conditional_fptr_and_null()  throws Exception {
         returns("conditional_fptr_and_null", 42);
     }
+
+    @Test
+    void array_element_to_pointer_argument_conversion()  throws Exception {
+        returns("array_element_to_pointer_argument_conversion", 5);
+    }
+
+    @Test
+    void compare_function_and_function_pointer() throws Exception {
+        returns("compare_function_and_function_pointer", 1);
+    }
+
     @Test
     void offsetof_test()  throws Exception {
         outputs("offsetof", "the first element is at offset 0\n" +

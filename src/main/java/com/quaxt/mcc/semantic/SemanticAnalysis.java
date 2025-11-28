@@ -1195,16 +1195,15 @@ public class SemanticAnalysis {
         return switch (typedE.type()) {
             case Array(Type element, _) ->
                     new AddrOf(typedE, new Pointer(element));
-            case Structure(boolean isUnion, String tag, StructDef _) -> {
+            case Structure(boolean _, String tag, StructDef _) -> {
                 if (TYPE_TABLE.containsKey(tag)) yield typedE;
                 else throw new Err("Invalid use of incomplete structure type");
             }
             default -> typedE;
-
         };
     }
 
-/**6.5.2.2/6 Function calls*
+    /**6.5.2.2/6 Function calls*
  * The integer promotions are performed on each trailing argument,
  * and trailing arguments that have type float are promoted to double. These are called the default
  * argument promotions. No other conversions are performed implicitly.
@@ -1271,22 +1270,25 @@ public class SemanticAnalysis {
                     case SAR_EQ -> SAR;
                 };
 
-                BinaryOp foo =
+                BinaryOp binaryOp =
                         (BinaryOp) typeCheckExpression(new BinaryOp(newOp,
                                 left, right, t));
 
-                Exp typedLeft = typeCheckAndConvert(left);
-                if (!isLvalue(typedLeft))
-                    throw new Err("cannot assign to non-lvalue");
-                Exp typedRight = typeCheckAndConvert(right);
+                Exp typedLeft =  binaryOp.left();
+                if (!isLvalue(typedLeft)){
+                    typedLeft = typeCheckAndConvert(left);
+                    if (!isLvalue(typedLeft))
+                        throw new Err("cannot assign to non-lvalue");
+
+                }
+                Exp typedRight = binaryOp.right();
                 Type leftType = typedLeft.type();
                 if (typedRight.type() == VOID) {
                     fail("can't assign void");
                 }
 
-
                 yield new CompoundAssignment(compoundOp, typedLeft,
-                        foo.right(), foo.type(), leftType);
+                        typedRight, binaryOp.type(), leftType);
             }
             case BinaryOp(BinaryOperator op, Exp e1, Exp e2,
                           Type _) when op == EQUALS || op == NOT_EQUALS -> {
