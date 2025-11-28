@@ -1162,7 +1162,7 @@ public class SemanticAnalysis {
         if (e.type() instanceof FunType) {
             if (e instanceof Conditional(Exp condition, Exp ifTrue, Exp ifFalse, Type type)){
                 ifTrue = isNullPointerConstant(ifTrue) ? ifTrue: typeCheckExpression(new AddrOf(ifTrue, null));
-                ifFalse= isNullPointerConstant(ifFalse) ? ifFalse:  typeCheckExpression(new AddrOf(ifFalse, null));
+                ifFalse = isNullPointerConstant(ifFalse) ? ifFalse:  typeCheckExpression(new AddrOf(ifFalse, null));
                 e = new Conditional(condition, ifTrue, ifFalse, ifTrue.type());
             }else e = typeCheckExpression(new AddrOf(e, null));
         }
@@ -1427,8 +1427,8 @@ public class SemanticAnalysis {
                         requireScalar(typeCheckAndConvert(condition));
                 Exp typedIfTrue = typeCheckAndConvert(ifTrue);
                 Exp typedIfFalse = typeCheckAndConvert(ifFalse);
-                Type t1 = typedIfTrue.type();
-                Type t2 = typedIfFalse.type();
+                Type t1 = decayFunType(typedIfTrue.type());
+                Type t2 = decayFunType(typedIfFalse.type());
                 Type commonType;
                 if (t1.equals(t2)){
                     commonType=t1;
@@ -1727,6 +1727,12 @@ public class SemanticAnalysis {
     private static Type getCommonPointerType(Exp e1, Exp e2) {
         Type t1 = e1.type();
         Type t2 = e2.type();
+        if (t1 instanceof FunType) {
+            t1 = decayFunType(t1);
+        }
+        if (t2 instanceof FunType){
+            t2 = decayFunType(t2);
+        }
         if (t1.equals(t2)) return t1;
         if (isNullPointerConstant(e1)) return t2;
         if (isNullPointerConstant(e2)) return t1;
