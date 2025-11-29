@@ -413,7 +413,7 @@ public class SemanticAnalysis {
                     default -> throw new IllegalStateException("Unexpected value: " + targetType);
                 }
             }
-            case SingleInit(Exp exp, Type _) -> {
+            case SingleInit(Exp exp, Type t) -> {
                 if (exp instanceof Str(String s,
                                        Type _) && targetType instanceof Array(
                         Type element, Constant arraySize)) {
@@ -426,14 +426,18 @@ public class SemanticAnalysis {
                     }
                     handleStringLiteral(acc,s,element,null);
 
-                } else if (exp instanceof AddrOf(Exp exp1, Type type1) && exp1 instanceof Str(String s,
-                                              Type _) && targetType instanceof Pointer(
-                        Type element)) {
-                    if (element != CHAR) {
-                        throw new Err("Can't initialize pointer to " + element + " with string literal");
+                } else if (exp instanceof AddrOf(Exp exp1, Type type1) &&
+                        exp1 instanceof Str(String s, Type _) &&
+                        targetType instanceof Pointer(Type element)) {
+                    if (!element.isCharacter()) {
+                        throw new Err("Can't initialize pointer to " + element +
+                                " with string literal");
                     }
-                    handleStringLiteral(acc,s,element,null);
-                    //acc.add(handleStringPointer(s));
+                    handleStringLiteral(acc, s, element, null);
+                } else if (exp instanceof Cast(Type type, Exp exp1) &&
+                        type instanceof Pointer(Type referenced) &&
+                        referenced.isCharacter()) {
+                    convertCompoundInitializerToStaticInitList(new SingleInit(exp1, t), targetType, acc);
                 } else {
                     if (targetType instanceof Array) {
                         throw new Err("Can't initialize static array with a " + "scalar");
@@ -565,9 +569,8 @@ public class SemanticAnalysis {
         // when initializing a static pointer with a string
         if (varType instanceof Pointer(Type referenced)
                 && referenced == CHAR && initialValue instanceof Initial(List<StaticInit> staticInits)
-        &&!isStringPointerInit(staticInits)) {
-
-            maybePointerify(referenced, staticInits, initialValue, decl,
+        && !isStringPointerInit(staticInits)) {
+            pointerify(referenced, staticInits, initialValue, decl,
                     varType);
         } else {
             StaticAttributes attrs =
@@ -974,11 +977,11 @@ public class SemanticAnalysis {
             if (//isStringPointerInit(staticInits) &&
                     varType instanceof Pointer(
                     Type referenced)) {
-                if (referenced == CHAR) {
+                if (referenced.isCharacter()) {
 
                     /* TODO: this logic is probably not going to handle
                         arrays of char* well*/
-                    maybePointerify(referenced, staticInits, initialValue, decl, varType);
+                    pointerify(referenced, staticInits, initialValue, decl, varType);
                 } else
                     throw new Err("Can't initialize pointer to " + referenced + " with string literal");
             } else
@@ -1007,11 +1010,11 @@ public class SemanticAnalysis {
         }
     }
 
-    private static void maybePointerify(Type referenced,
-                                  List<StaticInit> staticInits,
-                                  InitialValue initialValue,
-                                  VarDecl decl,
-                                  Type varType) {
+    private static void pointerify(Type referenced,
+                                   List<StaticInit> staticInits,
+                                   InitialValue initialValue,
+                                   VarDecl decl,
+                                   Type varType) {
         String uniqueName = makeTemporary(decl.name().name() +
                 ".string.");
         SYMBOL_TABLE.put(uniqueName,
@@ -1358,8 +1361,8 @@ public class SemanticAnalysis {
                 Exp typedE2 = typeCheckAndConvert(e2);
                 Type t1 = typedE1.type();
                 Type t2 = typedE2.type();
-                if (t1 == VOID && t2 == VOID) { // I guess we're dealing with comma operator
-                    yield new BinaryOp(op, typedE1, typedE2, VOID);
+                if (op == COMMA) {
+                    yield new BinaryOp(op, typedE1, typedE2, t2);
                 }
                 if (!t1.isScalar() || !t2.isScalar()) {
                     fail("Non-scalar operand illegal here");

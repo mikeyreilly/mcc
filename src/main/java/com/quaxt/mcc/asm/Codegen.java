@@ -86,7 +86,7 @@ public class Codegen {
 
         for (TopLevelAsm topLevelAsm : topLevels) {
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-                //RegisterAllocator.allocateRegisters(functionAsm);
+                RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
                 fixUpInstructions(offset, functionAsm);
