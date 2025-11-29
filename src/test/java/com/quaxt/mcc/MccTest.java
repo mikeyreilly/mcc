@@ -383,7 +383,12 @@ class MccTest {
 
     @Test
     void struct2() throws Exception{
-        returns("struct2", 0);
+        returns("struct2", 8);
+    }
+
+    @Test
+    void init() throws Exception{
+        returns("init", 32);
     }
 
     @Test
