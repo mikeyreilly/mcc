@@ -2,6 +2,7 @@ package com.quaxt.mcc;
 
 import com.quaxt.mcc.asm.Codegen;
 import com.quaxt.mcc.asm.ProgramAsm;
+import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.*;
@@ -17,6 +18,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.quaxt.mcc.parser.Nullptr.NULLPTR;
 import static com.quaxt.mcc.semantic.Primitive.*;
 
 import java.util.logging.*;
@@ -64,8 +66,11 @@ public class Mcc {
             case UINT -> 4;
             case LONG -> 8;
             case ULONG -> 8;
+            case ULONGLONG -> 8;
+            case LONGLONG -> 8;
             case DOUBLE -> 8;
             case VOID -> 1;
+            case Typeof(Exp e) when e == NULLPTR-> 8;
             case Structure(boolean isUnion, String tag, StructDef _) -> {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? 1 : st.alignment();

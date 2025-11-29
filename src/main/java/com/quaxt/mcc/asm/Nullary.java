@@ -1,8 +1,10 @@
 package com.quaxt.mcc.asm;
 
+import com.quaxt.mcc.tacky.InstructionIr;
+
 import java.util.Locale;
 
-public enum Nullary implements Instruction {
+public enum Nullary implements Instruction, InstructionIr {
     RET, MFENCE;
 
     final String code;
@@ -12,4 +14,8 @@ public enum Nullary implements Instruction {
     }
 
 
+    @Override
+    public String format(TypeAsm t) {
+        return Instruction.super.format(t);
+    }
 }

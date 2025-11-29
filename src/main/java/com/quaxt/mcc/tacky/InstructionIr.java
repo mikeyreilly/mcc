@@ -2,8 +2,10 @@ package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.AbstractInstruction;
 import com.quaxt.mcc.Ignore;
+import com.quaxt.mcc.asm.Nullary;
 
 public sealed interface InstructionIr extends AbstractInstruction permits Ignore,
+        Nullary,
         AddPtr,
         AtomicStore,
         BinaryIr,

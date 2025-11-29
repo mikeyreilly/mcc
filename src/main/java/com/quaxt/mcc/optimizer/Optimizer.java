@@ -12,6 +12,7 @@ import java.util.function.Predicate;
 
 import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.Optimization.*;
+import static com.quaxt.mcc.asm.Nullary.MFENCE;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
@@ -149,6 +150,7 @@ public class Optimizer {
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
                 case Jump _ -> {}
+                case MFENCE -> {}
                 case JumpIfNotZero(ValIr v1, String _) -> {
                     if (v1 instanceof VarIr var1 && var1.isStatic())
                         aliasedVars.add(var1);

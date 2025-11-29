@@ -21,6 +21,7 @@ import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.UnaryOperator.UNARY_SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.JmpCC.newJmpCC;
+import static com.quaxt.mcc.asm.Nullary.MFENCE;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 import static com.quaxt.mcc.asm.IntegerReg.*;
@@ -448,7 +449,10 @@ public class Codegen {
 
     private static TypeAsm toTypeAsm(Type type) {
         return switch (type) {
-            case Primitive.CHAR, UCHAR, Primitive.SCHAR, Primitive.BOOL -> BYTE;
+            case Primitive.CHAR, UCHAR, Primitive.SCHAR, Primitive.BOOL,
+            // it's easier to just pretend it's a byte than to actually discard these here
+            // the optimizer should eliminate them anyway
+                 Primitive.VOID -> BYTE;
             case Primitive.SHORT, Primitive.USHORT -> WORD;
             case Primitive.INT, Primitive.UINT -> LONGWORD;
             case Primitive.LONG, Primitive.ULONG, Primitive.LONGLONG, Primitive.ULONGLONG  -> QUADWORD;
@@ -458,6 +462,7 @@ public class Codegen {
             case Array _, Structure _ ->
                     new ByteArray((int) Mcc.size(type),
                             Mcc.variableAlignment(type));
+
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
         };
@@ -912,7 +917,7 @@ public class Codegen {
                 }
                 case BinaryIr(ArithmeticOperator op1, ValIr v1, ValIr v2,
                               VarIr dstName) -> {
-                    Type type = valToType(v1);
+                    Type type = valToType(v2);// v1 might be null because of VOID v1 in COMMA op
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (typeAsm == DOUBLE || typeAsm == FLOAT) {
                         if (op1 == COMMA) {
@@ -1343,9 +1348,6 @@ public class Codegen {
                     // register save area.
                     ins.add(new Lea(new Memory(BP, -176),
                             new PseudoMem(vaList.identifier(), 16)));
-
-
-                    //      throw new Todo("implement prologue first");
                 }
                 case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) -> {
                     emitBuiltInVarArg(vaList, dst, ins, type);
@@ -1354,6 +1356,7 @@ public class Codegen {
 //                        ins.add(new Bswap(valToAsmType(src),
 //                                toOperand(src),
 //                                toOperand(dst)));
+                case MFENCE -> ins.add(MFENCE);
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
             }

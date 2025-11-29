@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.parser.*;
@@ -758,7 +759,9 @@ public class IrGen {
                     case BUILTIN_MUL_OVERFLOW -> {
                         return emitOverflowArithmetic(IMUL, expr, instructions, args);
                     }
-                    case BUILTIN_BSWAP64 -> {
+                    case BUILTIN_BSWAP16,
+                         BUILTIN_BSWAP32,
+                         BUILTIN_BSWAP64 -> {
                         ValIr v1 =
                                 emitTackyAndConvert(args.get(0), instructions);
                         VarIr result = makeTemporary("tmp.", expr.type());
@@ -773,6 +776,10 @@ public class IrGen {
 
                         instructions.add(new UnaryIr(UnaryOperator.CLZ, v1, result));
                         return new PlainOperand(result);
+                    }
+                    case SYNC_SYNCHRONIZE ->  {
+                        instructions.add(Nullary.MFENCE);
+                        return null;
                     }
                 }
             }
