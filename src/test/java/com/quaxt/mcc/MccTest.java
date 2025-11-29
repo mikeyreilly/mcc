@@ -382,6 +382,11 @@ class MccTest {
     }
 
     @Test
+    void struct2() throws Exception{
+        returns("struct2", 0);
+    }
+
+    @Test
     void double_to_uint() throws Exception {
         outputs("double_to_uint", "long\n" + "18446744073709551615\n" + "1\n" +
                 "10000000000\n" + "0\n" + "0\n" + "int\n" + "4294967295\n" +
