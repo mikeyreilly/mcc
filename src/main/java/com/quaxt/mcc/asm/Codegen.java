@@ -411,7 +411,7 @@ public class Codegen {
                 case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                     if (srcType.isInteger()) {
                         if (src instanceof Imm) {
-                            instructions.set(i, new Mov(dstType, src, R10));
+                            instructions.set(i, new Mov(srcType, src, R10));
                             if (isRam(dst)) {
                                 instructions.add(i + 1, new Cvt(srcType, dstType, R10
                                         , XMM15));

@@ -396,6 +396,10 @@ class MccTest {
     void static_unsigned_char_pointer_init() throws Exception{
         returns("static_unsigned_char_pointer_init", 32);
     }
+    @Test
+    void cast_to_double() throws Exception{
+        returns("cast_to_double", 0);
+    }
 
     @Test
     void double_to_uint() throws Exception {
