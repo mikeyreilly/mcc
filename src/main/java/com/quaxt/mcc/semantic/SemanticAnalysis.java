@@ -1580,6 +1580,7 @@ public class SemanticAnalysis {
             case Dereference(Exp inner, Type _) -> {
                 Exp typedInner = typeCheckAndConvert(inner);
                 yield switch (typedInner.type()) {
+                    case FunType _ -> typedInner;
                     case Pointer(Type referenced) ->
                             new Dereference(typedInner, referenced);
                     default -> fail("Cannot dereference non-pointer");

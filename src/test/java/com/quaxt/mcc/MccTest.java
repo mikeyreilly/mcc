@@ -222,8 +222,14 @@ class MccTest {
 
     @Test
     void bytes_swap()  throws Exception {
-        outputs("bytes_swap", "EFCDAB8967452301\n", false);
+        outputs("bytes_swap", "EFCDAB8967452301\n" + "78563412\n" + "3412\n", false);
     }
+
+    @Test
+    void multiple_deref_function_pointer() throws Exception {
+        returns("multiple_deref_function_pointer", 42, false);
+    }
+
     @Test
     void extern2_test()  throws Exception {
         returns("extern2", 0);

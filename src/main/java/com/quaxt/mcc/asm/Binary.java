@@ -66,6 +66,20 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case BITWISE_XOR -> "xorps	";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
+        } : t == WORD ? switch (op) {
+            case SUB -> "subw	";
+            case ADD -> "addw	";
+            case IMUL -> "imulw	";
+            case DIVIDE -> "dividew	";
+            case REMAINDER -> "remainderw	";
+            case AND, BITWISE_AND -> "andw	";
+            case OR, BITWISE_OR -> "orw	";
+            case BITWISE_XOR -> "xorw   ";
+            case SHL -> "shlw	";
+            case SAR -> "sarw	";
+            case UNSIGNED_RIGHT_SHIFT -> "shrw  ";
+            default ->
+                    throw new IllegalStateException("Unexpected value: " + op);
         } : switch (op) {
             case SUB -> "subb	";
             case ADD -> "addb	";

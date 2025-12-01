@@ -5,4 +5,4 @@ else
     mccdir=./
 fi
 
-java -Djava.util.logging.config.file=logging.properties --enable-preview -cp "${mccdir}target/classes" com.quaxt.mcc.Mcc "$@"
+java -Xss10M -Djava.util.logging.config.file=logging.properties --enable-preview -cp "${mccdir}target/classes" com.quaxt.mcc.Mcc "$@"

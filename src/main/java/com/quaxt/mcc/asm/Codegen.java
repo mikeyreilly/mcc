@@ -148,7 +148,10 @@ public class Codegen {
             Instruction newInst = switch (oldInst) {
                 case CallIndirect(Operand p) ->
                         new CallIndirect(dePseudo(p, varTable, offset));
-                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _, Call _ ->
+                case Call c-> {
+                    throw new Todo();
+                }
+                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ->
                         oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
                         new Mov(typeAsm, dePseudo(src, varTable, offset),
@@ -499,7 +502,8 @@ public class Codegen {
                 if (t instanceof Array || t instanceof Structure)
                     yield new PseudoMem(identifier, 0);
                 var ste = SYMBOL_TABLE.get(identifier);
-                if (t instanceof FunType) {
+                if (t instanceof FunType && ste.attrs() instanceof FunAttributes) {
+                    System.out.println(ste.attrs());
                     yield new LabelAddress(identifier);
                 }
                 yield new Pseudo(identifier, toTypeAsm(t),
@@ -634,7 +638,7 @@ public class Codegen {
     private static void codegenFunCall(FunCall funCall,
                                        List<Instruction> instructionAsms) {
         // so for classify we can classify operands here
-        if (funCall instanceof FunCall(String name, ArrayList<ValIr> args,
+        if (funCall instanceof FunCall(VarIr name, ArrayList<ValIr> args,
                                        boolean varargs, boolean indirect, ValIr dst)) {
 
             final boolean returnInMemory;
@@ -664,7 +668,7 @@ public class Codegen {
             }
             ParameterClassification classifiedArgs =
                     classifyParameters(operands, returnInMemory);
-            PARAMETER_CLASSIFICATION_MAP.put(name, classifiedArgs);
+            PARAMETER_CLASSIFICATION_MAP.put(name.identifier(), classifiedArgs);
             ArrayList<TypedOperand> integerArguments =
                     classifiedArgs.integerArguments();
             ArrayList<Operand> doubleArguments =
@@ -720,9 +724,9 @@ public class Codegen {
                         new Imm(doubleArguments.size()), AX));
             }
             if (indirect) {
-                instructionAsms.add(new CallIndirect(toOperand(new VarIr(name))));
+                instructionAsms.add(new CallIndirect(toOperand(name)));
             }
-            else instructionAsms.add(new Call(name));
+            else instructionAsms.add(new CallIndirect(toOperand(name)));
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD,

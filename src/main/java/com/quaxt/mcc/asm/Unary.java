@@ -2,7 +2,7 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.UnaryOperator;
 
-import static com.quaxt.mcc.asm.PrimitiveTypeAsm.QUADWORD;
+import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record Unary(UnaryOperator op, TypeAsm type,
                     Operand operand) implements Instruction {
@@ -18,6 +18,16 @@ public record Unary(UnaryOperator op, TypeAsm type,
             case BSWAP -> "bswap";
             default ->
                     throw new AssertionError("can't format " + op + " in assembly");
-        } + (type == QUADWORD ? "q" : "l") + "\t";
+        } + switch (type) {
+            case ByteArray byteArray ->
+                    throw new AssertionError("unexpected operand " + op);
+            case BYTE -> 'b';
+            case WORD -> 'w';
+            case LONGWORD -> 'l';
+            case QUADWORD -> 'q';
+            case FLOAT -> 's';
+            case DOUBLE -> 'd';
+
+        } + "\t";
     }
 }

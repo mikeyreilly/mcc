@@ -563,17 +563,17 @@ public class IrGen {
                 return assign(left, right, instructions);
             case Var(String name, Type _):
                 return new PlainOperand(new VarIr(name));
-            case FunctionCall(Var name, List<Exp> args, boolean varargs, Type type): {
-                VarIr result = type == VOID ? null : makeTemporary("tmp.",
-                        type);
-                ArrayList<ValIr> argVals = new ArrayList<>();
-                for (Exp e : args) {
-                    argVals.add(emitTackyAndConvert(e, instructions));
-                }
-                boolean indirect = SYMBOL_TABLE.get(name.name()).type() instanceof Pointer;
-                instructions.add(new FunCall(name.name(), argVals, varargs,  indirect, result));
-                return new PlainOperand(result);
-            }
+//            case FunctionCall(Var name, List<Exp> args, boolean varargs, Type type): {
+//                VarIr result = type == VOID ? null : makeTemporary("tmp.",
+//                        type);
+//                ArrayList<ValIr> argVals = new ArrayList<>();
+//                for (Exp e : args) {
+//                    argVals.add(emitTackyAndConvert(e, instructions));
+//                }
+//                boolean indirect = SYMBOL_TABLE.get(name.name()).type() instanceof Pointer;
+//                instructions.add(new FunCall(new VarIr(name.name()), argVals, varargs,  indirect, result));
+//                return new PlainOperand(result);
+//            }
             case FunctionCall(Exp name, List<Exp> args, boolean varargs, Type type): {
                 VarIr func = (VarIr) emitTackyAndConvert(name, instructions);
                 VarIr result = type == VOID ? null : makeTemporary("tmp.",
@@ -584,7 +584,7 @@ public class IrGen {
                 }
                 boolean indirect = SYMBOL_TABLE.get(func.identifier()).type() instanceof Pointer;
 
-                instructions.add(new FunCall(func.identifier(), argVals, varargs,  indirect, result));
+                instructions.add(new FunCall(func, argVals, varargs,  indirect, result));
                 return new PlainOperand(result);
             }
             case Cast(Type t, Exp inner): {
@@ -601,9 +601,10 @@ public class IrGen {
                 emitCast(instructions, t, innerType, result, dst);
                 return new PlainOperand(dst);
             }
-            case Dereference(Exp exp, Type _): {
+            case Dereference(Exp exp, Type t): {
                 ValIr result = emitTackyAndConvert(exp, instructions);
-                return new DereferencedPointer((VarIr) result);
+                // deref of a function is a no-op (see c23 6.5.3.2 Address and indirection operators)
+                return t instanceof FunType ? new PlainOperand(result) : new DereferencedPointer((VarIr) result);
             }
             case AddrOf(Exp inner, Type _): {
                 ExpResult v = emitTacky(inner, instructions);

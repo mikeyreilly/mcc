@@ -144,10 +144,8 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
-                case FunCall(String name, ArrayList<ValIr> args, boolean _, boolean indirect, ValIr dst) -> {
-                    if (indirect) {
-                        currentLiveVars.add(new VarIr(name));
-                    }
+                case FunCall(VarIr name, ArrayList<ValIr> args, boolean _, boolean indirect, ValIr dst) -> {
+                    currentLiveVars.add(name);
                     currentLiveVars.remove(dst);
                     for (var src : args) {
                         if (src instanceof VarIr v) {
@@ -423,6 +421,7 @@ See p. 606 */
             }
             case CallIndirect(Operand address)-> {
                 // MR-TODO figure out the type of function we're calling and do proper parameter classification
+                // the way to do it is by changing the key of PARAMETER_CLASSIFICATION_MAP to the type of the function rather than it's name
                 Set<Operand> used = new HashSet<>();
                 used.add(address);
                 addMemoryAndIndexedRegsToUsed(address, used);

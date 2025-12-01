@@ -272,8 +272,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Nullary.MFENCE -> "mfence";
 
             case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
-                    instruction.format(t) +
-                        formatOperand(t, instruction, operand);
+                    op == UnaryOperator.BSWAP && t == WORD ?
+                            "rolw\t" + "$8, " +
+                                    formatOperand(t, instruction, operand) :
+                            instruction.format(t) +
+                                    formatOperand(t, instruction, operand);
             case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
                     instruction.format(t) + formatOperand(t, instruction,
                             subtrahend) + ", " + formatOperand(t, instruction
@@ -298,7 +301,13 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
                             functionName : functionName + "@PLT");
             case CallIndirect(Operand address) ->
-                    "call\t*" + formatOperand(QUADWORD, instruction, address);
+                    {
+                    if (address instanceof LabelAddress(String functionName)){
+                        yield "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
+                                functionName : functionName + "@PLT");
+                    }
+                    else yield "call\t" + "*"+formatOperand(QUADWORD, instruction, address);
+                    }
             case Cdq(TypeAsm t) -> instruction.format(t);
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                        Operand dst) -> {

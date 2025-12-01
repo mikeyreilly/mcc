@@ -1,3 +1,7 @@
 package com.quaxt.mcc.tacky;
 
-public record DereferencedPointer(VarIr v) implements ExpResult {}
+public record DereferencedPointer(VarIr v) implements ExpResult {
+    public DereferencedPointer(VarIr v){
+        this.v=v;
+    }
+}
