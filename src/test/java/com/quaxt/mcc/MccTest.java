@@ -416,4 +416,9 @@ class MccTest {
                 "0\n" + "0\n" + "0\n", false);
     }
 
+    @Test
+    void duplicate_goto_labels() throws Exception {
+        returns("duplicate_goto_labels", 42, false);
+    }
+
 }

@@ -272,7 +272,7 @@ public class IrGen {
 
             case Break aBreak ->
                     instructions.add(new Jump(breakLabel(aBreak.label)));
-            case Goto aGoto -> instructions.add(new Jump(".L" + aGoto.label));
+            case Goto aGoto -> instructions.add(new Jump(aGoto.label));
             case Continue aContinue ->
                     instructions.add(new Jump(continueLabel(aContinue.label)));
             case DoWhile(Statement body, Exp condition, String label) -> {

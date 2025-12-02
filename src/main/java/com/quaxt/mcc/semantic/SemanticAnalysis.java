@@ -2071,8 +2071,20 @@ public class SemanticAnalysis {
             case null -> null;
             case Exp exp -> resolveExp(exp, identifierMap, structureMap, enclosingFunction);
             case LabelledStatement(String label, Statement statement) ->
-                    new LabelledStatement(label, resolveStatement(statement,
+                    new LabelledStatement(labelForFunction(label,enclosingFunction.name), resolveStatement(statement,
                             identifierMap, structureMap, enclosingFunction));
+            case Break b -> {
+                b.label = labelForFunction(b.label, enclosingFunction.name);
+                yield b;
+            }
+            case Continue b -> {
+                b.label = labelForFunction(b.label, enclosingFunction.name);
+                yield b;
+            }
+            case Goto b -> {
+                b.label = labelForFunction(b.label, enclosingFunction.name);
+                yield b;
+            }
             case CaseStatement(Switch enclosingSwitch, Constant<?> label,
                                Statement statement) ->
                     new CaseStatement(enclosingSwitch, (Constant<?>) resolveExp(label, identifierMap,
@@ -2090,7 +2102,6 @@ public class SemanticAnalysis {
                     resolveBlock(block, new ArrayList<>(), copyIdentifierMap(identifierMap),
                             copyStructureMap(structureMap), enclosingFunction);
             case NullStatement nullStatement -> nullStatement;
-            case Break _, Continue _, Goto _ -> blockItem;
             case DoWhile(Statement body, Exp condition, String label) ->
                     new DoWhile(resolveStatement(body, identifierMap,
                             structureMap, enclosingFunction), resolveExp(condition,
@@ -2128,6 +2139,12 @@ public class SemanticAnalysis {
 
         };
 
+    }
+
+    private static String labelForFunction(String label,
+                                           String enclosingFunctionName) {
+        return label == null ? null :
+                ".L" + label + "." + enclosingFunctionName;
     }
 
     private static ForInit resolveForInit(ForInit init,

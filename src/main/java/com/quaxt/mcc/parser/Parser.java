@@ -558,7 +558,7 @@ public class Parser {
                 throw new Err("duplicate label: " + label);
             }
             labels.add(label);
-            return new LabelledStatement(".L" + label, parseStatement(tokens,
+            return new LabelledStatement(label, parseStatement(tokens,
                     labels, enclosingSwitch, typeAliases));
         }
         Exp exp = parseExp(tokens, 0, true, typeAliases);

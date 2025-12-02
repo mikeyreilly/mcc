@@ -1,0 +1,5 @@
+- bit precise integers
+- respect restrict
+- respect const
+- __int128
+- atomic types
