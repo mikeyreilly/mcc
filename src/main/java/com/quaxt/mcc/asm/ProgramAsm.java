@@ -283,7 +283,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                             , minuend);
             case Binary(ArithmeticOperator op, TypeAsm t, Operand src,
                         Operand dst) -> {
-                String srcF = formatOperand(t, instruction, src);
+                String srcF = formatOperand(switch(op){
+                    case SHL,SAR,UNSIGNED_RIGHT_SHIFT -> BYTE;
+                    default -> t;
+                }, instruction, src);
                 String dstF = formatOperand(t, instruction, dst);
                 yield instruction.format(t) + srcF + ", " + dstF;
             }

@@ -421,4 +421,19 @@ class MccTest {
         returns("duplicate_goto_labels", 42, false);
     }
 
+    @Test
+    void shl() throws Exception {
+        returns("shl", 64, false);
+    }
+
+    @Test
+    void infinty_builtin() throws Exception {
+        outputs("infinty_builtin", "INFINITY (float) printed with %f: inf\n" );
+    }
+
+
+    @Test
+    void nan_builtin() throws Exception {
+        outputs("nan_builtin", "NAN (double) printed with %f: nan\n");
+    }
 }

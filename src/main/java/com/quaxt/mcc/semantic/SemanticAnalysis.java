@@ -21,8 +21,7 @@ import static com.quaxt.mcc.optimizer.Optimizer.optimizeInstructions;
 import static com.quaxt.mcc.parser.BuiltInFunction.BUILTIN_ADD_OVERFLOW;
 import static com.quaxt.mcc.parser.BuiltInFunction.BUILTIN_SUB_OVERFLOW;
 import static com.quaxt.mcc.parser.Nullptr.NULLPTR;
-import static com.quaxt.mcc.parser.StorageClass.EXTERN;
-import static com.quaxt.mcc.parser.StorageClass.STATIC;
+import static com.quaxt.mcc.parser.StorageClass.*;
 import static com.quaxt.mcc.semantic.NullptrT.NULLPTR_T;
 import static com.quaxt.mcc.semantic.Primitive.*;
 
@@ -512,7 +511,7 @@ public class SemanticAnalysis {
         }
         InitialValue initialValue;
         var varType = decl.varType();
-        if (varType == VOID && decl.storageClass() != StorageClass.TYPEDEF) {
+        if (varType == VOID && decl.storageClass() != TYPEDEF) {
             fail("Can't declare void variable");
         }
         if (decl.init() == null) initialValue =
@@ -530,7 +529,7 @@ public class SemanticAnalysis {
         }
         if (((sd != null && !isComplete(sd)) || !isComplete(varType)) &&
                 ((decl.storageClass() != EXTERN &&
-                        decl.storageClass() != StorageClass.TYPEDEF) ||
+                        decl.storageClass() != TYPEDEF) ||
                         decl.init() != null)) {
 //            if (!(varType instanceof Array))
             fail("Can't declare incomplete variable");
@@ -576,8 +575,7 @@ public class SemanticAnalysis {
             StaticAttributes attrs =
                     new StaticAttributes(initialValue, global,
                      decl.storageClass());
-            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
-            , attrs));
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType, attrs));
         }
         return decl;
     }

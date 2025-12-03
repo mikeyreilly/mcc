@@ -30,8 +30,7 @@ import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
 public class Codegen {
     static HashMap<Number, StaticConstant> CONSTANT_TABLE = new HashMap<>();
-    private static final Data NEGATIVE_ZERO;
-    private static final Data UPPER_BOUND;
+
 
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE =
             new HashMap<>();
@@ -44,16 +43,6 @@ public class Codegen {
             SI, DX, CX, R8, R9};
     public final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
             XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
-
-    static {
-        double negative_zero = -0.0;
-        // can't just call resolve constant because 16-byte alignment
-        CONSTANT_TABLE.put(negative_zero,
-                new StaticConstant("c." + doubleToHexString(negative_zero), 16,
-                        new DoubleInit(negative_zero)));
-        NEGATIVE_ZERO = resolveConstantDouble(-0.0d);
-        UPPER_BOUND = resolveConstantDouble(0x1.0p63);
-    }
 
     private static String doubleToHexString(double d) {
         return Double.toHexString(d).replaceAll("-", "_");
@@ -71,11 +60,8 @@ public class Codegen {
                 case FunctionIr f -> topLevels.add(convertFunction(f));
 
                 case StaticVariable(String name, boolean global, Type t,
-                                    List<StaticInit> init) -> {
-
-                    topLevels.add(new StaticVariableAsm(name, global,
-                            Mcc.variableAlignment(t), init));
-                }
+                                    List<StaticInit> init) -> topLevels.add(new StaticVariableAsm(name, global,
+                                            Mcc.variableAlignment(t), init));
                 case com.quaxt.mcc.tacky.StaticConstant(String name, Type t,
                                                         StaticInit init) ->
                         topLevels.add(new StaticConstant(name,
@@ -90,7 +76,7 @@ public class Codegen {
                 RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
-                fixUpInstructions(offset, functionAsm);
+                fixUpInstructions(functionAsm);
             }
         }
 
@@ -148,9 +134,6 @@ public class Codegen {
             Instruction newInst = switch (oldInst) {
                 case CallIndirect(Operand p) ->
                         new CallIndirect(dePseudo(p, varTable, offset));
-                case Call c-> {
-                    throw new Todo();
-                }
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ->
                         oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
@@ -194,16 +177,15 @@ public class Codegen {
                         new Lea(dePseudo(src, varTable, offset), dePseudo(dst
                                 , varTable, offset));
                 case Comment comment -> comment;
-                case Pop pop -> throw new Todo();
-                case Test test -> throw new Todo();
+
+                default -> throw new IllegalStateException("Unexpected value: " + oldInst);
             };
             instructions.set(i, newInst);
         }
         return offset;
     }
 
-    private static void fixUpInstructions(AtomicLong offset,
-                                          FunctionAsm function) {
+    private static void fixUpInstructions(FunctionAsm function) {
         var instructions = function.instructions;
         IntegerReg[] calleeSavedRegs = function.calleeSavedRegs;
         int calleeSavedCount = calleeSavedRegs.length;
@@ -477,7 +459,9 @@ public class Codegen {
 
     public static Data resolveConstantDouble(double d) {
         StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d,
-                _ -> new StaticConstant("c." + doubleToHexString(d), 8,
+                _ -> new StaticConstant("c." + doubleToHexString(d),
+                        /* -0.0 is 16 byte aligned because it is used in xorpd*/
+                        d == -0.0 ? 16 : 8,
                         new DoubleInit(d)));
         return new Data(c.label(), 0);
     }
@@ -503,7 +487,6 @@ public class Codegen {
                     yield new PseudoMem(identifier, 0);
                 var ste = SYMBOL_TABLE.get(identifier);
                 if (t instanceof FunType && ste.attrs() instanceof FunAttributes) {
-                    System.out.println(ste.attrs());
                     yield new LabelAddress(identifier);
                 }
                 yield new Pseudo(identifier, toTypeAsm(t),
@@ -687,8 +670,7 @@ public class Codegen {
                 var assemblyType = integerArg.type();
 
                 IntegerReg r = INTEGER_REGISTERS[regIndex];
-                if (assemblyType instanceof ByteArray(long size,
-                                                      long alignment)) {
+                if (assemblyType instanceof ByteArray(long size, _)) {
                     copyBytesToReg(instructionAsms, integerArg.operand(), r,
                             size);
                 } else {
@@ -706,8 +688,7 @@ public class Codegen {
                 TypedOperand to = stackArguments.get(i);
                 TypeAsm assemblyType = to.type();
                 Operand operand = to.operand();
-                if (assemblyType instanceof ByteArray(long size,
-                                                      long alignment)) {
+                if (assemblyType instanceof ByteArray(long size, _)) {
                     instructionAsms.add(new Binary(SUB, QUADWORD, new Imm(8),
                             SP));
                     copyBytes(instructionAsms, operand, new Memory(SP, 0),
@@ -723,10 +704,7 @@ public class Codegen {
                 instructionAsms.add(new Mov(LONGWORD,
                         new Imm(doubleArguments.size()), AX));
             }
-            if (indirect) {
-                instructionAsms.add(new CallIndirect(toOperand(name)));
-            }
-            else instructionAsms.add(new CallIndirect(toOperand(name)));
+            instructionAsms.add(new CallIndirect(toOperand(name)));
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD,
@@ -743,7 +721,7 @@ public class Codegen {
                     TypeAsm t = intDest.type();
                     var op = intDest.operand();
                     IntegerReg r = INTEGER_RETURN_REGISTERS[regIndex];
-                    if (t instanceof ByteArray(long size, long alignment)) {
+                    if (t instanceof ByteArray(long size, _)) {
                         copyBytesFromReg(instructionAsms, r, op, size);
                     } else {
                         instructionAsms.add(new Mov(t, r, op));
@@ -829,7 +807,7 @@ public class Codegen {
 
         for (TypedOperand to : integerArguments) {
             TypeAsm paramType = to.type();
-            if (paramType instanceof ByteArray(long size, long alignment)) {
+            if (paramType instanceof ByteArray(long size, _)) {
                 copyBytesFromReg(ins, INTEGER_REGISTERS[regIndex],
                         to.operand(), size);
             } else
@@ -846,7 +824,7 @@ public class Codegen {
         for (int i = 0; i < stackArguments.size(); i++) {
             TypedOperand to = stackArguments.get(i);
             TypeAsm paramType = to.type();
-            if (paramType instanceof ByteArray(long size, long alignment)) {
+            if (paramType instanceof ByteArray(long size, _)) {
                 Operand src = new Memory(BP, offset);
                 copyBytes(ins, src, to.operand(), size);
             } else
@@ -901,10 +879,10 @@ public class Codegen {
 
                     Operand dst = toOperand(dstName);
                     LabelIr label1 = newLabel(Mcc.makeTemporary(".Lno."));
-                    ins.add(new Mov(PrimitiveTypeAsm.BYTE, Imm.ZERO, dst));
+                    ins.add(new Mov(BYTE, Imm.ZERO, dst));
 
                     ins.add(new JmpCC(CC.NO, label1.label()));
-                    ins.add(new Mov(PrimitiveTypeAsm.BYTE, Imm.ONE, dst));
+                    ins.add(new Mov(BYTE, Imm.ONE, dst));
                     ins.add(label1);
                     // if we have to downcast and result can't fit then that is overflow
                     if (Mcc.size(outputType) < Mcc.size(inputType)) {
@@ -912,7 +890,7 @@ public class Codegen {
                         ins.add(new Movsx(dstTypeAsm, srcTypeAsm, DX, AX));
                         ins.add(new Cmp(QUADWORD, DX, AX));
                         ins.add(new JmpCC(CC.E, label2.label()));
-                        ins.add(new Mov(PrimitiveTypeAsm.BYTE, Imm.ONE, dst));
+                        ins.add(new Mov(BYTE, Imm.ONE, dst));
                         ins.add(label2);
                     }
                     ins.add(new Mov(QUADWORD, toOperand(v3), AX));
@@ -952,10 +930,8 @@ public class Codegen {
                                 ins.add(new Binary(op1, typeAsm,
                                         toOperand(v2), toOperand(dstName)));
                             }
-                            case COMMA -> {
-                                ins.add(new Mov(typeAsm, toOperand(v2),
-                                        toOperand(dstName)));
-                            }
+                            case COMMA -> ins.add(new Mov(typeAsm, toOperand(v2),
+                                    toOperand(dstName)));
                             case DIVIDE, REMAINDER -> {
                                 if (type.isSigned()) {
                                     ins.add(new Mov(typeAsm, toOperand(v1),
@@ -1014,8 +990,7 @@ public class Codegen {
                     Operand dst = toOperand(dstV);
                     TypeAsm typeAsm = valToAsmType(srcV);
                     assert (valToAsmType(dstV).equals(typeAsm));
-                    if (typeAsm instanceof ByteArray(long size,
-                                                     long alignment)) {
+                    if (typeAsm instanceof ByteArray(long size, _)) {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
@@ -1023,8 +998,7 @@ public class Codegen {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV, (int) offset1);
                     TypeAsm typeAsm = valToAsmType(srcV);
-                    if (typeAsm instanceof ByteArray(long size,
-                                                     long alignment)) {
+                    if (typeAsm instanceof ByteArray(long size, _)) {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
@@ -1068,36 +1042,39 @@ public class Codegen {
                 }
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
                     Type dstType = valToType(dst);
-                    if (dstType == UCHAR) {
-                        ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
-                        ins.add(new Mov(BYTE, AX, toOperand(dst)));
-                    } else if (dstType == Primitive.USHORT) {
-                        ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
-                        ins.add(new Mov(WORD, AX, toOperand(dst)));
-                    } else if (dstType == Primitive.UINT) {
-                        ins.add(new Cvt(valToAsmType(src), QUADWORD, toOperand(src), AX));
-                        ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
-                    } else {
-                        TypeAsm srcAsmType = valToAsmType(src);
-                        //p.335
-                        LabelIr label1 = newLabel(Mcc.makeTemporary(".Laub."));
-                        LabelIr label2 = newLabel(Mcc.makeTemporary(".LendCmp"
-                                + "."));
-                        ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
-                        ins.add(new OldJmpCC(CmpOperator.GREATER_THAN_OR_EQUAL,
-                                true, label1.label()).toJmpCC2());
-                        ins.add(new Cvt(srcAsmType, QUADWORD, toOperand(src),
-                                toOperand(dst)));
-                        ins.add(new Jump(label2.label()));
-                        ins.add(label1);
-                        ins.add(new Mov(DOUBLE, toOperand(src), XMM0));
-                        ins.add(new Binary(DOUBLE_SUB, DOUBLE, UPPER_BOUND,
-                                XMM0));
-                        ins.add(new Cvt(srcAsmType, QUADWORD, XMM0, toOperand(dst)));
-                        ins.add(new Mov(QUADWORD, UPPER_BOUND_LONG_IMMEDIATE,
-                                AX));
-                        ins.add(new Binary(ADD, QUADWORD, AX, toOperand(dst)));
-                        ins.add(label2);
+                    switch (dstType) {
+                        case Primitive.UCHAR -> {
+                            ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
+                            ins.add(new Mov(BYTE, AX, toOperand(dst)));
+                        }
+                        case Primitive.USHORT -> {
+                            ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
+                            ins.add(new Mov(WORD, AX, toOperand(dst)));
+                        }
+                        case Primitive.UINT -> {
+                            ins.add(new Cvt(valToAsmType(src), QUADWORD, toOperand(src), AX));
+                            ins.add(new Mov(LONGWORD, AX, toOperand(dst)));
+                        }
+                        case null, default -> {
+                            TypeAsm srcAsmType = valToAsmType(src);
+                            //p.335
+                            LabelIr label1 =
+                                    newLabel(Mcc.makeTemporary(".Laub."));
+                            LabelIr label2 = newLabel(Mcc.makeTemporary(
+                                    ".LendCmp" + "."));
+                            var UPPER_BOUND = resolveConstantDouble(0x1.0p63);
+                            ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
+                            ins.add(new OldJmpCC(CmpOperator.GREATER_THAN_OR_EQUAL, true, label1.label()).toJmpCC2());
+                            ins.add(new Cvt(srcAsmType, QUADWORD, toOperand(src), toOperand(dst)));
+                            ins.add(new Jump(label2.label()));
+                            ins.add(label1);
+                            ins.add(new Mov(DOUBLE, toOperand(src), XMM0));
+                            ins.add(new Binary(DOUBLE_SUB, DOUBLE, UPPER_BOUND, XMM0));
+                            ins.add(new Cvt(srcAsmType, QUADWORD, XMM0, toOperand(dst)));
+                            ins.add(new Mov(QUADWORD, UPPER_BOUND_LONG_IMMEDIATE, AX));
+                            ins.add(new Binary(ADD, QUADWORD, AX, toOperand(dst)));
+                            ins.add(label2);
+                        }
                     }
                 }
                 case FunCall funCall -> codegenFunCall(funCall, ins);
@@ -1168,8 +1145,7 @@ public class Codegen {
                     Operand dst = toOperand(dstV);
                     TypeAsm dstType = toTypeAsm(valToType(dstV));
                     ins.add(new Mov(QUADWORD, ptr, AX));
-                    if (dstType instanceof ByteArray(long size,
-                                                     long alignment)) {
+                    if (dstType instanceof ByteArray(long size, _)) {
                         Operand src = new Memory(AX, 0);
                         copyBytes(ins, src, dst, size);
                     } else {
@@ -1177,9 +1153,8 @@ public class Codegen {
                         ins.add(new Mov(dstType, new Memory(AX, 0), dst));
                     }
                 }
-                case ReturnIr(ValIr val) -> {
-                    returnValueClassification = convertReturn(val, ins);
-                }
+                case ReturnIr(ValIr val) ->
+                        returnValueClassification = convertReturn(val, ins);
                 case SignExtendIr(ValIr src, VarIr dst) ->
                         ins.add(new Movsx(valToAsmType(src),
                                 valToAsmType(dst), toOperand(src),
@@ -1189,8 +1164,7 @@ public class Codegen {
                     Operand ptr = toOperand(ptrV);
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     TypeAsm srcType = toTypeAsm(valToType(srcV));
-                    if (srcType instanceof ByteArray(long size,
-                                                     long alignment)) {
+                    if (srcType instanceof ByteArray(long size, _)) {
                         Operand dst = new Memory(AX, 0);
                         copyBytes(ins, src, dst, size);
                     } else {
@@ -1285,6 +1259,7 @@ public class Codegen {
                         }
                     } else if (op1 == UnaryOperator.UNARY_MINUS && typeAsm == DOUBLE) {
                         ins.add(new Mov(typeAsm, src1, dst1));
+                        var NEGATIVE_ZERO = resolveConstantDouble(-0.0);
                         ins.add(new Binary(BITWISE_XOR, typeAsm,
                                 NEGATIVE_ZERO, dst1));
                     } else if (op1 == UnaryOperator.CLZ) {
@@ -1305,8 +1280,7 @@ public class Codegen {
                 case CopyFromOffset(ValIr srcV, long offset1, VarIr dstV) -> {
                     Operand src = toOperand(srcV, (int) offset1);
                     TypeAsm typeAsm = valToAsmType(dstV);
-                    if (typeAsm instanceof ByteArray(long size,
-                                                     long alignment)) {
+                    if (typeAsm instanceof ByteArray(long size, _)) {
                         Operand dst = toOperand(dstV, 0);
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, toOperand(dstV)));
@@ -1353,13 +1327,8 @@ public class Codegen {
                     ins.add(new Lea(new Memory(BP, -176),
                             new PseudoMem(vaList.identifier(), 16)));
                 }
-                case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) -> {
-                    emitBuiltInVarArg(vaList, dst, ins, type);
-                }
-//                case BswapIr(ValIr src, VarIr dst) ->
-//                        ins.add(new Bswap(valToAsmType(src),
-//                                toOperand(src),
-//                                toOperand(dst)));
+                case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) ->
+                        emitBuiltInVarArg(vaList, dst, ins, type);
                 case MFENCE -> ins.add(MFENCE);
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
@@ -1550,7 +1519,7 @@ public class Codegen {
                 Operand op = to.operand();
                 TypeAsm t = to.type();
                 var r = INTEGER_RETURN_REGISTERS[regIndex];
-                if (t instanceof ByteArray(long size, long alignment)) {
+                if (t instanceof ByteArray(long size, _)) {
                     copyBytesToReg(ins, op, r, size);
                 } else {
                     ins.add(new Mov(t, op, r));
@@ -1670,7 +1639,7 @@ public class Codegen {
     }
 
 
-    enum StructureType {MEMORY, SSE, INTEGER}
+    public enum StructureType {MEMORY, SSE, INTEGER}
 
     public static List<StructureType> classifyStructure(Type t) {
         long size = Mcc.size(t);
@@ -1745,19 +1714,4 @@ public class Codegen {
             throw new RuntimeException("Internal error");
         }
     }
-
-    private static void flattenTypes(List<Type> types,
-                                     ArrayList<MemberEntry> members) {
-        for (var m : members) {
-            Type type = m.type();
-            switch (type) {
-                case Array(Type element, Constant arraySize) ->
-                        types.addAll(Collections.nCopies((int) arraySize.toLong(), element));
-                case Structure(boolean isUnion, String tag, StructDef _) ->
-                        flattenTypes(types, Mcc.TYPE_TABLE.get(tag).members());
-                default -> types.add(type);
-            }
-        }
-    }
-
 }

@@ -17,8 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
-import static com.quaxt.mcc.parser.StorageClass.EXTERN;
-import static com.quaxt.mcc.parser.StorageClass.STATIC;
+import static com.quaxt.mcc.parser.StorageClass.*;
 import static com.quaxt.mcc.semantic.Primitive.*;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
@@ -44,11 +43,13 @@ public class IrGen {
                 }
                 case FunAttributes funAttributes -> {}
                 case IdentifierAttributes.LocalAttr localAttr -> {}
-                case StaticAttributes(InitialValue init, boolean global, StorageClass _) -> {
+                case StaticAttributes(InitialValue init, boolean global, StorageClass sc) -> {
                     if (init instanceof InitialValue.Tentative) {
-                        tackyDefs.add(new StaticVariable(name, global,
-                                value.type(),
-                                Collections.singletonList(new ZeroInit(Mcc.size(value.type())))));
+                        if (sc != TYPEDEF) {
+                            tackyDefs.add(new StaticVariable(name, global,
+                                    value.type(),
+                                    Collections.singletonList(new ZeroInit(Mcc.size(value.type())))));
+                        }
                     } else if (init instanceof Initial(
                             List<StaticInit> initList)) {
                         tackyDefs.add(new StaticVariable(name, global,
