@@ -30,8 +30,6 @@ import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
 public class Codegen {
     static HashMap<Number, StaticConstant> CONSTANT_TABLE = new HashMap<>();
-
-
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE =
             new HashMap<>();
 
@@ -622,7 +620,7 @@ public class Codegen {
                                        List<Instruction> instructionAsms) {
         // so for classify we can classify operands here
         if (funCall instanceof FunCall(VarIr name, ArrayList<ValIr> args,
-                                       boolean varargs, boolean indirect, ValIr dst)) {
+                                       boolean varargs, _, ValIr dst)) {
 
             final boolean returnInMemory;
             List<TypedOperand> intDests = Collections.emptyList();
@@ -1202,41 +1200,45 @@ public class Codegen {
                     var dst = toOperand(dstV);
                     Type srcType = valToType(srcV);
                     TypeAsm dstType = valToAsmType(dstV);
-                    if (srcType == UCHAR) {
-                        ins.add(new MovZeroExtend(BYTE, LONGWORD, src, AX));
-                        ins.add(new Cvt(LONGWORD, dstType, AX, dst));
-                    } else if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
-                        ins.add(new Movsx(BYTE, LONGWORD, src, AX));
-                        ins.add(new Cvt(LONGWORD, dstType, AX, dst));
-                    } else if (srcType == Primitive.INT) {
-                        ins.add(new MovZeroExtend(valToAsmType(srcV),
-                                valToAsmType(dstV), src, AX));
-                        ins.add(new Cvt(QUADWORD, dstType, AX, dst));
-                    } else if (srcType == Primitive.UINT) {
-                        ins.add(new MovZeroExtend(valToAsmType(srcV),
-                                valToAsmType(dstV), src, AX));
-                        ins.add(new Cvt(QUADWORD, dstType, AX, dst));
-                    } else {
-                        // see description on p. 320
-                        LabelIr label1 = newLabel(Mcc.makeTemporary(
-                                ".LoutOfRange."));
-                        LabelIr label2 = newLabel(Mcc.makeTemporary(".Lend."));
-                        var asmSrcType = srcType == Primitive.UINT ?
-                                LONGWORD : QUADWORD;
-                        ins.add(new Cmp(QUADWORD, new Imm(0), src));
-                        ins.add(newJmpCC(CmpOperator.LESS_THAN, false,
-                                label1.label()));
-                        ins.add(new Cvt(asmSrcType, dstType, src, dst));
-                        ins.add(new Jump(label2.label()));
-                        ins.add(label1);
-                        ins.add(new Mov(asmSrcType, src, AX));
-                        ins.add(new Mov(QUADWORD, AX, DX));
-                        ins.add(new Unary(UNARY_SHR, QUADWORD, DX));
-                        ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));
-                        ins.add(new Binary(OR, QUADWORD, AX, DX));
-                        ins.add(new Cvt(QUADWORD, dstType, DX, dst));
-                        ins.add(new Binary(DOUBLE_ADD, DOUBLE, dst, dst));
-                        ins.add(label2);
+                    switch (srcType) {
+                        case Primitive.UCHAR -> {
+                            ins.add(new MovZeroExtend(BYTE, LONGWORD, src, AX));
+                            ins.add(new Cvt(LONGWORD, dstType, AX, dst));
+                        }
+                        case Primitive.CHAR, Primitive.SCHAR -> {
+                            ins.add(new Movsx(BYTE, LONGWORD, src, AX));
+                            ins.add(new Cvt(LONGWORD, dstType, AX, dst));
+                        }
+                        case Primitive.INT -> {
+                            ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
+                            ins.add(new Cvt(QUADWORD, dstType, AX, dst));
+                        }
+                        case Primitive.UINT -> {
+                            ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
+                            ins.add(new Cvt(QUADWORD, dstType, AX, dst));
+                        }
+                        case null, default -> {
+                            // see description on p. 320
+                            LabelIr label1 =
+                                    newLabel(Mcc.makeTemporary(".LoutOfRange."));
+                            LabelIr label2 =
+                                    newLabel(Mcc.makeTemporary(".Lend."));
+                            var asmSrcType = srcType ==
+                                    Primitive.UINT ? LONGWORD : QUADWORD;
+                            ins.add(new Cmp(QUADWORD, new Imm(0), src));
+                            ins.add(newJmpCC(CmpOperator.LESS_THAN, false, label1.label()));
+                            ins.add(new Cvt(asmSrcType, dstType, src, dst));
+                            ins.add(new Jump(label2.label()));
+                            ins.add(label1);
+                            ins.add(new Mov(asmSrcType, src, AX));
+                            ins.add(new Mov(QUADWORD, AX, DX));
+                            ins.add(new Unary(UNARY_SHR, QUADWORD, DX));
+                            ins.add(new Binary(AND, QUADWORD, new Imm(1), AX));
+                            ins.add(new Binary(OR, QUADWORD, AX, DX));
+                            ins.add(new Cvt(QUADWORD, dstType, DX, dst));
+                            ins.add(new Binary(DOUBLE_ADD, DOUBLE, dst, dst));
+                            ins.add(label2);
+                        }
                     }
                 }
                 case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
@@ -1482,7 +1484,7 @@ public class Codegen {
         }
     }
 
-    final static Pair<Integer, Integer> NO_REGS = new Pair(0, 0);
+    final static Pair<Integer, Integer> NO_REGS = new Pair<>(0, 0);
 
     private static Pair<Integer, Integer> toRegisters(
             ReturnValueClassification returnValueClassification) {
