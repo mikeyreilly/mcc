@@ -1,6 +1,7 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.semantic.FunType;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
@@ -300,10 +301,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case JmpCC(CC cc,
                        String label) ->
                     "j" + cc.name().toLowerCase(Locale.ENGLISH) + "\t" +label;
-            case Call(String functionName) ->
-                    "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
-                            functionName : functionName + "@PLT");
-            case CallIndirect(Operand address) ->
+            case Call(Operand address, FunType _) ->
                     {
                     if (address instanceof LabelAddress(String functionName)){
                         yield "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?

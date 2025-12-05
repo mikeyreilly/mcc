@@ -78,6 +78,14 @@ public enum BuiltInFunction {
         public Type determineReturnType(List<Exp> args) {
             return Primitive.VOID;
         }
+    }, BUILTIN_NANF("__builtin_nanf", 1) {
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.FLOAT;
+        }
+
+        public Type getParamType(int i) {
+            return new Pointer(Primitive.CHAR);
+        }
     };
 
     private final String identifier;

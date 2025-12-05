@@ -38,7 +38,7 @@ public class Optimizer {
         List<InstructionIr> instructions = f.instructions();
         instructions = optimizeInstructions(optimizations, instructions);
         return new FunctionIr(f.name(), f.global(), f.type(), instructions,
-                f.returnType(), f.callsVaStart());
+                f.funType(), f.callsVaStart());
     }
 
     public static List<InstructionIr> optimizeInstructions(

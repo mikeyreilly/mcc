@@ -8,7 +8,6 @@ import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public sealed interface Instruction extends AbstractInstruction permits Binary,
         Call,
-        CallIndirect,
         Cdq,
         Cmp,
         Comment,

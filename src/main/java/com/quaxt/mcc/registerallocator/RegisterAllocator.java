@@ -5,6 +5,7 @@ import com.quaxt.mcc.asm.*;
 import com.quaxt.mcc.optimizer.BasicBlock;
 import com.quaxt.mcc.optimizer.CfgNode;
 import com.quaxt.mcc.optimizer.LivenessAnalyzer;
+import com.quaxt.mcc.semantic.FunType;
 import com.quaxt.mcc.tacky.*;
 
 import static com.quaxt.mcc.asm.DoubleReg.*;
@@ -70,11 +71,12 @@ public class RegisterAllocator {
                         instructions.set(copyTo++, new Xchg(type, src, dst));
                     }
                 }
-                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _, Call _,
+                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _,
                      Comment _ -> instructions.set(copyTo++, oldInst);
-                case CallIndirect(Operand operand) -> {
-                     instructions.set(copyTo++, new CallIndirect(find(operand,
-                         coalescedRegs)));
+                case Call(Operand operand, FunType t) -> {
+                     instructions.set(copyTo++,
+                             new Call(find(operand,
+                         coalescedRegs), t));
                 }
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
                            Operand operand) ->
@@ -303,7 +305,7 @@ public class RegisterAllocator {
                 }
 
             } else instructions.set(copyTo++, switch (instr) {
-                case CallIndirect(Operand address) ->new CallIndirect(replaceOperand(address, registerMap));
+                case Call(Operand address, FunType t) -> new Call(replaceOperand(address, registerMap), t);
                 case Binary(ArithmeticOperator op, TypeAsm type, Operand src,
                             Operand dst) ->
                         new Binary(op, type, replaceOperand(src, registerMap)
@@ -454,7 +456,7 @@ public class RegisterAllocator {
 
         for (var instr : instructions) {
             switch (instr) {
-                case CallIndirect(Operand operand) -> {
+                case Call(Operand operand, FunType _) -> {
                     incrementSpillCost(interferenceGraph,
                         interferenceGraphMmx, operand);
                 }
@@ -465,8 +467,6 @@ public class RegisterAllocator {
                     }
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, src, dst);
-                }
-                case Call(String name) -> {
                 }
                 case Cdq cdq -> {
                 }
@@ -683,7 +683,7 @@ public class RegisterAllocator {
                                            List<Node> inteferenceGraphMmx) {
         for (var instr : instructions) {
             switch (instr) {
-                case CallIndirect(Operand address) -> maybeAddPseudo(address, interferenceGraph, inteferenceGraphMmx);
+                case Call(Operand address, FunType t) -> maybeAddPseudo(address, interferenceGraph, inteferenceGraphMmx);
                 case Test test -> {throw new Todo();}
                 case Binary(ArithmeticOperator _, TypeAsm _, Operand src,
                             Operand dst) -> {
@@ -743,7 +743,7 @@ public class RegisterAllocator {
                         }
                     }
                 }
-                case Jump _, LabelIr _, Call _, Nullary _, JmpCC _,
+                case Jump _, LabelIr _, Nullary _, JmpCC _,
                      Comment _ -> {}
             }
         }

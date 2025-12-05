@@ -3,6 +3,7 @@ package com.quaxt.mcc.optimizer;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.asm.*;
 import com.quaxt.mcc.atomics.MemoryOrder;
+import com.quaxt.mcc.semantic.FunType;
 import com.quaxt.mcc.semantic.Type;
 import com.quaxt.mcc.tacky.*;
 
@@ -403,11 +404,13 @@ See p. 606 */
                 addMemoryAndIndexedRegsToUsed(dst, used);
                 return new Pair<>(used, Set.of(dst));
             }
-            case Call(String name) -> {
+            case Call(Operand address, FunType t)-> {
+                Set<Operand> used = new HashSet<>();
+                used.add(address);
+                addMemoryAndIndexedRegsToUsed(address, used);
                 ParameterClassification pc =
-                        Codegen.PARAMETER_CLASSIFICATION_MAP.get(name);
+                        Codegen.PARAMETER_CLASSIFICATION_MAP.get(t);
                 int len = pc.integerArguments().size();
-                Set<Reg> used = new HashSet<>();
                 for (int i = 0; i < len; i++) {
                     used.add(Codegen.INTEGER_REGISTERS[i]);
                 }
@@ -418,22 +421,7 @@ See p. 606 */
                 return new Pair<>(used, Set.of(DI, SI, DX, CX, R8, R9, AX,
                         XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8,
                         XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15));
-            }
-            case CallIndirect(Operand address)-> {
-                // MR-TODO figure out the type of function we're calling and do proper parameter classification
-                // the way to do it is by changing the key of PARAMETER_CLASSIFICATION_MAP to the type of the function rather than it's name
-                Set<Operand> used = new HashSet<>();
-                used.add(address);
-                addMemoryAndIndexedRegsToUsed(address, used);
-                for (int i = 0; i < Codegen.INTEGER_REGISTERS.length; i++) {
-                    used.add(Codegen.INTEGER_REGISTERS[i]);
-                }
-                for (int i = 0; i < DOUBLE_REGISTERS.length; i++) {
-                    used.add(DOUBLE_REGISTERS[i]);
-                }
-                return new Pair<>(used, Set.of(DI, SI, DX, CX, R8, R9, AX,
-                        XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8,
-                        XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15));
+
             }
             case Cdq cdq -> {
                 return new Pair<>(EnumSet.of(AX), EnumSet.of(DX));

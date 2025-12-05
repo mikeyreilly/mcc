@@ -9,9 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class MccTest {
 
@@ -19,7 +19,7 @@ class MccTest {
         ProcessBuilder pb = new ProcessBuilder(args);
         pb.redirectErrorStream(true);
         Process p=pb.start();
-        int ret=pb.start().waitFor();
+        pb.start().waitFor();
         byte[] bytes;
         try (InputStream is = p.getInputStream()) {
             bytes = is.readAllBytes();
@@ -34,7 +34,7 @@ class MccTest {
 
     @Test
     void function_pointer() throws Exception {
-        returns("function_pointer", 38);
+        returns("function_pointer", 38, true);
     }
 
     @Test
@@ -49,8 +49,11 @@ class MccTest {
 
     @Test
     void nullptr() throws Exception {
-        outputs("nullptr", "p is a null pointer.\n" +
-                "q points to value: 42\n" + "q is now a null pointer.\n");
+        outputs("nullptr", """
+                p is a null pointer.
+                q points to value: 42
+                q is now a null pointer.
+                """);
     }
 
 
@@ -211,18 +214,28 @@ class MccTest {
 
     @Test
     void bitfield_test()  throws Exception {
-        outputs("bitfield", "x=52\n" + "y=38\n");
+        outputs("bitfield", """
+                x=52
+                y=38
+                """);
     }
 
     @Test
     void bitfield_with_anon()  throws Exception {
-        outputs("bitfield_with_anon", "x=1540\n" + "y=1030\n");
+        outputs("bitfield_with_anon", """
+                x=1540
+                y=1030
+                """);
     }
 
 
     @Test
     void bytes_swap()  throws Exception {
-        outputs("bytes_swap", "EFCDAB8967452301\n" + "78563412\n" + "3412\n", false);
+        outputs("bytes_swap", """
+                EFCDAB8967452301
+                78563412
+                3412
+                """, false);
     }
 
     @Test
@@ -256,8 +269,10 @@ class MccTest {
 
     @Test
     void offsetof_test()  throws Exception {
-        outputs("offsetof", "the first element is at offset 0\n" +
-                "the double is at offset 8\n");
+        outputs("offsetof", """
+                the first element is at offset 0
+                the double is at offset 8
+                """);
     }
     @Test
     void string_init()  throws Exception {
@@ -269,29 +284,27 @@ class MccTest {
     }
     @Test
     void struct_no_such_member_test()  {
-        Err thrown = assertThrows(Err.class, () -> {
-            returns("struct_no_such_member", 0);
-        });
+        Err thrown = assertThrows(Err.class, () -> returns("struct_no_such_member", 0));
         assertEquals("Structure has no member with this name",
                 thrown.getMessage());
     }
     @Test
     void offsetof_no_such_member_test()  {
-        Err thrown = assertThrows(Err.class, () -> {
-            returns("offsetof_no_such_member", 0);
-        });
+        Err thrown = assertThrows(Err.class, () -> returns("offsetof_no_such_member", 0));
         assertEquals("Structure has no member with this name",
                 thrown.getMessage());
     }
 
     @Test
     void nested_struct() throws Exception {
-        outputs("nested_struct",
-                "sizeof(struct Outer) = 8\n" +
-                        "offsetof(struct Outer, inner) = 8\n" +
-                        "Outer.i = 42\n" + "  Inner[0]: j=0, s=\"string 0\"\n" +
-                        "  Inner[1]: j=10, s=\"string 1\"\n" +
-                        "  Inner[2]: j=20, s=\"string 2\"\n");
+        outputs("nested_struct", """
+                sizeof(struct Outer) = 8
+                offsetof(struct Outer, inner) = 8
+                Outer.i = 42
+                  Inner[0]: j=0, s="string 0"
+                  Inner[1]: j=10, s="string 1"
+                  Inner[2]: j=20, s="string 2"
+                """);
     }
 
     @Test
@@ -343,26 +356,37 @@ class MccTest {
 
     @Test
     void bool() throws Exception {
-        outputs("bool", "true=1\n" + "false=0\n" + "sizeof(bool)=1\ncast=1\n");
+        outputs("bool", """
+                true=1
+                false=0
+                sizeof(bool)=1
+                cast=1
+                """);
     }
 
     @Test
     void add_overflow() throws Exception {
-        outputs("add_overflow", "sum=3, overflow=0\n" +
-                "sum=-2147483648, overflow=1\n");
+        outputs("add_overflow", """
+                sum=3, overflow=0
+                sum=-2147483648, overflow=1
+                """);
 
     }
 
     @Test
     void sub_overflow() throws Exception {
-        outputs("sub_overflow", "sum=1, overflow=0\n" +
-                "sum=2147483647, overflow=1\n");
+        outputs("sub_overflow", """
+                sum=1, overflow=0
+                sum=2147483647, overflow=1
+                """);
 
     }
     @Test
     void mul_overflow() throws Exception {
-        outputs("mul_overflow", "product=42, overflow=0\n" +
-                "product=-2, overflow=1\n");
+        outputs("mul_overflow", """
+                product=42, overflow=0
+                product=-2, overflow=1
+                """);
 
     }
 
@@ -374,12 +398,18 @@ class MccTest {
 
     @Test
     void longlong() throws Exception{
-        outputs("longlong", "long\n" + "long long\n");
+        outputs("longlong", """
+                long
+                long long
+                """);
     }
 
     @Test
     void generic() throws Exception{
-        outputs("generic", "int\n" + "long\n");
+        outputs("generic", """
+                int
+                long
+                """);
     }
 
     @Test
@@ -409,11 +439,32 @@ class MccTest {
 
     @Test
     void double_to_uint() throws Exception {
-        outputs("double_to_uint", "long\n" + "18446744073709551615\n" + "1\n" +
-                "10000000000\n" + "0\n" + "0\n" + "int\n" + "4294967295\n" +
-                "1\n" + "1410065408\n" + "0\n" + "0\n" + "short\n" + "65535\n" +
-                "1\n" + "0\n" + "0\n" + "0\n" + "char\n" + "255\n" + "1\n" +
-                "0\n" + "0\n" + "0\n", false);
+        outputs("double_to_uint", """
+                long
+                18446744073709551615
+                1
+                10000000000
+                0
+                0
+                int
+                4294967295
+                1
+                1410065408
+                0
+                0
+                short
+                65535
+                1
+                0
+                0
+                0
+                char
+                255
+                1
+                0
+                0
+                0
+                """, false);
     }
 
     @Test
@@ -435,5 +486,22 @@ class MccTest {
     @Test
     void nan_builtin() throws Exception {
         outputs("nan_builtin", "NAN (double) printed with %f: nan\n");
+    }
+
+    private static String assemble(String testProgram,
+                                   boolean optimize) throws Exception {
+        String baseFileName = "src/test/resources/" + testProgram;
+        if (optimize)
+            assertEquals(0, Mcc.mcc(baseFileName + ".c", "-S", "--optimize"));
+        else assertEquals(0, Mcc.mcc(baseFileName + ".c", "-S"));
+        return Files.readString(Paths.get(baseFileName + ".s"));
+    }
+
+
+    @Test
+    void inline() throws Exception {
+        returns("inline", 36, false);
+        Stream<String> lines = assemble("inline", false).lines();
+        assertTrue(lines.filter(x -> x.startsWith("sum:")).findAny().isEmpty());
     }
 }

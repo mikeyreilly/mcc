@@ -1,4 +1,7 @@
 package com.quaxt.mcc.asm;
 
-public record Call(String name) implements Instruction {
+import com.quaxt.mcc.semantic.FunType;
+
+public record Call(Operand address, FunType type) implements Instruction {
+
 }

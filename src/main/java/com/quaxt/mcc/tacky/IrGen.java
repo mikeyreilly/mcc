@@ -65,7 +65,7 @@ public class IrGen {
         List<InstructionIr> instructions = new ArrayList<>();
         compileBlock(function.body, instructions);
         FunctionIr f = new FunctionIr(function.name,
-                SYMBOL_TABLE.get(function.name).attrs().global(), function.parameters, instructions, function.funType.ret(), function.callsVaStart);
+                SYMBOL_TABLE.get(function.name).attrs().global(), function.parameters, instructions, function.funType, function.callsVaStart);
           ReturnIr ret = new ReturnIr(IntInit.ZERO);
         instructions.add(ret);
         return f;

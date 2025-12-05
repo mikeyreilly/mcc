@@ -130,8 +130,8 @@ public class Codegen {
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
             Instruction newInst = switch (oldInst) {
-                case CallIndirect(Operand p) ->
-                        new CallIndirect(dePseudo(p, varTable, offset));
+                case Call(Operand p, FunType t) ->
+                        new Call(dePseudo(p, varTable, offset), t);
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ->
                         oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
@@ -649,7 +649,7 @@ public class Codegen {
             }
             ParameterClassification classifiedArgs =
                     classifyParameters(operands, returnInMemory);
-            PARAMETER_CLASSIFICATION_MAP.put(name.identifier(), classifiedArgs);
+            PARAMETER_CLASSIFICATION_MAP.put(Mcc.funType(name), classifiedArgs);
             ArrayList<TypedOperand> integerArguments =
                     classifiedArgs.integerArguments();
             ArrayList<Operand> doubleArguments =
@@ -702,7 +702,7 @@ public class Codegen {
                 instructionAsms.add(new Mov(LONGWORD,
                         new Imm(doubleArguments.size()), AX));
             }
-            instructionAsms.add(new CallIndirect(toOperand(name)));
+            instructionAsms.add(new Call(toOperand(name), Mcc.funType(name)));
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD,
@@ -793,7 +793,7 @@ public class Codegen {
 
         ParameterClassification classifiedParameters =
                 classifyParameters(operands, returnInMemory);
-        PARAMETER_CLASSIFICATION_MAP.put(functionIr.name(),
+        PARAMETER_CLASSIFICATION_MAP.put(functionIr.funType(),
                 classifiedParameters);
 
         ArrayList<TypedOperand> integerArguments =
@@ -1630,7 +1630,7 @@ public class Codegen {
                 stackArguments);
     }
 
-    public static final Map<String, ParameterClassification> PARAMETER_CLASSIFICATION_MAP = new HashMap<>();
+    public static final Map<FunType, ParameterClassification> PARAMETER_CLASSIFICATION_MAP = new HashMap<>();
 
     private static TypeAsm getEightbyteType(long offset, long structSize) {
         long bytesFromEnd = structSize - offset;

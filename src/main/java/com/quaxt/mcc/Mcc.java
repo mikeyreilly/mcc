@@ -166,6 +166,17 @@ public class Mcc {
         return null;
     }
 
+    public static Type type(VarIr v) {
+        return Mcc.SYMBOL_TABLE.get(v.identifier()).type();
+    }
+
+    public static FunType funType(VarIr v) {
+        Type t=type(v);
+        if (t instanceof FunType ft) return ft;
+        if (t instanceof Pointer(FunType ft)) return ft;
+        throw new IllegalArgumentException("Required function or pointer to function. Found "+t);
+    }
+
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}
 
 
