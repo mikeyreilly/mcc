@@ -27,7 +27,7 @@ public enum TokenType implements Token {
     ATOMIC, BOOL, BREAK, BUILTIN_C23_VA_START, BUILTIN_OFFSETOF,
     BUILTIN_VA_ARG, BUILTIN_VA_END, CASE, CHAR, CONST, CONTINUE, DEFAULT, DO,
     DOUBLE, ELSE, ENUM, EXTERN, FALSE, FLOAT, FOR, GCC_ATTRIBUTE, GENERIC,
-    GOTO, IF, INT, LONG, NULLPTR, REGISTER, RESTRICT, RETURN, SHORT, SIGNED,
+    GOTO, IF, INLINE, INT, LONG, NULLPTR, REGISTER, RESTRICT, RETURN, SHORT, SIGNED,
     SIZEOF, STATIC, STRUCT, SWITCH, TRUE, TYPEDEF, TYPEOF, UNION, UNSIGNED,
     VOID, VOLATILE, WHILE, DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
@@ -96,6 +96,7 @@ public enum TokenType implements Token {
             case IDENTIFIER -> "identifier";
             case IF -> "if";
             case INCREMENT -> "increment";
+            case INLINE -> "inline";
             case INT -> "int";
             case INT_LITERAL -> "int_literal";
             case NULLPTR -> "nullptr";

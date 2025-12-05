@@ -8,15 +8,14 @@ import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.parser.StructOrUnionSpecifier;
 import com.quaxt.mcc.semantic.*;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.optimizer.Optimizer.optimizeFunction;
 import static com.quaxt.mcc.parser.StorageClass.*;
 import static com.quaxt.mcc.semantic.Primitive.*;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
@@ -25,9 +24,11 @@ public class IrGen {
 
     public static ProgramIr programIr(Program program) {
         List<TopLevel> tackyDefs = new ArrayList<>();
+        Map<String, FunctionIr> inlineFunctions = new HashMap<>();
+
         for (Function function : program.functions()) {
             if (function.body != null)
-                tackyDefs.add(compileFunction(function));
+                tackyDefs.add(compileFunction(function, inlineFunctions));
         }
         convertSymbolsToTacky(tackyDefs);
         return new ProgramIr(tackyDefs);
@@ -61,27 +62,38 @@ public class IrGen {
         }
     }
 
-    private static FunctionIr  compileFunction(Function function) {
+    private static FunctionIr  compileFunction(Function function,
+                                               Map<String, FunctionIr> inlineFunctions) {
         List<InstructionIr> instructions = new ArrayList<>();
-        compileBlock(function.body, instructions);
-        FunctionIr f = new FunctionIr(function.name,
-                SYMBOL_TABLE.get(function.name).attrs().global(), function.parameters, instructions, function.funType, function.callsVaStart);
-          ReturnIr ret = new ReturnIr(IntInit.ZERO);
+        compileBlock(function.body, instructions, inlineFunctions);
+        FunctionIr f =
+                new FunctionIr(function.name,
+                        SYMBOL_TABLE.get(function.name).attrs().global(),
+                        function.parameters, instructions, function.funType,
+                        function.callsVaStart, function.inline && !function.callsVaStart);
+        ReturnIr ret = new ReturnIr(IntInit.ZERO);
         instructions.add(ret);
+        if (f.inline()) {
+            EnumSet<Optimization> optimizations = EnumSet.allOf(Optimization.class);
+            f = optimizeFunction(f, optimizations);
+            inlineFunctions.put(f.name(), f);
+        }
         return f;
     }
 
     private static void compileBlock(Block block,
-                                     List<InstructionIr> instructions) {
-        compileBlockItems(block.blockItems(), instructions);
+                                     List<InstructionIr> instructions,
+                                     Map<String, FunctionIr> inlineFunctions) {
+        compileBlockItems(block.blockItems(), instructions, inlineFunctions);
     }
 
     private static void compileDeclaration(Declaration d,
-                                           List<InstructionIr> instructions) {
+                                           List<InstructionIr> instructions,
+                                           Map<String, FunctionIr> inlineFunctions) {
         switch (d) {
             case EnumSpecifier enumSpecifier -> throw new Todo();
             case Function function -> {
-                if (function.body != null) compileFunction(function);
+                if (function.body != null) compileFunction(function, inlineFunctions);
             }
             case VarDecl(Var name, Initializer init, Type _,
                          StorageClass storageClass,
@@ -89,17 +101,18 @@ public class IrGen {
                          Constant _) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
-                    assign(new VarIr(name.name()), init, instructions, 0);
+                    assign(new VarIr(name.name()), init, instructions, 0, inlineFunctions);
                     return;
                 }
-                emitTacky(null, instructions);
+                emitTacky(null, instructions, inlineFunctions);
             }
             case StructOrUnionSpecifier _ -> {} // nothing to do: StructDecls are not in IR
         }
     }
 
     private static long assign(VarIr name, Initializer init,
-                               List<InstructionIr> instructions, long offset) {
+                               List<InstructionIr> instructions, long offset,
+                               Map<String, FunctionIr> inlineFunctions) {
         switch (init) {
             case CompoundInit(ArrayList<Initializer> inits,
                               Type compoundInitType) when compoundInitType instanceof Structure(boolean isUnion,
@@ -115,7 +128,7 @@ public class IrGen {
                     switch (memInit) {
                         case CompoundInit _ ->
                                 assign(name, memInit, instructions,
-                                        offset + member.byteOffset());
+                                        offset + member.byteOffset(), inlineFunctions);
                         case SingleInit(Exp exp, Type targetType) -> {
                             if (exp instanceof Str(String s,
                                                    Type type) && type instanceof Array(
@@ -125,7 +138,7 @@ public class IrGen {
                                         offset + member.byteOffset(), s, arraySize);
                             } else {
                                 var val = emitTackyAndConvert(exp,
-                                        instructions);
+                                        instructions, inlineFunctions);
                                 if (member instanceof BitFieldMember(        String _,
                                                                              Type _,
                                                                              int _,
@@ -149,7 +162,7 @@ public class IrGen {
                     switch (innerInit) {
                         case CompoundInit _ ->
                                 offset = assign(name, innerInit, instructions
-                                        , offset);
+                                        , offset, inlineFunctions);
                         case SingleInit(Exp exp, Type targetType) -> {
                             if (exp instanceof Str(String s,
                                                    Type type) && type instanceof Array(
@@ -158,7 +171,7 @@ public class IrGen {
                                         instructions, offset, s, arraySize);
                             } else {
                                 var val = emitTackyAndConvert(exp,
-                                        instructions);
+                                        instructions, inlineFunctions);
                                 instructions.add(new CopyToOffset(val, name,
                                         offset));
                             }
@@ -177,7 +190,7 @@ public class IrGen {
                     initializeArrayWithStringLiteral(name, instructions,
                             offset, s, arraySize);
                 } else {
-                    assign(name, exp, instructions);
+                    assign(name, exp, instructions, inlineFunctions);
                 }
                 return offset + Mcc.size(targetType);
             }
@@ -204,72 +217,76 @@ public class IrGen {
 
 
     private static void compileBlockItems(List<BlockItem> blockItems,
-                                          List<InstructionIr> instructions) {
+                                          List<InstructionIr> instructions,
+                                          Map<String, FunctionIr> inlineFunctions) {
         for (BlockItem i : blockItems) {
             switch (i) {
 
-                case Declaration d -> compileDeclaration(d, instructions);
+                case Declaration d -> compileDeclaration(d, instructions, inlineFunctions);
                 case Statement statement ->
-                        compileStatement(statement, instructions);
+                        compileStatement(statement, instructions, inlineFunctions);
             }
         }
     }
 
     private static void compileIfElse(Exp condition, Statement ifTrue,
                                       Statement ifFalse,
-                                      List<InstructionIr> instructions) {
-        ValIr c = emitTackyAndConvert(condition, instructions);
+                                      List<InstructionIr> instructions,
+                                      Map<String, FunctionIr> inlineFunctions) {
+        ValIr c = emitTackyAndConvert(condition, instructions, inlineFunctions);
         LabelIr e2Label = newLabel(Mcc.makeTemporary(".Le2."));
         instructions.add(new JumpIfZero(c, e2Label.label()));
-        compileStatement(ifTrue, instructions);
+        compileStatement(ifTrue, instructions, inlineFunctions);
         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
         instructions.add(new Jump(endLabel.label()));
         instructions.add(e2Label);
-        compileStatement(ifFalse, instructions);
+        compileStatement(ifFalse, instructions, inlineFunctions);
         instructions.add(endLabel);
     }
 
     private static void compileIf(Exp condition, Statement ifTrue,
-                                  List<InstructionIr> instructions) {
-        ValIr c = emitTackyAndConvert(condition, instructions);
+                                  List<InstructionIr> instructions,
+                                  Map<String, FunctionIr> inlineFunctions) {
+        ValIr c = emitTackyAndConvert(condition, instructions, inlineFunctions);
         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
         instructions.add(new JumpIfZero(c, endLabel.label()));
-        compileStatement(ifTrue, instructions);
+        compileStatement(ifTrue, instructions, inlineFunctions);
         instructions.add(endLabel);
     }
 
 
     public static void compileStatement(Statement i,
-                                         List<InstructionIr> instructions) {
+                                         List<InstructionIr> instructions,
+                                         Map<String, FunctionIr> inlineFunctions) {
         switch (i) {
             case BuiltinC23VaStart(Var exp) -> {
                 ValIr retVal = emitTackyAndConvert(exp,
-                        instructions);
+                        instructions, inlineFunctions);
                 instructions.add(new BuiltinC23VaStartIr((VarIr) retVal));
             }
             case Switch switchStatement -> {
-                compileSwitch(switchStatement, instructions);
+                compileSwitch(switchStatement, instructions, inlineFunctions);
             }
             case Return(Exp exp) -> {
                 ValIr retVal = exp == null ? null : emitTackyAndConvert(exp,
-                        instructions);
+                        instructions, inlineFunctions);
                 ReturnIr ret = new ReturnIr(retVal);
                 instructions.add(ret);
             }
 
-            case Exp exp -> emitTacky(exp, instructions);
+            case Exp exp -> emitTacky(exp, instructions, inlineFunctions);
 
             case If(Exp condition, Statement ifTrue, Statement ifFalse) -> {
                 if (ifFalse != null) {
-                    compileIfElse(condition, ifTrue, ifFalse, instructions);
+                    compileIfElse(condition, ifTrue, ifFalse, instructions, inlineFunctions);
                 } else {
-                    compileIf(condition, ifTrue, instructions);
+                    compileIf(condition, ifTrue, instructions, inlineFunctions);
 
                 }
             }
             case NullStatement _ -> {
             }
-            case Block b -> compileBlock(b, instructions);
+            case Block b -> compileBlock(b, instructions, inlineFunctions);
 
             case Break aBreak ->
                     instructions.add(new Jump(breakLabel(aBreak.label)));
@@ -279,10 +296,10 @@ public class IrGen {
             case DoWhile(Statement body, Exp condition, String label) -> {
                 LabelIr start = newLabel(Mcc.makeTemporary(".Lstart."));
                 instructions.add(start);
-                compileStatement(body, instructions);
+                compileStatement(body, instructions, inlineFunctions);
                 LabelIr continueLabel = newLabel(continueLabel(label));
                 instructions.add(continueLabel);
-                ValIr v = emitTackyAndConvert(condition, instructions);
+                ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                 instructions.add(new JumpIfNotZero(v, start.label()));
                 LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(breakLabel);
@@ -291,12 +308,12 @@ public class IrGen {
                      String label) -> {
 
                 switch (init) {
-                    case Exp e -> emitTacky(e, instructions);
+                    case Exp e -> emitTacky(e, instructions, inlineFunctions);
                     case null -> {
                     }
                     case DeclarationList(List<Declaration> list) -> {
                         for (var d: list){
-                            compileDeclaration(d, instructions);
+                            compileDeclaration(d, instructions, inlineFunctions);
                         }
                     }
                 }
@@ -306,33 +323,33 @@ public class IrGen {
                 LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(start);
                 if (condition != null) {
-                    ValIr v = emitTackyAndConvert(condition, instructions);
+                    ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                     instructions.add(new JumpIfZero(v, breakLabel.label()));
                 }
-                compileStatement(body, instructions);
+                compileStatement(body, instructions, inlineFunctions);
                 instructions.add(continueLabel);
-                emitTacky(post, instructions);
+                emitTacky(post, instructions, inlineFunctions);
                 instructions.add(new Jump(start.label()));
                 instructions.add(breakLabel);
             }
             case While(Exp condition, Statement body, String label) -> {
                 LabelIr continueLabel = newLabel(continueLabel(label));
                 instructions.add(continueLabel);
-                ValIr v = emitTackyAndConvert(condition, instructions);
+                ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                 LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(new JumpIfZero(v, breakLabel.label()));
-                compileStatement(body, instructions);
+                compileStatement(body, instructions, inlineFunctions);
                 instructions.add(new Jump(continueLabel.label()));
                 instructions.add(breakLabel);
             }
             case LabelledStatement(String label, Statement statement) -> {
                 instructions.add(newLabel(label));
-                compileStatement(statement, instructions);
+                compileStatement(statement, instructions, inlineFunctions);
             }
             case CaseStatement(Switch enclosingSwitch, Constant<?> label, Statement statement) -> {
                 String s = enclosingSwitch.labelFor(label);
                 instructions.add(newLabel(s));
-                compileStatement(statement, instructions);
+                compileStatement(statement, instructions, inlineFunctions);
             }
             case BuiltinVaEnd builtinVaEnd -> {
                 // it's a NOOP
@@ -341,9 +358,10 @@ public class IrGen {
     }
 
     private static void compileSwitch(Switch switchStatement,
-                                      List<InstructionIr> instructions) {
+                                      List<InstructionIr> instructions,
+                                      Map<String, FunctionIr> inlineFunctions) {
         ValIr switchVal = emitTackyAndConvert(switchStatement.exp,
-                instructions);
+                instructions, inlineFunctions);
         Type type = switchStatement.exp.type();
         for (Constant c : switchStatement.entries) {
             if (c != null) {
@@ -356,7 +374,7 @@ public class IrGen {
         }
         String end = breakLabel(switchStatement.label);
         instructions.add(new Jump(end));
-        compileStatement(switchStatement.body, instructions);
+        compileStatement(switchStatement.body, instructions, inlineFunctions);
         instructions.add(newLabel(end));
     }
 
@@ -373,7 +391,8 @@ public class IrGen {
     }
 
     private static ExpResult emitTacky(Exp expr,
-                                       List<InstructionIr> instructions) {
+                                       List<InstructionIr> instructions,
+                                       Map<String, FunctionIr> inlineFunctions) {
         switch (expr) {
 
             case null:
@@ -382,25 +401,25 @@ public class IrGen {
                 return new PlainOperand(c);
             case Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                              Type type): {
-                ValIr cond = emitTackyAndConvert(condition, instructions);
+                ValIr cond = emitTackyAndConvert(condition, instructions, inlineFunctions);
                 LabelIr e2Label = newLabel(Mcc.makeTemporary(".Le2."));
                 instructions.add(new JumpIfZero(cond, e2Label.label()));
                 if (type == VOID) {
-                    emitTackyAndConvert(ifTrue, instructions);
+                    emitTackyAndConvert(ifTrue, instructions, inlineFunctions);
                     LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
                     instructions.add(new Jump(endLabel.label()));
                     instructions.add(e2Label);
-                    emitTackyAndConvert(ifFalse, instructions);
+                    emitTackyAndConvert(ifFalse, instructions, inlineFunctions);
                     instructions.add(endLabel);
                     return null;//not used by caller (see p. 480)
                 } else {
-                    ValIr e1 = emitTackyAndConvert(ifTrue, instructions);
+                    ValIr e1 = emitTackyAndConvert(ifTrue, instructions, inlineFunctions);
                     VarIr result = makeTemporary("result.", type);
                     instructions.add(new Copy(e1, result));
                     LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
                     instructions.add(new Jump(endLabel.label()));
                     instructions.add(e2Label);
-                    ValIr e2 = emitTackyAndConvert(ifFalse, instructions);
+                    ValIr e2 = emitTackyAndConvert(ifFalse, instructions, inlineFunctions);
                     instructions.add(new Copy(e2, result));
                     instructions.add(endLabel);
                     return new PlainOperand(result);
@@ -413,7 +432,7 @@ public class IrGen {
                         default -> false;
                     };
                     if (!post) throw new Todo();
-                    ExpResult lval = emitTacky(exp, instructions);
+                    ExpResult lval = emitTacky(exp, instructions, inlineFunctions);
                     var newOp = switch (op) {
                         case POST_INCREMENT -> ADD;
                         case POST_DECREMENT -> SUB;
@@ -423,7 +442,7 @@ public class IrGen {
                     return applyOperatorAndAssign(instructions, exp, lval,
                             right, newOp, post, exp.type(), exp.type());
                 }
-                ValIr src = emitTackyAndConvert(exp, instructions);
+                ValIr src = emitTackyAndConvert(exp, instructions, inlineFunctions);
                 VarIr dst = makeTemporary("tmp.", type);
                 instructions.add(new UnaryIr(op, src, dst));
                 return new PlainOperand(dst);
@@ -435,7 +454,7 @@ public class IrGen {
 
                 boolean post = false;
 
-                ExpResult lval = emitTacky(left, instructions);
+                ExpResult lval = emitTacky(left, instructions, inlineFunctions);
                 ArithmeticOperator newOp = switch (op) {
                     case SUB_EQ -> SUB;
                     case ADD_EQ -> ADD;
@@ -450,7 +469,7 @@ public class IrGen {
                     case SHL_EQ -> SHL;
                     case SAR_EQ -> SAR;
                 };
-                ValIr rightVal = emitTackyAndConvert(right, instructions);
+                ValIr rightVal = emitTackyAndConvert(right, instructions, inlineFunctions);
                 return applyOperatorAndAssign(instructions, left, lval,
                         rightVal, newOp, post, tempType, lvalueType);
 
@@ -467,11 +486,11 @@ public class IrGen {
                                 ".LandFalse."));
                         LabelIr endLabel = newLabel(Mcc.makeTemporary(
                                 ".LandEnd."));
-                        ValIr v1 = emitTackyAndConvert(left, instructions);
+                        ValIr v1 = emitTackyAndConvert(left, instructions, inlineFunctions);
                         instructions.add(new JumpIfZero(v1,
                                 falseLabel.label()));
 
-                        ValIr v2 = emitTackyAndConvert(right, instructions);
+                        ValIr v2 = emitTackyAndConvert(right, instructions, inlineFunctions);
                         instructions.add(new JumpIfZero(v2,
                                 falseLabel.label()));
                         instructions.add(new Copy(IntInit.ONE, result));
@@ -490,11 +509,11 @@ public class IrGen {
                                 ".Ltrue."));
                         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend" +
                                 "."));
-                        ValIr v1 = emitTackyAndConvert(left, instructions);
+                        ValIr v1 = emitTackyAndConvert(left, instructions, inlineFunctions);
                         instructions.add(new JumpIfNotZero(v1,
                                 trueLabel.label()));
 
-                        ValIr v2 = emitTackyAndConvert(right, instructions);
+                        ValIr v2 = emitTackyAndConvert(right, instructions, inlineFunctions);
                         instructions.add(new JumpIfNotZero(v2,
                                 trueLabel.label()));
                         instructions.add(new Copy(IntInit.ZERO, result));
@@ -507,8 +526,8 @@ public class IrGen {
                         return new PlainOperand(result);
                     }
                     default -> {
-                        ValIr v1 = emitTackyAndConvert(left, instructions);
-                        ValIr v2 = emitTackyAndConvert(right, instructions);
+                        ValIr v1 = emitTackyAndConvert(left, instructions, inlineFunctions);
+                        ValIr v2 = emitTackyAndConvert(right, instructions, inlineFunctions);
                         VarIr dstName = makeTemporary("tmp.", expr.type());
                         VarIr ptr = null;
                         ValIr other = null;
@@ -561,35 +580,32 @@ public class IrGen {
                     }
                 }
             case Assignment(Exp left, Exp right, Type _):
-                return assign(left, right, instructions);
+                return assign(left, right, instructions, inlineFunctions);
             case Var(String name, Type _):
                 return new PlainOperand(new VarIr(name));
-//            case FunctionCall(Var name, List<Exp> args, boolean varargs, Type type): {
-//                VarIr result = type == VOID ? null : makeTemporary("tmp.",
-//                        type);
-//                ArrayList<ValIr> argVals = new ArrayList<>();
-//                for (Exp e : args) {
-//                    argVals.add(emitTackyAndConvert(e, instructions));
-//                }
-//                boolean indirect = SYMBOL_TABLE.get(name.name()).type() instanceof Pointer;
-//                instructions.add(new FunCall(new VarIr(name.name()), argVals, varargs,  indirect, result));
-//                return new PlainOperand(result);
-//            }
             case FunctionCall(Exp name, List<Exp> args, boolean varargs, Type type): {
-                VarIr func = (VarIr) emitTackyAndConvert(name, instructions);
+                VarIr func = (VarIr) emitTackyAndConvert(name, instructions, inlineFunctions);
                 VarIr result = type == VOID ? null : makeTemporary("tmp.",
                         type);
                 ArrayList<ValIr> argVals = new ArrayList<>();
                 for (Exp e : args) {
-                    argVals.add(emitTackyAndConvert(e, instructions));
+                    argVals.add(emitTackyAndConvert(e, instructions, inlineFunctions));
                 }
                 boolean indirect = SYMBOL_TABLE.get(func.identifier()).type() instanceof Pointer;
 
-                instructions.add(new FunCall(func, argVals, varargs,  indirect, result));
+                if (func instanceof VarIr(String identifier)
+
+                        && SYMBOL_TABLE.get(identifier).type() instanceof FunType // must be FunType not pointer etc.
+                        && inlineFunctions.get(identifier) instanceof FunctionIr functionToInlineIr) {
+                    //codegenInlineFunCall(funCall, functionToInlineIr, ins);
+                    emitInlineFunCall(functionToInlineIr, argVals, result, instructions);
+                } else {
+                    instructions.add(new FunCall(func, argVals, varargs, indirect, result));
+                }
                 return new PlainOperand(result);
             }
             case Cast(Type t, Exp inner): {
-                ValIr result = emitTackyAndConvert(inner, instructions);
+                ValIr result = emitTackyAndConvert(inner, instructions, inlineFunctions);
                 Type innerType = inner.type();
                 // for the purposes of casting we treat pointers exactly like
                 // unsigned long (p. 375)
@@ -603,12 +619,12 @@ public class IrGen {
                 return new PlainOperand(dst);
             }
             case Dereference(Exp exp, Type t): {
-                ValIr result = emitTackyAndConvert(exp, instructions);
+                ValIr result = emitTackyAndConvert(exp, instructions, inlineFunctions);
                 // deref of a function is a no-op (see c23 6.5.3.2 Address and indirection operators)
                 return t instanceof FunType ? new PlainOperand(result) : new DereferencedPointer((VarIr) result);
             }
             case AddrOf(Exp inner, Type _): {
-                ExpResult v = emitTacky(inner, instructions);
+                ExpResult v = emitTacky(inner, instructions, inlineFunctions);
                 return switch (v) {
                     case PlainOperand(ValIr obj) -> {
                         assert (expr.type() instanceof Pointer);
@@ -631,8 +647,8 @@ public class IrGen {
             }
 
             case Subscript(Exp left, Exp right, Type type): {
-                ValIr v1 = emitTackyAndConvert(left, instructions);
-                ValIr v2 = emitTackyAndConvert(right, instructions);
+                ValIr v1 = emitTackyAndConvert(left, instructions, inlineFunctions);
+                ValIr v2 = emitTackyAndConvert(right, instructions, inlineFunctions);
                 VarIr dstName = makeTemporary("tmp.", new Pointer(expr.type()));
                 VarIr ptr;
                 ValIr other;
@@ -665,7 +681,7 @@ public class IrGen {
                 String uniqueName = Mcc.makeTemporary("string.");
                 SYMBOL_TABLE.put(uniqueName, new SymbolTableEntry(type,
                         new ConstantAttr(new StringInit(s, true))));
-                return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions);
+                return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions, inlineFunctions);
             }
             case SizeOf(Exp exp): {
                 return new PlainOperand(new ULongInit(Mcc.size(exp.type())));
@@ -682,7 +698,7 @@ public class IrGen {
                 StructDef structDef = Mcc.TYPE_TABLE.get(tag(structure));
                 MemberEntry memberEntry = structDef.findMember(member);
                 int memberOffset = memberEntry.byteOffset();
-                ExpResult innerObject = emitTacky(structure, instructions);
+                ExpResult innerObject = emitTacky(structure, instructions, inlineFunctions);
                 return switch (innerObject) {
                     case DereferencedPointer(ValIr ptr) -> {
                         if (memberOffset == 0) yield innerObject;
@@ -721,7 +737,7 @@ public class IrGen {
             case Arrow(Exp pointer, String member, Type type): {
                 StructDef structDef = Mcc.TYPE_TABLE.get(ptrTag(pointer));
                 int memberOffset = structDef.findMember(member).byteOffset();
-                ValIr innerObject = emitTackyAndConvert(pointer, instructions);
+                ValIr innerObject = emitTackyAndConvert(pointer, instructions, inlineFunctions);
                 if (memberOffset == 0)
                     return new DereferencedPointer((VarIr) innerObject);
                 VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
@@ -731,7 +747,7 @@ public class IrGen {
             }
             case BuiltinVaArg(Var identifier, Type type): {
                 VarIr src = (VarIr) emitTackyAndConvert(identifier,
-                        instructions);
+                        instructions, inlineFunctions);
                 VarIr dst = makeTemporary("tmp.", type);
                 instructions.add(new BuiltinVaArgIr(src, dst, type));
                 return new PlainOperand(dst);
@@ -740,32 +756,32 @@ public class IrGen {
                                      Type type): {
                 switch (name) {
                     case ATOMIC_STORE_N -> {
-                        ExpResult o = emitTacky(args.get(0), instructions);
+                        ExpResult o = emitTacky(args.get(0), instructions, inlineFunctions);
                         if (o instanceof PlainOperand(VarIr ptr)){
-                            ValIr val = emitTackyAndConvert(args.get(1), instructions);
-                            ValIr memOrder = emitTackyAndConvert(args.get(2), instructions);
+                            ValIr val = emitTackyAndConvert(args.get(1), instructions, inlineFunctions);
+                            ValIr memOrder = emitTackyAndConvert(args.get(2), instructions, inlineFunctions);
                             instructions.add(new AtomicStore(val, ptr, MemoryOrder.from(memOrder)));
                             return null;
                         } else throw new Todo();
                     }
                     case ATOMIC_LOAD_N -> {
-                        ValIr result = emitTackyAndConvert(args.get(0), instructions);
+                        ValIr result = emitTackyAndConvert(args.get(0), instructions, inlineFunctions);
                         return new DereferencedPointer((VarIr) result);
                     }
                     case BUILTIN_ADD_OVERFLOW -> {
-                        return emitOverflowArithmetic(ADD, expr, instructions, args);
+                        return emitOverflowArithmetic(ADD, expr, instructions, args, inlineFunctions);
                     }
                     case BUILTIN_SUB_OVERFLOW -> {
-                        return emitOverflowArithmetic(SUB, expr, instructions, args);
+                        return emitOverflowArithmetic(SUB, expr, instructions, args, inlineFunctions);
                     }
                     case BUILTIN_MUL_OVERFLOW -> {
-                        return emitOverflowArithmetic(IMUL, expr, instructions, args);
+                        return emitOverflowArithmetic(IMUL, expr, instructions, args, inlineFunctions);
                     }
                     case BUILTIN_BSWAP16,
                          BUILTIN_BSWAP32,
                          BUILTIN_BSWAP64 -> {
                         ValIr v1 =
-                                emitTackyAndConvert(args.get(0), instructions);
+                                emitTackyAndConvert(args.get(0), instructions, inlineFunctions);
                         VarIr result = makeTemporary("tmp.", expr.type());
 
                         instructions.add(new UnaryIr(UnaryOperator.BSWAP, v1, result));
@@ -773,7 +789,7 @@ public class IrGen {
                     }
                     case BUILTIN_CLZLL -> {
                         ValIr v1 =
-                                emitTackyAndConvert(args.get(0), instructions);
+                                emitTackyAndConvert(args.get(0), instructions, inlineFunctions);
                         VarIr result = makeTemporary("tmp.", expr.type());
 
                         instructions.add(new UnaryIr(UnaryOperator.CLZ, v1, result));
@@ -783,6 +799,9 @@ public class IrGen {
                         instructions.add(Nullary.MFENCE);
                         return null;
                     }
+                    case BUILTIN_NANF -> {
+                        throw new Todo();
+                    }
                 }
             }
 
@@ -791,15 +810,82 @@ public class IrGen {
         }
     }
 
+
+    private static void emitInlineFunCall(FunctionIr functionToInlineIr,
+                                          ArrayList<ValIr> argVals,
+                                          VarIr result,
+                                          List<InstructionIr> instructions) {
+        Map<VarIr, ValIr> substitutionTable = new HashMap<>();
+        List<Var> params = functionToInlineIr.type();
+        for(int i = 0; i < functionToInlineIr.type().size();i++){
+            Var p = params.get(i);
+            substitutionTable.put(new VarIr(p.name()), argVals.get(i));
+        }
+        java.util.function.Function<ValIr, ValIr> s = val->
+            val instanceof VarIr v ? substitutionTable.getOrDefault(v, v): val;
+
+        AtomicInteger labelSuffix = new AtomicInteger(0);
+
+        Map<String, String> labelTable = new HashMap<>();
+
+        java.util.function.Function<String, String> fixLabel = l ->
+                labelTable.computeIfAbsent(l, k-> k + labelSuffix.incrementAndGet());
+        int varArgIndex=functionToInlineIr.type().size();
+        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
+        for (var instr : functionToInlineIr.instructions()) {
+            InstructionIr i = switch(instr){
+                case Copy(ValIr src, VarIr dst) -> new Copy(s.apply(src), dst);
+                case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,
+                              VarIr dstName) ->
+                        new BinaryIr(op, s.apply(v1), s.apply(v2), dstName);
+                case ReturnIr(ValIr val) -> {
+                    instructions.add(new Copy(s.apply(val), result));
+                    yield new Jump(endLabel.label());
+                }
+                case BuiltinC23VaStartIr _ -> null;
+                case LabelIr(String label) -> new LabelIr(fixLabel.apply(label));
+                case JumpIfZero(ValIr v,String label) -> new JumpIfZero(s.apply(v), fixLabel.apply(label));
+                case Jump(String label) -> new Jump(fixLabel.apply(label));
+                case CopyFromOffset(VarIr src, long offset, VarIr dst) -> new CopyFromOffset((VarIr) s.apply(src), offset, dst);
+                case CopyBitsFromOffset(VarIr base, int byteOffset, int bitOffset,
+                                        int bitWidth,
+                                        VarIr dst) -> new CopyBitsFromOffset((VarIr) s.apply(base), byteOffset, bitOffset, bitWidth, dst);
+                case CopyBitsToOffset(ValIr rval, VarIr base, long  byteOffset,
+                                      int bitOffset,
+                                      int bitWidth) -> new CopyBitsToOffset(s.apply(rval), (VarIr) s.apply(base), byteOffset, bitOffset, bitWidth);
+                case IntToDouble(ValIr src, VarIr dst) -> new IntToDouble(s.apply(src), dst);
+                case Load(ValIr ptr, VarIr dst)-> new Load(s.apply(ptr), dst);
+                case SignExtendIr(ValIr src, VarIr dst)  -> new SignExtendIr(s.apply(src), dst);
+                case ZeroExtendIr(ValIr src, VarIr dst)  -> new ZeroExtendIr(s.apply(src), dst);
+                case TruncateIr(ValIr src, VarIr dst)  -> new TruncateIr(s.apply(src), dst);
+                case GetAddress(ValIr src, VarIr dst)  -> new GetAddress((VarIr) s.apply(src), dst);
+                case AddPtr(VarIr ptr, ValIr index, int scale, VarIr dst) -> new  AddPtr((VarIr) s.apply(ptr), s.apply(index), scale, dst);
+                case FunCall(VarIr name, ArrayList<ValIr> args, boolean varargs,
+                             boolean indirect, VarIr dst) -> {
+                    ArrayList<ValIr> newArgs = new ArrayList<>();
+                    for (var a : args) {
+                        newArgs.add(s.apply(a));
+                    }
+                    yield new FunCall((VarIr) s.apply(name), newArgs, varargs
+                            , indirect, dst);
+                }
+                default -> throw new IllegalStateException(
+                        "Unexpected value: " + instr);
+            };
+            if (i != null) instructions.add(i);
+        }
+        instructions.add(endLabel);
+    }
+
     private static PlainOperand emitOverflowArithmetic(ArithmeticOperator op, Exp expr,
                                                 List<InstructionIr> instructions,
-                                                List<Exp> args) {
+                                                List<Exp> args, Map<String, FunctionIr> inlineFunctions) {
         ValIr v1 =
-                emitTackyAndConvert(args.get(0), instructions);
+                emitTackyAndConvert(args.get(0), instructions, inlineFunctions);
         ValIr v2 =
-                emitTackyAndConvert(args.get(1), instructions);
+                emitTackyAndConvert(args.get(1), instructions, inlineFunctions);
         ValIr result =
-                emitTackyAndConvert(args.get(2), instructions);
+                emitTackyAndConvert(args.get(2), instructions, inlineFunctions);
         VarIr overflow = makeTemporary("tmp.", expr.type());
 
         instructions.add(new BinaryWithOverflowIr(op, v1, v2
@@ -841,8 +927,9 @@ public class IrGen {
     }
 
     public static ValIr emitTackyAndConvert(Exp e,
-                                             List<InstructionIr> instructions) {
-        ExpResult result = emitTacky(e, instructions);
+                                            List<InstructionIr> instructions,
+                                            Map<String, FunctionIr> inlineFunctions) {
+        ExpResult result = emitTacky(e, instructions, inlineFunctions);
         return switch (result) {
             case null -> null;
             case DereferencedPointer(ValIr ptr) -> {
@@ -866,8 +953,9 @@ public class IrGen {
     }
 
     private static void assign(VarIr dst, Exp right,
-                               List<InstructionIr> instructions) {
-        ValIr rval = emitTackyAndConvert(right, instructions);
+                               List<InstructionIr> instructions,
+                               Map<String, FunctionIr> inlineFunctions) {
+        ValIr rval = emitTackyAndConvert(right, instructions, inlineFunctions);
         instructions.add(new Copy(rval, dst));
     }
 
@@ -938,9 +1026,10 @@ public class IrGen {
     }
 
     private static ExpResult assign(Exp left, Exp right,
-                                    List<InstructionIr> instructions) {
-        ExpResult lval = emitTacky(left, instructions);
-         ValIr rval = emitTackyAndConvert(right, instructions);
+                                    List<InstructionIr> instructions,
+                                    Map<String, FunctionIr> inlineFunctions) {
+        ExpResult lval = emitTacky(left, instructions, inlineFunctions);
+         ValIr rval = emitTackyAndConvert(right, instructions, inlineFunctions);
         return switch (lval) {
             case PlainOperand(VarIr obj) -> {
                 instructions.add(new Copy(rval, obj));

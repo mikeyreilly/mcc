@@ -502,6 +502,6 @@ class MccTest {
     void inline() throws Exception {
         returns("inline", 36, false);
         Stream<String> lines = assemble("inline", false).lines();
-        assertTrue(lines.filter(x -> x.startsWith("sum:")).findAny().isEmpty());
+        assertTrue(lines.filter(x -> x.contains("call\tsum")).findAny().isEmpty());
     }
 }

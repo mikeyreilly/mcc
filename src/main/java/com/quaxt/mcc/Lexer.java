@@ -142,6 +142,7 @@ public class Lexer {
                                 case "goto" -> GOTO;
                                 case "if" -> IF;
                                 case "int" -> INT;
+                                case "inline" -> INLINE;
                                 case "long" -> LONG;
                                 case "nullptr" -> NULLPTR;
                                 case "register" -> REGISTER;

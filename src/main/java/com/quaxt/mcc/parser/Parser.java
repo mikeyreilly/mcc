@@ -70,10 +70,12 @@ public class Parser {
                 typeAliases = null; // we only want to recognize a typedef
                 // name as a typedef name if it is the first typeSpecifier
                 l.add(typeSpecifier);
-            } else if (tokens.getFirst() instanceof
-                    TokenWithValue(Token type, String value) && type==IDENTIFIER &&
-                    (value.equals("inline") || value.equals("__inline") ||
-                        value.equals("_NoReturn"))) {
+            } else if (tokens.getFirst() == INLINE){
+                tokens.removeFirst();
+                l.add(FunctionSpecifier.INLINE);
+            }else if (tokens.getFirst() instanceof
+                    TokenWithValue(Token type, String value) && type == IDENTIFIER &&
+                    value.equals("_NoReturn")) {
                     tokens.removeFirst();
             } else if (tokens.getFirst() == GCC_ATTRIBUTE) {
                 stripGccAttribute(tokens);
@@ -266,12 +268,8 @@ public class Parser {
             TokenList tokens, ArrayList<Map<String, Type>> typeAliases) {
         boolean isUnion = false;
         switch (tokens.getFirst()) {
-            case STRUCT -> {
-                isUnion = false;
-            }
-            case UNION -> {
-                isUnion = true;
-            }
+            case STRUCT -> isUnion = false;
+            case UNION -> isUnion = true;
             default -> {
                 return null;
             }
@@ -306,14 +304,10 @@ public class Parser {
                             fail("error: member declaration can't be function");
                                 members.add(new MemberDeclaration(t, name.name(), structOrUnionSpecifier, bitFieldWidth));
                             }
-                            case StructOrUnionSpecifier sous -> {
-                                // the only way we can get one of these is if
+                            case StructOrUnionSpecifier sous -> // the only way we can get one of these is if
                                 // we have an anonymous inner struct or union
-                                members.add(new MemberDeclaration(new Structure(sous.isUnion(), sous.tag(), TYPE_TABLE.get(sous.tag())), null, sous, null));
-                            }
-                            default->{
-                                throw makeErr("Todo", tokens);
-                            }
+                                    members.add(new MemberDeclaration(new Structure(sous.isUnion(), sous.tag(), TYPE_TABLE.get(sous.tag())), null, sous, null));
+                            default-> throw makeErr("Todo", tokens);
                         }
 
 
@@ -461,18 +455,18 @@ public class Parser {
         Token token = tokens.getFirst();
         Token tokenType = token.type();
         switch (token) {
-            case TokenType.RETURN -> {
+            case RETURN -> {
                 tokens.removeFirst();
                 if (tokens.getFirst() == SEMICOLON) return new Return(null);
                 Exp exp = parseExp(tokens, 0, true, typeAliases);
                 expect(SEMICOLON, tokens);
                 return new Return(exp);
             }
-            case TokenType.SEMICOLON -> {
+            case SEMICOLON -> {
                 tokens.removeFirst();
                 return NULL_STATEMENT;
             }
-            case TokenType.IF -> {
+            case IF -> {
                 tokens.removeFirst();
                 expect(OPEN_PAREN, tokens);
                 Exp condition = parseExp(tokens, 0, true, typeAliases);
@@ -488,48 +482,48 @@ public class Parser {
                 };
                 return new If(condition, ifTrue, ifFalse);
             }
-            case TokenType.OPEN_BRACE -> {
+            case OPEN_BRACE -> {
                 return parseBlock(tokens, labels, enclosingSwitch, typeAliases);
             }
-            case TokenType.WHILE -> {
+            case WHILE -> {
                 return parseWhile(tokens, labels, enclosingSwitch, typeAliases);
             }
-            case TokenType.DO -> {
+            case DO -> {
                 return parseDoWhile(tokens, labels, enclosingSwitch, typeAliases);
             }
-            case TokenType.FOR -> {
+            case FOR -> {
                 tokens.removeFirst();
                 return parseFor(tokens, labels, enclosingSwitch, typeAliases);
             }
-            case TokenType.SWITCH -> {
+            case SWITCH -> {
                 tokens.removeFirst();
                 return parseSwitch(tokens, labels, typeAliases);
             }
-            case TokenType.BUILTIN_C23_VA_START -> {
+            case BUILTIN_C23_VA_START -> {
                 tokens.removeFirst();
                 return parseBuiltinC23VaStart(tokens, labels, typeAliases);
             }
-            case TokenType.BUILTIN_VA_END -> {
+            case BUILTIN_VA_END -> {
                 tokens.removeFirst();
                 return parseBuiltinVaEnd(tokens, labels, typeAliases);
             }
-            case TokenType.BREAK -> {
+            case BREAK -> {
                 tokens.removeFirst();
                 expect(SEMICOLON, tokens);
                 return new Break();
             }
-            case TokenType.CONTINUE -> {
+            case CONTINUE -> {
                 tokens.removeFirst();
                 expect(SEMICOLON, tokens);
                 return new Continue();
             }
-            case TokenType.GOTO -> {
+            case GOTO -> {
                 tokens.removeFirst();
                 var label = expectIdentifier(tokens);
                 expect(SEMICOLON, tokens);
                 return new Goto(label);
             }
-             case TokenType.CASE -> {
+             case CASE -> {
                 tokens.removeFirst(); // CASE
                 Constant<?> c = parseConstExp(tokens, typeAliases);
                 expect(COLON, tokens);
@@ -537,7 +531,7 @@ public class Parser {
                         parseStatement(tokens, labels, enclosingSwitch,
                                 typeAliases));
             }
-            case TokenType.DEFAULT -> {
+            case DEFAULT -> {
                 tokens.removeFirst(); // CASE
                 expect(COLON, tokens);
                 return new CaseStatement(enclosingSwitch, null,
@@ -783,9 +777,7 @@ public class Parser {
                 Parser.expect(CLOSE_PAREN, tokens);
                 yield r;
             }
-            default -> {
-                yield null;
-            }
+            default -> null;
         };
         while(true) {
             t = tokens.getFirst();
@@ -992,7 +984,8 @@ public class Parser {
                 ArrayList<String> paramNames = nameDeclTypeParams.paramNames();
                 if (type instanceof FunType funType) {
                     decl =
-                            parseRestOfFunction(paramNames, tokens, name, typeAndStorageClass.storageClass(), typeAliases, funType);
+                            parseRestOfFunction(paramNames, tokens, name, typeAndStorageClass.storageClass(), typeAliases, funType,
+                                    typeAndStorageClass.inline());
                 } else {
                     Token token1 = tokens.getFirst();
                     Initializer init=null;
@@ -1061,6 +1054,7 @@ public class Parser {
         int intCount=0;
         StructOrUnionSpecifier structOrUnionSpecifier = null;
         Type type = null;
+        boolean inline = false;
         EnumSet<TypeQualifier> typeQualifiers =
                 EnumSet.noneOf(TypeQualifier.class);
 
@@ -1161,16 +1155,16 @@ public class Parser {
                         fail("can't combine typedef name with other type " + "specifiers");
                     type = findTypeByName(typeAliases, name);
                 }
-                case TypeQualifier typeQualifier -> {
-                    typeQualifiers.add(typeQualifier);
-                }
+                case TypeQualifier typeQualifier -> typeQualifiers.add(typeQualifier);
                 case EnumSpecifier es -> {
                     type=es.type();
                     if (type == null) type=Primitive.INT;
                 }
                 //default -> throw new Todo();
-                case Typeof typeof -> {type=typeof;}
-                case TypeofT typeofT -> {type=typeofT;}
+                case Typeof typeof -> type = typeof;
+                case TypeofT typeofT -> type = typeofT;
+                case FunctionSpecifier.INLINE -> inline = true;
+                default -> throw new IllegalStateException("Unexpected value: " + x);
             }
         }
 
@@ -1193,7 +1187,7 @@ public class Parser {
 
 
         return new TypeAndStorageClass(type, storageClass, null,
-                typeQualifiers, structOrUnionSpecifier);
+                typeQualifiers, structOrUnionSpecifier, inline);
 
     }
 
@@ -1218,7 +1212,8 @@ public class Parser {
                                                 String functionName,
                                                 StorageClass storageClass,
                                                 ArrayList<Map<String, Type>> typeAliases,
-                                                FunType funType) {
+                                                FunType funType,
+                                                boolean inline) {
 
         List<Type> paramTypes = funType.params();
 
@@ -1235,7 +1230,7 @@ public class Parser {
             block = null;
         }
         return new Function(functionName, params, block, funType,
-                storageClass, false, false);
+                storageClass, false, false, inline);
     }
 
     private static String expectIdentifier(TokenList tokens) {
@@ -1581,27 +1576,24 @@ public class Parser {
                 }
             }
             case TRUE, FALSE -> parseConst(tokens, true);
-            case TokenWithValue(Token tokenType, String value) -> {
+            case TokenWithValue(Token tokenType, String value) -> switch (tokenType) {
+                case STRING_LITERAL -> new Str(parseStr(tokens), null);
+                case IDENTIFIER
+                     // if we're in the middle of a ?: expression we
+                     // might have token type label (because of the
+                     // colon), but it's really an identifier
+                    -> {
+                    tokens.removeFirst();
 
-                yield switch (tokenType) {
-                    case STRING_LITERAL -> new Str(parseStr(tokens), null);
-                    case IDENTIFIER
-                         // if we're in the middle of a ?: expression we
-                         // might have token type label (because of the
-                         // colon), but it's really an identifier
-                        -> {
-                        tokens.removeFirst();
+                    Var id = new Var(value, null);
+                    Exp id1 =
+                            parseFunctionCallArgs(id, tokens, typeAliases);
+                    if (id1 != null) yield id1;
+                    yield id;
 
-                        Var id = new Var(value, null);
-                        Exp id1 =
-                                parseFunctionCallArgs(id, tokens, typeAliases);
-                        if (id1 != null) yield id1;
-                        yield id;
-
-                    }
-                    default -> parseConst(tokens, true);
-                };
-            }
+                }
+                default -> parseConst(tokens, true);
+            };
             case NULLPTR -> {
                 tokens.removeFirst();
                 yield Nullptr.NULLPTR;
@@ -1932,7 +1924,9 @@ public class Parser {
     private record TypeAndStorageClass(Type type, StorageClass storageClass,
                                        String typeDefName,
                                        EnumSet<TypeQualifier> typeQualifiers,
-                                       StructOrUnionSpecifier structOrUnionSpecifier) {}
+                                       StructOrUnionSpecifier structOrUnionSpecifier,
+                                       boolean inline) {}
 
-    public sealed static interface DeclarationSpecifier permits StorageClass, TypeSpecifier, TypeQualifier {}
+
+    public sealed static interface DeclarationSpecifier permits StorageClass, TypeSpecifier, TypeQualifier, FunctionSpecifier {}
 }

@@ -31,7 +31,7 @@ public class Mcc {
             return super.put(key, value);
         }
     };
-    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>(){
+    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>() {
         public StructDef put(String key, StructDef value) {
             return super.put(key, value);
         }
@@ -171,7 +171,7 @@ public class Mcc {
     }
 
     public static FunType funType(VarIr v) {
-        Type t=type(v);
+        Type t = type(v);
         if (t instanceof FunType ft) return ft;
         if (t instanceof Pointer(FunType ft)) return ft;
         throw new IllegalArgumentException("Required function or pointer to function. Found "+t);

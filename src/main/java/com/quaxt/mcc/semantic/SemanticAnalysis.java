@@ -51,7 +51,8 @@ public class SemanticAnalysis {
     private static Function loopLabelFunction(Function function) {
         return new Function(function.name, function.parameters,
                 loopLabelStatement(function.body, null, null),
-                function.funType, function.storageClass, function.callsVaStart, function.usesFunc);
+                function.funType, function.storageClass, function.callsVaStart,
+                function.usesFunc, function.inline);
 
     }
 
@@ -746,7 +747,8 @@ public class SemanticAnalysis {
             declParams.set(i, new Var(oldParam.name(), adjustedParams.get(i)));
         }
         return new Function(decl.name, decl.parameters, typeCheckedBody,
-                funType, decl.storageClass, decl.callsVaStart, decl.usesFunc);
+                funType, decl.storageClass, decl.callsVaStart, decl.usesFunc,
+                decl.inline);
     }
 
     private static Type arrayToPointer(Type p) {
@@ -1234,7 +1236,7 @@ public class SemanticAnalysis {
         List<InstructionIr> irs = new ArrayList<>();
         var typeCheckedSize = typeCheckExpression(exp);
         var r = new Return(typeCheckedSize);
-        IrGen.compileStatement(r, irs);
+        IrGen.compileStatement(r, irs, Collections.emptyMap());
         irs = optimizeInstructions(EnumSet.allOf(Optimization.class), irs);
         if (irs.size() == 1 &&
                 irs.getFirst() instanceof ReturnIr(Constant val)) {
@@ -2017,7 +2019,8 @@ public class SemanticAnalysis {
 
         return new Function(function.name, newArgs, newBody,
                 resolveFunType(function.funType, identifierMap, innerStructureMap, function),
-                function.storageClass, function.callsVaStart, function.usesFunc);
+                function.storageClass, function.callsVaStart, function.usesFunc,
+                function.inline);
     }
 
     private static FunType resolveFunType(FunType funType,

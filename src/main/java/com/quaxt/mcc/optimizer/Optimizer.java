@@ -32,13 +32,13 @@ public class Optimizer {
     //helps me set conditional breakpoints
     static String CURRENT_FUNCTION_NAME = "";
 
-    private static TopLevel optimizeFunction(FunctionIr f,
-                                             EnumSet<Optimization> optimizations) {
+    public static FunctionIr optimizeFunction(FunctionIr f,
+                                            EnumSet<Optimization> optimizations) {
         CURRENT_FUNCTION_NAME = f.name();
         List<InstructionIr> instructions = f.instructions();
         instructions = optimizeInstructions(optimizations, instructions);
         return new FunctionIr(f.name(), f.global(), f.type(), instructions,
-                f.funType(), f.callsVaStart());
+                f.funType(), f.callsVaStart(), f.inline());
     }
 
     public static List<InstructionIr> optimizeInstructions(

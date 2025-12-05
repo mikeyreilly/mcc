@@ -9,9 +9,11 @@ import java.util.List;
 public record FunctionIr(String name, boolean global, List<Var> type,
                          List<InstructionIr> instructions,
                          FunType funType,
-                         boolean callsVaStart) implements TopLevel {
+                         boolean callsVaStart,
+                         boolean inline) implements TopLevel {
 
     public Type returnType() {
         return funType.ret();
     }
+
 }

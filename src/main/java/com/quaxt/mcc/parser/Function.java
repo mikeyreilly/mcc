@@ -12,11 +12,12 @@ public final class Function implements Declaration {
     public StorageClass storageClass;
     public boolean callsVaStart;
     public boolean usesFunc;
-
+    public boolean inline;
     public Function(String name, List<Var> parameters, Block body,
                     FunType funType, StorageClass storageClass,
                     boolean callsVaStart,
-    boolean usesFunc) {
+                    boolean usesFunc,
+                    boolean inline) {
         this.name = name;
         this.parameters = parameters;
         this.body = body;
@@ -24,5 +25,6 @@ public final class Function implements Declaration {
         this.storageClass = storageClass;
         this.callsVaStart = callsVaStart;
         this.usesFunc = usesFunc;
+        this.inline = inline;
     }
 }

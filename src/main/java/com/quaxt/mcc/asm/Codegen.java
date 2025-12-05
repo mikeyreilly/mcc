@@ -55,7 +55,11 @@ public class Codegen {
         ArrayList<TopLevelAsm> topLevels = new ArrayList<>();
         for (TopLevel topLevel : programIr.topLevels()) {
             switch (topLevel) {
-                case FunctionIr f -> topLevels.add(convertFunction(f));
+                case FunctionIr f -> {
+                    FunctionAsm functionAsm = convertFunction(f);
+                    topLevels.add(functionAsm);
+
+                }
 
                 case StaticVariable(String name, boolean global, Type t,
                                     List<StaticInit> init) -> topLevels.add(new StaticVariableAsm(name, global,
@@ -1075,7 +1079,10 @@ public class Codegen {
                         }
                     }
                 }
-                case FunCall funCall -> codegenFunCall(funCall, ins);
+                case FunCall funCall -> {
+                    // check if we can inline
+                    codegenFunCall(funCall, ins);
+                }
                 case GetAddress(ValIr srcV, VarIr dstV) -> {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV);
