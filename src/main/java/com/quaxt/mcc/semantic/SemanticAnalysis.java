@@ -982,8 +982,11 @@ public class SemanticAnalysis {
                     /* TODO: this logic is probably not going to handle
                         arrays of char* well*/
                     pointerify(referenced, staticInits, initialValue, decl, varType);
-                } else
-                    throw new Err("Can't initialize pointer to " + referenced + " with string literal");
+                } else if (!isNullPointer(init)) {
+                    throw new Err("Can't initialize pointer to " + referenced +
+                            " with string literal");
+                }
+
             } else
 
                 SYMBOL_TABLE.put(decl.name().name(),
@@ -1008,6 +1011,11 @@ public class SemanticAnalysis {
             return new VarDecl(new Var(decl.name().name(), type), init, type,
                     decl.storageClass(), decl.structOrUnionSpecifier());
         }
+    }
+
+    private static boolean isNullPointer(Initializer init) {
+        return init instanceof SingleInit(Exp exp, Type _)
+                && exp instanceof ULongInit c && c.isZero();
     }
 
     private static void pointerify(Type referenced,

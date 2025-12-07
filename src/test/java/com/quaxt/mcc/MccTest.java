@@ -351,7 +351,7 @@ class MccTest {
 
     @Test
     void atomic() throws Exception {
-        outputs("atomic", "x = 27, y = 27\n", false);
+        outputs("atomic", "x = 27, y = 27\n", true);
     }
 
     @Test
@@ -478,8 +478,8 @@ class MccTest {
     }
 
     @Test
-    void infinty_builtin() throws Exception {
-        outputs("infinty_builtin", "INFINITY (float) printed with %f: inf\n" );
+    void infinity_builtin() throws Exception {
+        outputs("infinity_builtin", "INFINITY (float) printed with %f: inf\n" );
     }
 
 

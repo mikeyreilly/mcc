@@ -74,8 +74,11 @@ public class PropagateCopies {
                                 new Load(replaceOperand(ptr, reachingCopies), dst);
                         case Store(ValIr v, VarIr dst) ->
                                 new Store(replaceOperand(v, reachingCopies), dst);
-                        case AtomicStore(ValIr v, VarIr dst, MemoryOrder memOrder) ->
-                                new AtomicStore(replaceOperand(v, reachingCopies), dst, memOrder);
+
+                        // Not safe to replace operands on AtomicStore
+
+                        case AtomicStore(ValIr v, VarIr dst, MemoryOrder memOrder) -> instr;
+
                         case GetAddress _, LabelIr _, Jump _, BuiltinC23VaStartIr _ -> instr;
                         case Ignore.IGNORE -> instr;
 

@@ -1445,17 +1445,26 @@ public class Parser {
     private static Constant parseConst(TokenList tokens,
                                        boolean throwIfNotFound) {
         Token token = tokens.getFirst();
-        if (token == TRUE) {
+        Constant c = parseConstant(token);
+        if (c == null) {
+            if (throwIfNotFound)
+                throw makeErr("expected const, found: " + token, tokens);
+        } else {
             tokens.removeFirst();
+        }
+        return c;
+    }
+
+    public static Constant parseConstant(Token token) {
+        if (token == TRUE) {
+
             return BoolInit.TRUE;
         } else if (token == FALSE) {
-            tokens.removeFirst();
             return BoolInit.FALSE;
         }
         boolean isLongLong = false;
-        if (tokens.getFirst() instanceof TokenWithValue(Token tokenType,
+        if (token instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
-            tokens.removeFirst();
             boolean isHex = UNSIGNED_HEX_INT_LITERAL == token.type() ||
                     UNSIGNED_HEX_LONG_LITERAL == token.type() ||
                     HEX_LONG_LITERAL == token.type() ||
@@ -1476,14 +1485,14 @@ public class Parser {
                     Type t = Primitive.fromTokenType((TokenType) tokenType);
                     int end = value.length();
                     int start=isHex ? 2 : 0;
-                   while(end>start+1){
-                       int c=value.charAt(end-1);
-                       if (c == 'u' || c == 'U' || c == 'l' || c == 'L' ||
-                               ((c == 'f' || c == 'F') &&
-                                       t == Primitive.FLOAT)) {
-                           end--;
-                       } else break;
-                   }
+                    while(end>start+1){
+                        int c=value.charAt(end-1);
+                        if (c == 'u' || c == 'U' || c == 'l' || c == 'L' ||
+                                ((c == 'f' || c == 'F') &&
+                                        t == Primitive.FLOAT)) {
+                            end--;
+                        } else break;
+                    }
 
                     return parseConst(value.substring(start, end), t,
                             isHex, isLongLong);
@@ -1495,8 +1504,7 @@ public class Parser {
                     break;
             }
         }
-        if (throwIfNotFound)
-            throw makeErr("expected const, found: " + token, tokens);
+
         return null;
     }
 

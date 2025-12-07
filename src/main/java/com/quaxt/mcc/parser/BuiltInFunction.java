@@ -86,6 +86,14 @@ public enum BuiltInFunction {
         public Type getParamType(int i) {
             return new Pointer(Primitive.CHAR);
         }
+    }, BUILTIN_INFF("__builtin_inff", 0) {
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.FLOAT;
+        }
+
+        public Type getParamType(int i) {
+            return new Pointer(Primitive.CHAR);
+        }
     };
 
     private final String identifier;

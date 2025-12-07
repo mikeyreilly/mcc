@@ -1,6 +1,8 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Codegen;
+import com.quaxt.mcc.asm.Data;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.atomics.MemoryOrder;
@@ -760,6 +762,12 @@ public class IrGen {
                         if (o instanceof PlainOperand(VarIr ptr)){
                             ValIr val = emitTackyAndConvert(args.get(1), instructions, inlineFunctions);
                             ValIr memOrder = emitTackyAndConvert(args.get(2), instructions, inlineFunctions);
+                            // need a tmp if val is constant
+                            if (val instanceof Constant c) {
+                                VarIr tmp = makeTemporary("tmp.", c.type());
+                                instructions.add(new Copy(val, tmp));
+                                val = tmp;
+                            }
                             instructions.add(new AtomicStore(val, ptr, MemoryOrder.from(memOrder)));
                             return null;
                         } else throw new Todo();
@@ -800,7 +808,15 @@ public class IrGen {
                         return null;
                     }
                     case BUILTIN_NANF -> {
-                        throw new Todo();
+                        Exp arg = args.getFirst();
+                        String number = arg instanceof Str(String s, Type _) ? s
+                                : arg instanceof AddrOf(Exp exp, Type _) && exp instanceof Str(String s, Type _)?s:"0";
+                        TokenList tl = Lexer.lex(number + " ");
+                        int i = tl.isEmpty() ? 0 : (int) Parser.parseConstant(tl.getFirst()).toLong();
+                        return new PlainOperand(new FloatInit(payloadToNaNFloat(i)));
+                    }
+                    case BUILTIN_INFF -> {
+                        return new PlainOperand(new FloatInit(Float.POSITIVE_INFINITY));
                     }
                 }
             }
@@ -810,6 +826,33 @@ public class IrGen {
         }
     }
 
+    public static float payloadToNaNFloat(int payload) {
+        int frac = payload & 0x7FFFFF;
+
+        // Force quiet NaN bit (bit 22)
+        frac |= 0x400000;
+
+        int bits = (0xFF << 23) | frac;
+
+        System.out.printf("payload:                %d\n", payload);
+        System.out.printf("frac after mask/or:     0x%06X\n", frac);
+        System.out.printf("final bits:             0x%08X\n", bits);
+
+        return Float.intBitsToFloat(bits);
+    }
+
+    public static double payloadToNaNDouble(long payload) {
+        // Keep only 52 bits for the fraction
+        long frac = payload & 0x000F_FFFF_FFFF_FFFFL;
+
+        // Force quiet NaN (top fraction bit = 1)
+        frac |= 0x0008_0000_0000_0000L;
+
+        // sign = 0, exponent = 0x7FF (all 1s), fraction = payload
+        long bits = (0x7FFL << 52) | frac;
+
+        return Double.longBitsToDouble(bits);
+    }
 
     private static void emitInlineFunCall(FunctionIr functionToInlineIr,
                                           ArrayList<ValIr> argVals,
