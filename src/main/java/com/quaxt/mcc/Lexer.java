@@ -120,7 +120,7 @@ public class Lexer {
                                 case "__builtin_offsetof" -> BUILTIN_OFFSETOF;
                                 case "__builtin_va_arg" -> BUILTIN_VA_ARG;
                                 case "__builtin_va_end" -> BUILTIN_VA_END;
-                                case "__extension__" -> RESTRICT;
+                                case "__extension__" -> null;
                                 case "__restrict" -> RESTRICT;
                                 case "__restrict__" -> RESTRICT;
                                 case "__signed__" -> SIGNED;
@@ -143,6 +143,7 @@ public class Lexer {
                                 case "if" -> IF;
                                 case "int" -> INT;
                                 case "inline" -> INLINE;
+                                case "__inline" -> INLINE;
                                 case "long" -> LONG;
                                 case "nullptr" -> NULLPTR;
                                 case "register" -> REGISTER;
@@ -164,7 +165,8 @@ public class Lexer {
                                 case "while" -> WHILE;
                                 default -> new TokenWithValue(tokenType, value);
                             };
-                            tokens.add(token, filename, lineNumber);
+                            if (token != null)
+                                tokens.add(token, filename, lineNumber);
                         } else {
                             tokens.add(tokenType, filename, lineNumber);
                         }

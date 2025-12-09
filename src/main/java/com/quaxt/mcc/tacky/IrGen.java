@@ -833,11 +833,6 @@ public class IrGen {
         frac |= 0x400000;
 
         int bits = (0xFF << 23) | frac;
-
-        System.out.printf("payload:                %d\n", payload);
-        System.out.printf("frac after mask/or:     0x%06X\n", frac);
-        System.out.printf("final bits:             0x%08X\n", bits);
-
         return Float.intBitsToFloat(bits);
     }
 

@@ -487,6 +487,16 @@ class MccTest {
     void nan_builtin() throws Exception {
         outputs("nan_builtin", "NAN (double) printed with %f: nan\n");
     }
+    @Test
+    void paren_block() throws Exception {
+        returns("paren_block", 0);
+    }
+
+
+    @Test
+    void foo() throws Exception {
+        returns("foo", 17);
+    }
 
     private static String assemble(String testProgram,
                                    boolean optimize) throws Exception {

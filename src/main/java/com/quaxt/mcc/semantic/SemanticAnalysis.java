@@ -696,7 +696,7 @@ public class SemanticAnalysis {
             if (p == VOID) {
                 fail("named parameter " + (i + 1) + " is void");
             }
-            if (!isComplete(p) && decl.body != null) {
+            if (!isComplete(p) && !isComplete(decayArrayType(p)) && decl.body != null) {
                 fail("function with incomplete type parameter");
             }
             adjustedParams.add(arrayToPointer(p));
@@ -1240,7 +1240,7 @@ public class SemanticAnalysis {
         return c;
     }
 
-    private static Constant evaluateExpAsConstant(Exp exp) {
+    public static Constant evaluateExpAsConstant(Exp exp) {
         List<InstructionIr> irs = new ArrayList<>();
         var typeCheckedSize = typeCheckExpression(exp);
         var r = new Return(typeCheckedSize);
@@ -1696,6 +1696,10 @@ public class SemanticAnalysis {
 
     private static Type decayFunType(Type t) {
         return t instanceof FunType ? new Pointer(t) : t;
+    }
+
+    private static Type decayArrayType(Type t) {
+        return t instanceof Array(Type r, Constant _) ? new Pointer(r) : t;
     }
 
     private static Type completeType(Type t) {

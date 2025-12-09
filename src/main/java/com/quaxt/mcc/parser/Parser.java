@@ -555,6 +555,16 @@ public class Parser {
             return new LabelledStatement(label, parseStatement(tokens,
                     labels, enclosingSwitch, typeAliases));
         }
+
+        if (tokens.getFirst() == OPEN_PAREN &&
+                tokens.get(1) == OPEN_BRACE) {
+            tokens.removeFirst();
+            var stmt =
+                    parseStatement(tokens, labels, enclosingSwitch,
+                            typeAliases);
+            expect(CLOSE_PAREN, tokens);
+            return stmt;
+        }
         Exp exp = parseExp(tokens, 0, true, typeAliases);
         if (tokens.getFirst() == OPEN_PAREN) {
             throw makeErr("function application is not supported in this kind of situation yet", tokens);

@@ -10,12 +10,13 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
 import static com.quaxt.mcc.UnaryOperator.POST_INCREMENT;
 import static com.quaxt.mcc.semantic.Primitive.CHAR;
+import static com.quaxt.mcc.semantic.SemanticAnalysis.evaluateExpAsConstant;
 
 public record ConstantExp(Exp exp) implements  Constant<ConstantExp> {
 
     @Override
     public long toLong() {
-        throw new IllegalStateException();
+        return evaluateExpAsConstant(exp).toLong();
     }
 
     @Override
