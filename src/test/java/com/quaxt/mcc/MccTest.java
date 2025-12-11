@@ -488,14 +488,14 @@ class MccTest {
         outputs("nan_builtin", "NAN (double) printed with %f: nan\n");
     }
     @Test
-    void paren_block() throws Exception {
-        returns("paren_block", 0);
+    void statement_expression() throws Exception {
+        outputs("statement_expression", "true\n" + "x=17\n");
     }
 
 
     @Test
-    void foo() throws Exception {
-        returns("foo", 17);
+    void parenthesized_lvalue() throws Exception {
+        returns("parenthesized_lvalue", 17);
     }
 
     private static String assemble(String testProgram,

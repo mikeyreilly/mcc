@@ -393,8 +393,8 @@ public class Mcc {
     }
 
     public static Err makeErr(String s, TokenList tokens) {
-        if (tokens!=null) {
-            return new Err(s+" "+ tokens.positionString());
+        if (tokens != null) {
+            return new Err(s + " " + tokens.positionString());
         }
         return new Err(s);
     }
