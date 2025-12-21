@@ -477,6 +477,7 @@ public class Codegen {
 
     private static Operand toOperand(ValIr val) {
         return switch (val) {
+            case null -> null;
             case CharInit(byte i) -> new Imm(i);
             case UCharInit(byte i) -> new Imm(i & 0xff);
             case BoolInit(byte i) -> new Imm(i & 0xff);
@@ -932,8 +933,11 @@ public class Codegen {
                                 ins.add(new Binary(op1, typeAsm,
                                         toOperand(v2), toOperand(dstName)));
                             }
-                            case COMMA -> ins.add(new Mov(typeAsm, toOperand(v2),
-                                    toOperand(dstName)));
+                            case COMMA -> {
+                                if (v2 != null) { // comma operator can have VOID type
+                                    ins.add(new Mov(typeAsm, toOperand(v2), toOperand(dstName)));
+                                }
+                            }
                             case DIVIDE, REMAINDER -> {
                                 if (type.isSigned()) {
                                     ins.add(new Mov(typeAsm, toOperand(v1),

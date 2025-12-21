@@ -754,6 +754,10 @@ public class IrGen {
                 var l = blockItems.getLast();
                 return switch(l){
                     case Exp e -> emitTacky(e, instructions, inlineFunctions);
+                    case If _ -> {
+                        compileBlockItem(l, instructions, inlineFunctions);
+                        yield null;
+                    }
                     default -> throw new IllegalStateException("Unexpected value: " + l);
                 };
 

@@ -137,6 +137,7 @@ public class Mcc {
 
     public static Type valToType(ValIr val) {
         return switch (val) {
+            case null -> Primitive.VOID;
             case Constant constant -> constant.type();
             case VarIr(String identifier) ->
                     SYMBOL_TABLE.get(identifier).type();

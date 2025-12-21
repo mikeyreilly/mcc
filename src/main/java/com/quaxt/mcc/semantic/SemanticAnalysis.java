@@ -201,9 +201,8 @@ public class SemanticAnalysis {
     private static StructDef typeCheckStructureDeclaration(
             StructOrUnionSpecifier structDecl) {
         if (structDecl == null || structDecl.members() == null) return null;
-        if (TYPE_TABLE.containsKey(structDecl.tag())) {
-            throw new Err("redefinition of struct");
-        }
+
+        var existing = TYPE_TABLE.get(structDecl.tag());
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
         boolean isUnion = structDecl.isUnion();
         StructDef sd = new StructDef(isUnion,
@@ -226,7 +225,12 @@ public class SemanticAnalysis {
         validateStructDefinition(structDecl);
 
         int structSize = roundUp(sd.size(), sd.alignment());
+
         sd = new StructDef(sd.isUnion(),sd.alignment(), structSize, sd.members());
+        if (existing!=null && !sd.equals(existing)) {
+                throw new Err("Incompatible redefinition of struct");
+
+        }
         TYPE_TABLE.put(structDecl.tag(), sd);
         return sd;
     }
