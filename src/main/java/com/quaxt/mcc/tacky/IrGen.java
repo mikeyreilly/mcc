@@ -1,8 +1,6 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Codegen;
-import com.quaxt.mcc.asm.Data;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.atomics.MemoryOrder;
@@ -86,7 +84,9 @@ public class IrGen {
     private static void compileBlock(Block block,
                                      List<InstructionIr> instructions,
                                      Map<String, FunctionIr> inlineFunctions) {
-        compileBlockItems(block.blockItems(), instructions, inlineFunctions);
+        for (BlockItem i : block.blockItems()) {
+            compileBlockItem(i, instructions, inlineFunctions);
+        }
     }
 
     private static void compileDeclaration(Declaration d,
@@ -218,16 +218,12 @@ public class IrGen {
     }
 
 
-    private static void compileBlockItems(List<BlockItem> blockItems,
-                                          List<InstructionIr> instructions,
-                                          Map<String, FunctionIr> inlineFunctions) {
-        for (BlockItem i : blockItems) {
-            switch (i) {
-
-                case Declaration d -> compileDeclaration(d, instructions, inlineFunctions);
-                case Statement statement ->
-                        compileStatement(statement, instructions, inlineFunctions);
-            }
+    private static void compileBlockItem(BlockItem i,List<InstructionIr> instructions,
+                            Map<String, FunctionIr> inlineFunctions) {
+        switch (i) {
+            case Declaration d -> compileDeclaration(d, instructions, inlineFunctions);
+            case Statement statement ->
+                    compileStatement(statement, instructions, inlineFunctions);
         }
     }
 
@@ -747,6 +743,22 @@ public class IrGen {
                         new LongInit(memberOffset), 1, dstPtr));
                 return new DereferencedPointer(dstPtr);
             }
+            case ExpressionStatement(Block block): {
+
+                ArrayList<BlockItem> blockItems = block.blockItems();
+                for (int j = 0, blockItemsSize = blockItems.size();
+                     j < blockItemsSize - 1; j++) {
+                    BlockItem i = blockItems.get(j);
+                    compileBlockItem(i, instructions, inlineFunctions);
+                }
+                var l = blockItems.getLast();
+                return switch(l){
+                    case Exp e -> emitTacky(e, instructions, inlineFunctions);
+                    default -> throw new IllegalStateException("Unexpected value: " + l);
+                };
+
+
+            }
             case BuiltinVaArg(Var identifier, Type type): {
                 VarIr src = (VarIr) emitTackyAndConvert(identifier,
                         instructions, inlineFunctions);
@@ -820,6 +832,7 @@ public class IrGen {
                     }
                 }
             }
+
 
             default:
                 throw new IllegalStateException("Unexpected value: " + expr);

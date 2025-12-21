@@ -1873,6 +1873,14 @@ public class Parser {
                                 Switch enclosingSwitch) {
 
         // First check if we are looking at an expression statement
+        if (tokens.getFirst() == OPEN_PAREN &&
+                tokens.get(1) == OPEN_BRACE) {
+            tokens.removeFirst();
+            Block stmt = parseBlock(tokens, labels, enclosingSwitch,
+                            typeAliases);
+            expect(CLOSE_PAREN, tokens);
+            return new ExpressionStatement(stmt);
+        }
 
         //to this
         // <exp> ::= <cast-exp> | <exp> <binop> <exp> | <exp> "?" <exp> ":"

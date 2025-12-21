@@ -1691,6 +1691,7 @@ public class SemanticAnalysis {
                 }
                 yield defaultExp;
             }
+            case ExpressionStatement(Block block) -> new ExpressionStatement(typeCheckBlock(block, null));
         };
     }
 
@@ -2351,6 +2352,8 @@ public class SemanticAnalysis {
                         resolveExp(defaultExp, identifierMap,
                                 structureMap, enclosingFunction));
             }
+            case ExpressionStatement(Block stmt) -> new ExpressionStatement(resolveBlock(stmt, new ArrayList<>(), identifierMap,
+                    structureMap, enclosingFunction));
         };
         return r;
     }
