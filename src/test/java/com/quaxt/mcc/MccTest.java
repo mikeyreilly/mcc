@@ -180,6 +180,10 @@ class MccTest {
         outputs("thing_before", "it's 17", false);
     }
 
+    @Test
+    void static_struct_string_member() throws Exception {
+        returns("static_struct_string_member", 12, false);
+    }
 
     @Test
     void varargs3_no_stack()  throws Exception {

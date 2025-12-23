@@ -421,14 +421,14 @@ public class SemanticAnalysis {
                 if (exp instanceof Str(String s,
                                        Type _) && targetType instanceof Array(
                         Type element, Constant arraySize)) {
-                    return handleStringLiteral(acc, s, element, arraySize);
+                    return handleStringLiteral(acc, s, element, arraySize, false);
                 } else if (exp instanceof Str(String s,
                                               Type _) && targetType instanceof Pointer(
                         Type element)) {
                     if (element != CHAR) {
                         throw new Err("Can't initialize pointer to " + element + " with string literal");
                     }
-                    handleStringLiteral(acc,s,element,null);
+                    handleStringLiteral(acc,s,element,null, true);
 
                 } else if (exp instanceof AddrOf(Exp exp1, Type type1) &&
                         exp1 instanceof Str(String s, Type _) &&
@@ -437,7 +437,7 @@ public class SemanticAnalysis {
                         throw new Err("Can't initialize pointer to " + element +
                                 " with string literal");
                     }
-                    handleStringLiteral(acc, s, element, null);
+                    handleStringLiteral(acc, s, element, null, true);
                 } else if (exp instanceof Cast(Type type, Exp exp1) &&
                         type instanceof Pointer(Type referenced) &&
                         referenced.isCharacter()) {
@@ -495,7 +495,8 @@ public class SemanticAnalysis {
 
     /* returns the length of the String literal including trailing zero byte(s)*/
     private static Constant handleStringLiteral(List<StaticInit> acc, String s,
-                                            Type element, Constant arrayLen) {
+                                                Type element, Constant arrayLen,
+                                                boolean pointerify) {
         if (!element.isCharacter())
             throw new Err("Can't initialize non-character type with a string "
                     + "literal");
@@ -503,9 +504,18 @@ public class SemanticAnalysis {
             throw new Err("Too many chars in string literal");
         // how many zeros past the first one that comes with asciz
         long zeroCount = arrayLen != null ? arrayLen.toLong() - s.length() - 1 : 1;
-        acc.add(new StringInit(s, zeroCount >= 0));
-        if (zeroCount > 0) acc.add(new ZeroInit(zeroCount));
-        return arrayLen == null?new LongInit(s.length() + zeroCount):arrayLen;
+        if (pointerify){
+            List<StaticInit> temp = new ArrayList<>();
+            temp.add(new StringInit(s, zeroCount >= 0));
+            if (zeroCount > 0) temp.add(new ZeroInit(zeroCount));
+            String symbolName = addStringToSymbolTable(new Pointer(Primitive.CHAR), temp);
+            acc.add(new PointerInit(symbolName, 0));
+        } else {
+            acc.add(new StringInit(s, zeroCount >= 0));
+            if (zeroCount > 0) acc.add(new ZeroInit(zeroCount));
+        }
+        return arrayLen == null ? new LongInit(
+                s.length() + zeroCount) : arrayLen;
     }
 
     private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
@@ -978,24 +988,23 @@ public class SemanticAnalysis {
                     varType, staticInits);
             initialValue = new Initial(staticInits);
 
-            if (//isStringPointerInit(staticInits) &&
-                    varType instanceof Pointer(
-                    Type referenced)) {
-                if (referenced.isCharacter()) {
+//            if (//isStringPointerInit(staticInits) &&
+//                    varType instanceof Pointer(
+//                    Type referenced)) {
+//                if (referenced.isCharacter()) {
+//
+//                    /* TODO: this logic is probably not going to handle
+//                        arrays of char* well*/
+//                    pointerify(referenced, staticInits, initialValue, decl, varType);
+//                } else if (!isNullPointer(init)) {
+//                    throw new Err("Can't initialize pointer to " + referenced +
+//                            " with string literal");
+//                }
+//
+//            } else
 
-                    /* TODO: this logic is probably not going to handle
-                        arrays of char* well*/
-                    pointerify(referenced, staticInits, initialValue, decl, varType);
-                } else if (!isNullPointer(init)) {
-                    throw new Err("Can't initialize pointer to " + referenced +
-                            " with string literal");
-                }
-
-            } else
-
-                SYMBOL_TABLE.put(decl.name().name(),
-                        new SymbolTableEntry(varType,
-                                new StaticAttributes(initialValue, false, decl.storageClass())));
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
+                    , new StaticAttributes(initialValue, false, decl.storageClass())));
             return new VarDecl(new Var(decl.name().name(), varType),
                     init, varType, decl.storageClass(),decl.structOrUnionSpecifier());
         } else {
@@ -1022,11 +1031,11 @@ public class SemanticAnalysis {
                 && exp instanceof ULongInit c && c.isZero();
     }
 
-    private static void pointerify(Type referenced,
-                                   List<StaticInit> staticInits,
-                                   InitialValue initialValue,
-                                   VarDecl decl,
-                                   Type varType) {
+    private static String pointerify(Type referenced,
+                                     List<StaticInit> staticInits,
+                                     InitialValue initialValue,
+                                     VarDecl decl,
+                                     Type varType) {
         String uniqueName = makeTemporary(decl.name().name() +
                 ".string.");
         SYMBOL_TABLE.put(uniqueName,
@@ -1035,6 +1044,16 @@ public class SemanticAnalysis {
         SYMBOL_TABLE.put(decl.name().name(),
                 new SymbolTableEntry(varType,
                         new StaticAttributes(new Initial(Collections.singletonList(new PointerInit(uniqueName))), false, decl.storageClass())));
+        return uniqueName;
+    }
+    private static String addStringToSymbolTable(Type referenced,
+                                     List<StaticInit> staticInits) {
+        String uniqueName = makeTemporary(
+                "string.");
+        SYMBOL_TABLE.put(uniqueName,
+                new SymbolTableEntry(new Array(referenced, new IntInit((int) strlen(staticInits))),
+                        new StaticAttributes(new Initial(staticInits), false, StorageClass.STATIC)));
+        return uniqueName;
     }
 
     private static Type typeCheckType(Type type) {
