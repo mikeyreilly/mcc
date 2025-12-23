@@ -1355,6 +1355,7 @@ public class Codegen {
     private static void emitBuiltInVarArg(VarIr vaList, VarIr dst,
                                           List<Instruction> ins, Type type) {
 
+        // the problem is that if we call this from a non-varargs function we don't seem to have vaList initialized - in the assembly I have it passed as rdi but by the time we get here vaList has not come from rdi
         int numGp = 0;
         int numFp = 0;
         boolean floatFirst = false;
@@ -1431,7 +1432,8 @@ public class Codegen {
 
 // 5. Set:
 // l->gp_offset = l->gp_offset + num_gp ∗ 8
-// l->fp_offset = l->fp_offset + num_fp ∗ 16.            if (numGp > 0)
+// l->fp_offset = l->fp_offset + num_fp ∗ 16.
+            if (numGp > 0)
                 ins.add(new Binary(ADD, LONGWORD, new Imm(8L * numGp), gpOffset));
             if (numFp > 0)
                 ins.add(new Binary(ADD, LONGWORD, new Imm(16L * numFp), fpOffset));

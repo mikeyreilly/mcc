@@ -195,6 +195,10 @@ class MccTest {
         returns("varargs_int_no_stack", 15);
     }
 
+    @Test
+    void non_varargs_fn_call_va_arg() throws Exception {
+        outputs("non_varargs_fn_call_va_arg", "a string", false);
+    }
 
     @Test
     void varargs_struct()  throws Exception {
