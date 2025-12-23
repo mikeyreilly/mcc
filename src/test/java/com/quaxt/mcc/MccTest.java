@@ -177,7 +177,7 @@ class MccTest {
 
     @Test
     void thing_before()  throws Exception {
-        outputs("thing_before", "it's 17");
+        outputs("thing_before", "it's 17", false);
     }
 
 

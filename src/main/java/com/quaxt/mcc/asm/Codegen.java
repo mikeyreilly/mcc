@@ -1255,7 +1255,7 @@ public class Codegen {
                 case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
                     Operand dst1 = toOperand(dstIr);
                     Operand src1 = toOperand(srcIr);
-                    Type type = valToType(srcIr);
+                    Type type = valToType(dstIr);
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (op1 == UnaryOperator.NOT) {
                         if (typeAsm == DOUBLE) {
