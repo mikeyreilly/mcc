@@ -175,6 +175,7 @@ public class Mcc {
         Type t = type(v);
         if (t instanceof FunType ft) return ft;
         if (t instanceof Pointer(FunType ft)) return ft;
+        if (t instanceof Array(Type p, Constant _) && p instanceof Pointer(FunType ft)) return ft;
         throw new IllegalArgumentException("Required function or pointer to function. Found "+t);
     }
 

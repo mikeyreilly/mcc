@@ -1319,17 +1319,17 @@ public class Codegen {
 
                     // gp_offset The element holds the offset in bytes from
                     // reg_save_area to the
-                    //place where the next available general purpose argument
+                    // place where the next available general purpose argument
                     // register is saved
 
-                    ins.add(new Mov(LONGWORD, Imm.ZERO,
+                    ins.add(new Mov(LONGWORD, new Imm(integerArguments.size() * 8),
                             new PseudoMem(vaList.identifier(), 0)));
 
                     //fp_offset The element holds the offset in bytes from
                     // reg_save_area to the
                     //place where the next available floating point argument
                     // register is saved.
-                    ins.add(new Mov(LONGWORD, new Imm(48),
+                    ins.add(new Mov(LONGWORD, new Imm(48 + doubleArguments.size() * 16),
                             new PseudoMem(vaList.identifier(), 4)));
                     // overflow_arg_area
                     ins.add(new Lea(new Memory(BP, offset),

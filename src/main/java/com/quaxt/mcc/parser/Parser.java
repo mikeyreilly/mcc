@@ -592,9 +592,12 @@ public class Parser {
         // This compiler doesn't do anything with paramN.
         expect(OPEN_PAREN, tokens);
         String ap = expectIdentifier(tokens);
-        if (tokens.getFirst() == COMMA) {
+
+        while (tokens.getFirst() == COMMA) {
             tokens.removeFirst();
-            expectIdentifier(tokens); // paramN - ignore
+            parseExp(tokens, 0, false, typeAliases, labels, null);
+            // MR-TODO these arguments are useless in c23
+            // but we should check if the first one is the name of the last named parameter and if it isn't produce a diagnostic
         }
         expect(CLOSE_PAREN, tokens);
         expect(SEMICOLON, tokens);

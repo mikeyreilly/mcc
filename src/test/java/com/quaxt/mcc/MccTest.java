@@ -169,6 +169,18 @@ class MccTest {
     void varargs3()  throws Exception {
         returns("varargs3", 66);
     }
+
+    @Test
+    void varargs_pointer()  throws Exception {
+        outputs("varargs_pointer", "ptr: 42\n");
+    }
+
+    @Test
+    void thing_before()  throws Exception {
+        outputs("thing_before", "it's 17");
+    }
+
+
     @Test
     void varargs3_no_stack()  throws Exception {
         returns("varargs3_no_stack", 15);
