@@ -36,4 +36,10 @@ public final class SymbolTableEntry {
         return "SymbolTableEntry[" + "type=" + type + ", " + "attrs=" + attrs + ']';
     }
 
+    public boolean isStatic() {
+        return switch (attrs()) {
+            case StaticAttributes _, ConstantAttr _ -> true;
+            default -> false;
+        };
+    }
 }

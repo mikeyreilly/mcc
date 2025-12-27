@@ -16,8 +16,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
-import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
-import static com.quaxt.mcc.Mcc.valToType;
+import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
+import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.UnaryOperator.UNARY_SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.JmpCC.newJmpCC;
@@ -25,7 +25,6 @@ import static com.quaxt.mcc.asm.Nullary.MFENCE;
 import static com.quaxt.mcc.asm.Nullary.RET;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 import static com.quaxt.mcc.asm.IntegerReg.*;
-import static com.quaxt.mcc.semantic.Primitive.UCHAR;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
 public class Codegen {
@@ -72,8 +71,9 @@ public class Codegen {
         }
         topLevels.addAll(CONSTANT_TABLE.values());
         generateBackendSymbolTable();
-
+        ArrayList<Instruction> oldAsm = null;
         for (TopLevelAsm topLevelAsm : topLevels) {
+
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
                 RegisterAllocator.allocateRegisters(functionAsm);
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
@@ -434,9 +434,9 @@ public class Codegen {
         return toTypeAsm(valToType(val));
     }
 
-    private static TypeAsm toTypeAsm(Type type) {
+    public static TypeAsm toTypeAsm(Type type) {
         return switch (type) {
-            case Primitive.CHAR, UCHAR, Primitive.SCHAR, Primitive.BOOL,
+            case Primitive.CHAR, Primitive.UCHAR, Primitive.SCHAR, Primitive.BOOL,
             // it's easier to just pretend it's a byte than to actually discard these here
             // the optimizer should eliminate them anyway
                  Primitive.VOID -> BYTE;
@@ -486,17 +486,15 @@ public class Codegen {
             case IntInit(int i) -> new Imm(i);
             case VarIr(String identifier) -> {
                 Type t = valToType(val);
+                var ste = SYMBOL_TABLE.get(identifier);
                 if (t instanceof Array || t instanceof Structure)
                     yield new PseudoMem(identifier, 0);
-                var ste = SYMBOL_TABLE.get(identifier);
+
                 if (t instanceof FunType && ste.attrs() instanceof FunAttributes) {
                     yield new LabelAddress(identifier);
                 }
                 yield new Pseudo(identifier, toTypeAsm(t),
-                        switch (ste.attrs()) {
-                    case StaticAttributes _, ConstantAttr _ -> true;
-                    default -> false;
-                }, ste.aliased);
+                        ste.isStatic(), ste.aliased);
             }
             case LongInit(long l) -> new Imm(l);
             case LongLongInit(long l) -> new Imm(l);
@@ -512,12 +510,10 @@ public class Codegen {
 
     private static Operand toOperand(ValIr val, int offset) {
         return switch (val) {
-            case VarIr(
-                    String identifier) when valToType(val) instanceof Array ->
-                    new PseudoMem(identifier, offset);
-            case VarIr(
-                    String identifier) when valToType(val) instanceof Structure ->
-                    new PseudoMem(identifier, offset);
+            case VarIr(String identifier) when valToType(val) instanceof Array || valToType(val) instanceof Structure->{
+                var ste = SYMBOL_TABLE.get(identifier);
+                yield new PseudoMem(identifier, offset);
+            }
             default -> {
                 if (offset == 0) yield toOperand(val);
                 else throw new AssertionError(val);
@@ -532,13 +528,14 @@ public class Codegen {
         switch (in) {
             case Imm _, IntegerReg _, Memory _, DoubleReg _, Data _, Indexed _, LabelAddress _:
                 return in;
-            case Pseudo p:
+            case Pseudo p: {
                 identifier = p.identifier;
                 offsetFromStartOfArray = 0;
                 break;
-            case PseudoMem(String pIdentifier, long pOffsetFromStartOfArray):
-                identifier = pIdentifier;
-                offsetFromStartOfArray = pOffsetFromStartOfArray;
+            }
+            case PseudoMem p:
+                identifier = p.identifier();
+                offsetFromStartOfArray = p.offset();
                 break;
             default:
                 throw new IllegalArgumentException();
@@ -604,6 +601,7 @@ public class Codegen {
                 int structSize = (int) Mcc.size(st);
                 int offset = 0;
                 for (var c : classes) {
+                    var ste = SYMBOL_TABLE.get(nameOfRetVal);
                     var operand = new PseudoMem(nameOfRetVal, offset);
                     switch (c) {
                         case SSE -> doubleDests.add(operand);
@@ -1352,10 +1350,30 @@ public class Codegen {
                 functionIr.callsVaStart());
     }
 
+
+    private static Operand vaListField(VarIr vaList, int offset, boolean vaListIsPointer,
+                                       List<Instruction> ins) {
+        if (vaListIsPointer) {
+            Operand ptr = toOperand(vaList);
+            String name = Mcc.makeTemporary("tmp");
+            TypeAsm t = switch(offset) {
+                case 0, 4 -> PrimitiveTypeAsm.LONGWORD;
+                case 8, 16 -> PrimitiveTypeAsm.QUADWORD;
+                default -> throw new IllegalArgumentException("bad offset " + offset);
+            };
+            Operand dst = new Pseudo(name, PrimitiveTypeAsm.LONGWORD, false, false);
+            ins.add(new Mov(QUADWORD, ptr, R10));
+            ins.add(new Mov(t, new Memory(R10, offset), dst));
+            return dst;
+        }
+        return new PseudoMem(vaList.identifier(), offset);
+    }
+
     private static void emitBuiltInVarArg(VarIr vaList, VarIr dst,
                                           List<Instruction> ins, Type type) {
 
-        // the problem is that if we call this from a non-varargs function we don't seem to have vaList initialized - in the assembly I have it passed as rdi but by the time we get here vaList has not come from rdi
+        boolean vaListIsPointer = Mcc.SYMBOL_TABLE.get(vaList.identifier()).type() instanceof Pointer;
+
         int numGp = 0;
         int numFp = 0;
         boolean floatFirst = false;
@@ -1383,9 +1401,6 @@ public class Codegen {
         LabelIr stackLabel = newLabel(Mcc.makeTemporary(".Lstack."));
         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
 
-        Operand gpOffset = new PseudoMem(vaList.identifier(), 0);
-        Operand fpOffset = new PseudoMem(vaList.identifier(), 4);
-
 // 1. Determine whether type may be passed in the registers. If not go to
 // step 7.
 // 2. Compute num_gp to hold the number of general purpose registers needed
@@ -1396,15 +1411,23 @@ public class Codegen {
 // or
 // l->fp_offset > 176 − num_fp ∗ 16
 // go to step 7.
+
+        var ste = SYMBOL_TABLE.get(vaList.identifier());
+        boolean isStatic=vaList.isStatic();
+        boolean isAliased=ste.aliased;
+        Pseudo tmp = makeTemporary("tmp.", decayArrayType(Mcc.BUILTIN_VA_LIST));
+
         if (canBePassedInRegisters) {
             if (numGp>0) {
                 // is register available?
+                Operand gpOffset = vaListField(vaList, 0, vaListIsPointer, ins);
                 ins.add(new Cmp(LONGWORD, new Imm(48 - numGp * 8L), gpOffset));
                 // if not use stack
                 ins.add(newJmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
             }
             if (numFp>0) {
                 // is register available?
+                Operand fpOffset = vaListField(vaList, 4, vaListIsPointer, ins);
                 ins.add(new Cmp(LONGWORD, new Imm(176 - numFp * 16L), fpOffset));
                 // if not use stack
                 ins.add(newJmpCC(CmpOperator.GREATER_THAN, true, stackLabel.label()));
@@ -1419,9 +1442,9 @@ public class Codegen {
                         i == 0 : i == 1));
 
                 // add gp_offset/fp_offset to reg_save_area
-                var regSaveArea = new PseudoMem(vaList.identifier(), 16);
+                var regSaveArea = vaListField(vaList, 16, vaListIsPointer, ins);
                 ins.add(new Mov(QUADWORD, regSaveArea, AX));
-                ins.add(new Mov(LONGWORD, isFp ? fpOffset : gpOffset, DX));
+                ins.add(new Mov(LONGWORD, isFp ? vaListField(vaList, 4, vaListIsPointer, ins) : vaListField(vaList, 0, vaListIsPointer, ins), DX));
                 ins.add(new Binary(ADD, QUADWORD, DX, AX));
                 // mov what's at address gp_offset+reg_save_area to dst
                 int offset=i*8;
@@ -1434,9 +1457,9 @@ public class Codegen {
 // l->gp_offset = l->gp_offset + num_gp ∗ 8
 // l->fp_offset = l->fp_offset + num_fp ∗ 16.
             if (numGp > 0)
-                ins.add(new Binary(ADD, LONGWORD, new Imm(8L * numGp), gpOffset));
+                ins.add(new Binary(ADD, LONGWORD, new Imm(8L * numGp), vaListField(vaList, 0, vaListIsPointer, ins)));
             if (numFp > 0)
-                ins.add(new Binary(ADD, LONGWORD, new Imm(16L * numFp), fpOffset));
+                ins.add(new Binary(ADD, LONGWORD, new Imm(16L * numFp), vaListField(vaList, 4, vaListIsPointer, ins)));
             ins.add(new Jump(endLabel.label()));
 
 
@@ -1455,7 +1478,7 @@ public class Codegen {
         // 8. Fetch type from l->overflow_arg_area.
 // 9. Set l->overflow_arg_area to:
 // l->overflow_arg_area + sizeof(type)
-        var overFlowArgArea = new PseudoMem(vaList.identifier(), 8);
+        var overFlowArgArea = vaListField(vaList, 8, vaListIsPointer, ins);
         ins.add(new Mov(QUADWORD, overFlowArgArea, AX));
 //        ins.add(new Mov(QUADWORD, new Memory(AX, 0), toOperand(dst)));
         copyBytes(ins,new Memory(AX, 0),toOperand(dst,0), typeSize);
@@ -1466,6 +1489,14 @@ public class Codegen {
         ins.add(endLabel);
 
     }
+
+    private static Pseudo makeTemporary(String prefix,
+                                        Type t) {
+        String name = Mcc.makeTemporary(prefix);
+        SYMBOL_TABLE.put(name, new SymbolTableEntry(t, LOCAL_ATTR));
+        return new Pseudo(name, toTypeAsm(t), false, false);
+    }
+
 
     private static void compareDouble(CmpOperator op1, TypeAsm typeAsm,
                                       Operand subtrahend, Operand minuend,

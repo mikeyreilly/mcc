@@ -317,6 +317,10 @@ public class Mcc {
 
         return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations);
     }
+    public static Type decayArrayType(Type t) {
+        return t instanceof Array(Type r, Constant _) ? new Pointer(r) : t;
+    }
+
     public static Array BUILTIN_VA_LIST = null;
     private static int mccHelper(String cSource, Mode mode,
                                  EnumSet<Optimization> optimizations,

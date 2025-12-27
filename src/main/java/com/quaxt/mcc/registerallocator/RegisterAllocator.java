@@ -779,7 +779,8 @@ public class RegisterAllocator {
 
 
     private static final Reg[] BASE_GRAPH_GPRS = new Reg[]{AX, BX, CX, DX, DI
-            , SI, R8, R9, R12, R13, R14, R15,};
+            , SI, R8, R9, R12,
+            R13, R14, R15,};
     private static final Reg[] BASE_GRAPH_DOUBLE_REGS = new Reg[]{XMM0, XMM1,
             XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8, XMM9, XMM10, XMM11,
             XMM12, XMM13};

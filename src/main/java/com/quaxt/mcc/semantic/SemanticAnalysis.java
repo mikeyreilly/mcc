@@ -1722,9 +1722,6 @@ public class SemanticAnalysis {
         return t instanceof FunType ? new Pointer(t) : t;
     }
 
-    private static Type decayArrayType(Type t) {
-        return t instanceof Array(Type r, Constant _) ? new Pointer(r) : t;
-    }
 
     private static Type completeType(Type t) {
         if (t instanceof Array(Type refType, ConstantExp c)){

@@ -197,7 +197,7 @@ class MccTest {
 
     @Test
     void non_varargs_fn_call_va_arg() throws Exception {
-        outputs("non_varargs_fn_call_va_arg", "a string", false);
+        outputs("non_varargs_fn_call_va_arg", "a string\n", false);
     }
 
     @Test
