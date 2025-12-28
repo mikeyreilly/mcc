@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
+import static com.quaxt.mcc.Mcc.decayArrayType;
 import static com.quaxt.mcc.optimizer.Optimizer.optimizeFunction;
 import static com.quaxt.mcc.parser.StorageClass.*;
 import static com.quaxt.mcc.semantic.Primitive.*;
@@ -662,13 +663,13 @@ public class IrGen {
                 if (left.type() instanceof Pointer(Type referenced)) {
                     ptr = (VarIr) v1;
                     other = v2;
-                    scale = Mcc.size(referenced);
+                    scale = Mcc.size(decayArrayType(referenced));
                 } else if (right.type() instanceof Pointer(
                         Type referenced)) { // else condition just for
                     // pattern match
                     ptr = (VarIr) v2;
                     other = v1;
-                    scale = Mcc.size(referenced);
+                    scale = Mcc.size(decayArrayType(referenced));
                 } else throw new AssertionError("");
                 instructions.add(new AddPtr(ptr, other, (int) scale, dstName));
                 return new DereferencedPointer(dstName);
@@ -900,6 +901,7 @@ public class IrGen {
                 case BuiltinC23VaStartIr _ -> null;
                 case LabelIr(String label) -> new LabelIr(fixLabel.apply(label));
                 case JumpIfZero(ValIr v,String label) -> new JumpIfZero(s.apply(v), fixLabel.apply(label));
+                case JumpIfNotZero(ValIr v,String label) -> new JumpIfNotZero(s.apply(v), fixLabel.apply(label));
                 case Jump(String label) -> new Jump(fixLabel.apply(label));
                 case CopyFromOffset(VarIr src, long offset, VarIr dst) -> new CopyFromOffset((VarIr) s.apply(src), offset, dst);
                 case CopyBitsFromOffset(VarIr base, int byteOffset, int bitOffset,
@@ -910,6 +912,7 @@ public class IrGen {
                                       int bitWidth) -> new CopyBitsToOffset(s.apply(rval), (VarIr) s.apply(base), byteOffset, bitOffset, bitWidth);
                 case IntToDouble(ValIr src, VarIr dst) -> new IntToDouble(s.apply(src), dst);
                 case Load(ValIr ptr, VarIr dst)-> new Load(s.apply(ptr), dst);
+                case Store(ValIr v, VarIr dst)-> new Store(s.apply(v), dst);
                 case SignExtendIr(ValIr src, VarIr dst)  -> new SignExtendIr(s.apply(src), dst);
                 case ZeroExtendIr(ValIr src, VarIr dst)  -> new ZeroExtendIr(s.apply(src), dst);
                 case TruncateIr(ValIr src, VarIr dst)  -> new TruncateIr(s.apply(src), dst);

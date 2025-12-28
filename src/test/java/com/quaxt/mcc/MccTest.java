@@ -201,6 +201,11 @@ class MccTest {
     }
 
     @Test
+    void func_ptr_array_call() throws Exception {
+        outputs("func_ptr_array_call", "bar returned 42", false);
+    }
+
+    @Test
     void varargs_struct()  throws Exception {
         returns("varargs_struct", 163);
     }
