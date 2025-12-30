@@ -15,7 +15,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.SYMBOL_TABLE;
-import static com.quaxt.mcc.Mcc.decayArrayType;
 import static com.quaxt.mcc.optimizer.Optimizer.optimizeFunction;
 import static com.quaxt.mcc.parser.StorageClass.*;
 import static com.quaxt.mcc.semantic.Primitive.*;
@@ -663,13 +662,14 @@ public class IrGen {
                 if (left.type() instanceof Pointer(Type referenced)) {
                     ptr = (VarIr) v1;
                     other = v2;
-                    scale = Mcc.size(decayArrayType(referenced));
+                    scale = Mcc.size(type);
                 } else if (right.type() instanceof Pointer(
                         Type referenced)) { // else condition just for
                     // pattern match
+
                     ptr = (VarIr) v2;
                     other = v1;
-                    scale = Mcc.size(decayArrayType(referenced));
+                    scale = Mcc.size(type);
                 } else throw new AssertionError("");
                 instructions.add(new AddPtr(ptr, other, (int) scale, dstName));
                 return new DereferencedPointer(dstName);
@@ -699,14 +699,24 @@ public class IrGen {
                 int memberOffset = memberEntry.byteOffset();
                 ExpResult innerObject = emitTacky(structure, instructions, inlineFunctions);
                 return switch (innerObject) {
-                    case DereferencedPointer(ValIr ptr) -> {
-                        if (memberOffset == 0) yield innerObject;
-                        VarIr dstPtr = makeTemporary("ptr",
-                                new Pointer(expr.type()));
-                        instructions.add(new AddPtr((VarIr) ptr,
-                                new LongInit(memberOffset), 1, dstPtr));
-                        yield new DereferencedPointer(dstPtr);
-                    }
+                    case DereferencedPointer(ValIr ptr) -> switch (memberEntry){
+                        case BitFieldMember(
+                                String _,
+                                Type _,
+                                int _,
+                                int bitOffset,
+                                int bitWidth
+                        ) -> new BitFieldSubObject((VarIr)ptr, memberOffset, bitOffset, bitWidth);
+                        case OrdinaryMember _ -> {
+                            if (memberOffset == 0) yield innerObject;
+                            VarIr dstPtr = makeTemporary("ptr",
+                                            new Pointer(expr.type()));
+                            instructions.add(new AddPtr((VarIr) ptr,
+                                    new LongInit(memberOffset), 1, dstPtr));
+                            yield new DereferencedPointer(dstPtr);
+
+                        }
+                    };
                     case PlainOperand(VarIr v) -> switch (memberEntry){
                         case BitFieldMember(
                                 String _,
@@ -734,15 +744,10 @@ public class IrGen {
 
             }
             case Arrow(Exp pointer, String member, Type type): {
-                StructDef structDef = Mcc.TYPE_TABLE.get(ptrTag(pointer));
-                int memberOffset = structDef.findMember(member).byteOffset();
-                ValIr innerObject = emitTackyAndConvert(pointer, instructions, inlineFunctions);
-                if (memberOffset == 0)
-                    return new DereferencedPointer((VarIr) innerObject);
-                VarIr dstPtr = makeTemporary("ptr", new Pointer(expr.type()));
-                instructions.add(new AddPtr((VarIr) innerObject,
-                        new LongInit(memberOffset), 1, dstPtr));
-                return new DereferencedPointer(dstPtr);
+                Pointer pointerType = (Pointer) (pointer.type());
+                return emitTacky(new Dot(new Dereference(pointer,
+                        pointerType.referenced()), member, type),
+                        instructions, inlineFunctions);
             }
             case ExpressionStatement(Block block): {
 
@@ -988,6 +993,12 @@ public class IrGen {
                                             List<InstructionIr> instructions,
                                             Map<String, FunctionIr> inlineFunctions) {
         ExpResult result = emitTacky(e, instructions, inlineFunctions);
+        return convert(result, e, instructions);
+    }
+
+    private static ValIr convert(ExpResult result,
+                                 Exp e,
+                                 List<InstructionIr> instructions) {
         return switch (result) {
             case null -> null;
             case DereferencedPointer(ValIr ptr) -> {

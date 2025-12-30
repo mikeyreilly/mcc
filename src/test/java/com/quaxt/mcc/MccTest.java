@@ -244,6 +244,10 @@ class MccTest {
                 y=38
                 """);
     }
+    @Test
+    void bitfield2_test()  throws Exception {
+        outputs("bitfield2", "x.a=0");
+    }
 
     @Test
     void bitfield_with_anon()  throws Exception {

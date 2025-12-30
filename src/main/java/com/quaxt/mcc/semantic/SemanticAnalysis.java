@@ -1498,8 +1498,8 @@ public class SemanticAnalysis {
             case Str(String s, Type type) ->
                     new Str(s, new Array(CHAR, new IntInit(s.length() + 1)));
             case FunctionCall(Exp name, List<Exp> args, boolean _, Type _) -> {
-                name = typeCheckExpression(name);
-                Type fType = name.type();
+                Exp typedName = typeCheckExpression(name);
+                Type fType = typedName.type();
                 if (fType instanceof Pointer(Type referenced)){
                     fType = referenced;
                 }
@@ -1519,10 +1519,10 @@ public class SemanticAnalysis {
                             } else
                                 args.set(i, typeCheckAndConvertWithDefaultArgumentPromotion(arg));
                         }
-                        yield new FunctionCall(typeCheckExpression(name), args, varargs, ret);
+                        yield new FunctionCall(typedName, args, varargs, ret);
                     }
                     default ->
-                            fail("variable " + name + " used as " +
+                            fail("variable " + typedName + " used as " +
                                     "function");
                 };
             }
@@ -1628,7 +1628,10 @@ public class SemanticAnalysis {
                 }
 
             }
-            case Subscript(Exp e1, Exp e2, Type _) -> {
+            case Subscript(Exp e1, Exp e2, Type oldType) -> {
+                if (oldType != null) {
+                    yield exp;
+                }
                 var typedE1 = typeCheckAndConvert(e1);
                 var typedE2 = typeCheckAndConvert(e2);
                 var t1 = typedE1.type();

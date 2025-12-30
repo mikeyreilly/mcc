@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
-import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.UnaryOperator.UNARY_SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
@@ -71,7 +70,6 @@ public class Codegen {
         }
         topLevels.addAll(CONSTANT_TABLE.values());
         generateBackendSymbolTable();
-        ArrayList<Instruction> oldAsm = null;
         for (TopLevelAsm topLevelAsm : topLevels) {
 
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
@@ -510,10 +508,8 @@ public class Codegen {
 
     private static Operand toOperand(ValIr val, int offset) {
         return switch (val) {
-            case VarIr(String identifier) when valToType(val) instanceof Array || valToType(val) instanceof Structure->{
-                var ste = SYMBOL_TABLE.get(identifier);
-                yield new PseudoMem(identifier, offset);
-            }
+            case VarIr(String identifier) when valToType(val) instanceof Array || valToType(val) instanceof Structure ->
+                    new PseudoMem(identifier, offset);
             default -> {
                 if (offset == 0) yield toOperand(val);
                 else throw new AssertionError(val);
@@ -601,7 +597,6 @@ public class Codegen {
                 int structSize = (int) Mcc.size(st);
                 int offset = 0;
                 for (var c : classes) {
-                    var ste = SYMBOL_TABLE.get(nameOfRetVal);
                     var operand = new PseudoMem(nameOfRetVal, offset);
                     switch (c) {
                         case SSE -> doubleDests.add(operand);
@@ -1081,10 +1076,8 @@ public class Codegen {
                         }
                     }
                 }
-                case FunCall funCall -> {
-                    // check if we can inline
-                    codegenFunCall(funCall, ins);
-                }
+                case FunCall funCall -> // check if we can inline
+                        codegenFunCall(funCall, ins);
                 case GetAddress(ValIr srcV, VarIr dstV) -> {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV);
@@ -1219,7 +1212,7 @@ public class Codegen {
                             ins.add(new Cvt(LONGWORD, dstType, AX, dst));
                         }
                         case Primitive.INT -> {
-                            ins.add(new MovZeroExtend(valToAsmType(srcV), valToAsmType(dstV), src, AX));
+                            ins.add(new Movsx(valToAsmType(srcV), valToAsmType(dstV), src, AX));
                             ins.add(new Cvt(QUADWORD, dstType, AX, dst));
                         }
                         case Primitive.UINT -> {
@@ -1411,12 +1404,6 @@ public class Codegen {
 // or
 // l->fp_offset > 176 − num_fp ∗ 16
 // go to step 7.
-
-        var ste = SYMBOL_TABLE.get(vaList.identifier());
-        boolean isStatic=vaList.isStatic();
-        boolean isAliased=ste.aliased;
-        Pseudo tmp = makeTemporary("tmp.", decayArrayType(Mcc.BUILTIN_VA_LIST));
-
         if (canBePassedInRegisters) {
             if (numGp>0) {
                 // is register available?
@@ -1489,14 +1476,6 @@ public class Codegen {
         ins.add(endLabel);
 
     }
-
-    private static Pseudo makeTemporary(String prefix,
-                                        Type t) {
-        String name = Mcc.makeTemporary(prefix);
-        SYMBOL_TABLE.put(name, new SymbolTableEntry(t, LOCAL_ATTR));
-        return new Pseudo(name, toTypeAsm(t), false, false);
-    }
-
 
     private static void compareDouble(CmpOperator op1, TypeAsm typeAsm,
                                       Operand subtrahend, Operand minuend,
