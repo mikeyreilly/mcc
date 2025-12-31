@@ -40,6 +40,9 @@ public class Mcc {
 
     public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
 
+    /** This is sometimes useful in testing*/
+    public static boolean registerAllocatorDisabled = false;
+
     public static void setAliased(String identifier) {
         SYMBOL_TABLE.get(identifier).aliased = true;
     }
@@ -137,7 +140,7 @@ public class Mcc {
 
     public static Type valToType(ValIr val) {
         return switch (val) {
-            case null -> Primitive.VOID;
+            case null -> VOID;
             case Constant constant -> constant.type();
             case VarIr(String identifier) ->
                     SYMBOL_TABLE.get(identifier).type();
@@ -167,10 +170,12 @@ public class Mcc {
         return null;
     }
 
-    public static Type type(VarIr v) {
-        return Mcc.SYMBOL_TABLE.get(v.identifier()).type();
+    public static Type type(ValIr val) {
+        return switch(val){
+            case Constant constant -> constant.type();
+            case VarIr v -> Mcc.SYMBOL_TABLE.get(v.identifier()).type();
+        };
     }
-
     public static FunType funType(VarIr v) {
         Type t = type(v);
         if (t instanceof FunType ft) return ft;
@@ -178,6 +183,7 @@ public class Mcc {
         if (t instanceof Array(Type p, Constant _) && p instanceof Pointer(FunType ft)) return ft;
         throw new IllegalArgumentException("Required function or pointer to function. Found "+t);
     }
+
 
     enum Mode {LEX, PARSE, VALIDATE, CODEGEN, COMPILE, TACKY, ASSEMBLE, DUMMY}
 

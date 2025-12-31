@@ -706,7 +706,7 @@ public class IrGen {
                                 int _,
                                 int bitOffset,
                                 int bitWidth
-                        ) -> new BitFieldSubObject((VarIr)ptr, memberOffset, bitOffset, bitWidth);
+                        ) -> new BitFieldSubObjectViaPointer((VarIr)ptr, memberOffset, bitOffset, bitWidth);
                         case OrdinaryMember _ -> {
                             if (memberOffset == 0) yield innerObject;
                             VarIr dstPtr = makeTemporary("ptr",
@@ -1018,6 +1018,12 @@ public class IrGen {
                 instructions.add(new CopyBitsFromOffset(base, byteOffset, bitOffset, bitWidth, dst));
                 yield dst;
             }
+            case BitFieldSubObjectViaPointer(VarIr ptr, int byteOffset, int bitOffset,
+                                             int bitWidth) -> {
+                VarIr dst = makeTemporary("dst.", e.type());
+                instructions.add(new CopyBitsFromOffsetViaPointer(ptr, byteOffset, bitOffset, bitWidth, dst));
+                yield dst;
+            }
         };
     }
 
@@ -1115,6 +1121,12 @@ public class IrGen {
             case BitFieldSubObject(VarIr base, int byteOffset, int bitOffset,
                                    int bitWidth)->{
                 instructions.add(new CopyBitsToOffset(rval, base, byteOffset, bitOffset, bitWidth));
+                yield new PlainOperand(rval);
+            }
+
+            case BitFieldSubObjectViaPointer(VarIr base, int byteOffset, int bitOffset,
+                                             int bitWidth)->{
+                instructions.add(new CopyBitsToOffsetViaPointer(rval, base, byteOffset, bitOffset, bitWidth));
                 yield new PlainOperand(rval);
             }
             default ->

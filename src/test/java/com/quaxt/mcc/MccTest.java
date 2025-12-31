@@ -133,7 +133,8 @@ class MccTest {
 
     private static void outputs(String testProgram,
                                 String expectedOutput,
-                                boolean optimize) throws Exception {
+                                boolean optimize, boolean disableRegisterAllocator) throws Exception {
+        if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
         if (optimize) {
             assertEquals(0, Mcc.mcc(
                     "src/test/resources/" + testProgram + ".c", "--optimize"));
@@ -141,6 +142,7 @@ class MccTest {
             assertEquals(0, Mcc.mcc(
                     "src/test/resources/" + testProgram + ".c"));
         }
+        Mcc.registerAllocatorDisabled = false;
         assertEquals(expectedOutput, startProcessAndCaptureOutput(
                 "src/test/resources/" + testProgram));
     }
@@ -152,7 +154,7 @@ class MccTest {
 
     private void outputs(String testProgram,
                          String expectedOutput) throws Exception {
-        outputs(testProgram,expectedOutput,true);
+        outputs(testProgram,expectedOutput,true, false);
     }
 
     @Test
@@ -177,7 +179,7 @@ class MccTest {
 
     @Test
     void thing_before()  throws Exception {
-        outputs("thing_before", "it's 17", false);
+        outputs("thing_before", "it's 17", false, false);
     }
 
     @Test
@@ -197,17 +199,33 @@ class MccTest {
 
     @Test
     void non_varargs_fn_call_va_arg() throws Exception {
-        outputs("non_varargs_fn_call_va_arg", "a string\n", false);
+        outputs("non_varargs_fn_call_va_arg", "a string\n", false, false);
+    }
+
+
+    @Test
+    void non_varargs_fn_call_va_arg_without_register_allocator() throws Exception {
+        outputs("non_varargs_fn_call_va_arg", "a string\n", false, true);
+    }
+
+    @Test
+    void struct3() throws Exception {
+        outputs("struct3", "sum=708270", false, true);
     }
 
     @Test
     void func_ptr_array_call() throws Exception {
-        outputs("func_ptr_array_call", "bar returned 42", false);
+        outputs("func_ptr_array_call", "bar returned 42", false, false);
     }
 
     @Test
     void varargs_struct()  throws Exception {
         returns("varargs_struct", 163);
+    }
+
+    @Test
+    void varargs_struct2()  throws Exception {
+        returns("varargs_struct2", 163);
     }
 
     @Test
@@ -246,7 +264,7 @@ class MccTest {
     }
     @Test
     void bitfield2_test()  throws Exception {
-        outputs("bitfield2", "x.a=0");
+        outputs("bitfield2", "x.a=0", false, true);
     }
 
     @Test
@@ -264,7 +282,7 @@ class MccTest {
                 EFCDAB8967452301
                 78563412
                 3412
-                """, false);
+                """, false, false);
     }
 
     @Test
@@ -380,7 +398,7 @@ class MccTest {
 
     @Test
     void atomic() throws Exception {
-        outputs("atomic", "x = 27, y = 27\n", true);
+        outputs("atomic", "x = 27, y = 27\n", true, false);
     }
 
     @Test
@@ -493,7 +511,7 @@ class MccTest {
                 0
                 0
                 0
-                """, false);
+                """, false, false);
     }
 
     @Test

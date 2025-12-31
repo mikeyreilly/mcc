@@ -3,9 +3,7 @@ package com.quaxt.mcc.asm;
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.optimizer.Optimizer;
-import com.quaxt.mcc.parser.Constant;
-import com.quaxt.mcc.parser.StorageClass;
-import com.quaxt.mcc.parser.Var;
+import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.registerallocator.RegisterAllocator;
 import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
@@ -16,6 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.EQUALS;
 import static com.quaxt.mcc.CmpOperator.NOT_EQUALS;
+import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.UnaryOperator.UNARY_SHR;
 import static com.quaxt.mcc.asm.DoubleReg.*;
@@ -61,11 +60,11 @@ public class Codegen {
 
                 case StaticVariable(String name, boolean global, Type t,
                                     List<StaticInit> init) -> topLevels.add(new StaticVariableAsm(name, global,
-                                            Mcc.variableAlignment(t), init));
+                                            variableAlignment(t), init));
                 case com.quaxt.mcc.tacky.StaticConstant(String name, Type t,
                                                         StaticInit init) ->
                         topLevels.add(new StaticConstant(name,
-                                Mcc.variableAlignment(t), init));
+                                variableAlignment(t), init));
             }
         }
         topLevels.addAll(CONSTANT_TABLE.values());
@@ -73,7 +72,9 @@ public class Codegen {
         for (TopLevelAsm topLevelAsm : topLevels) {
 
             if (topLevelAsm instanceof FunctionAsm functionAsm) {
-                RegisterAllocator.allocateRegisters(functionAsm);
+                if(!registerAllocatorDisabled){
+                    RegisterAllocator.allocateRegisters(functionAsm);
+                }
                 AtomicLong offset = replacePseudoRegisters(functionAsm);
                 functionAsm.stackSize = -offset.get();
                 fixUpInstructions(functionAsm);
@@ -445,8 +446,8 @@ public class Codegen {
             case Primitive.FLOAT -> FLOAT;
             case Pointer _, FunType _ -> QUADWORD;
             case Array _, Structure _ ->
-                    new ByteArray((int) Mcc.size(type),
-                            Mcc.variableAlignment(type));
+                    new ByteArray((int) size(type),
+                            variableAlignment(type));
 
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
@@ -507,14 +508,12 @@ public class Codegen {
     }
 
     private static Operand toOperand(ValIr val, int offset) {
-        return switch (val) {
-            case VarIr(String identifier) when valToType(val) instanceof Array || valToType(val) instanceof Structure ->
+        return switch(val){
+            case VarIr(String identifier)  ->
                     new PseudoMem(identifier, offset);
-            default -> {
-                if (offset == 0) yield toOperand(val);
-                else throw new AssertionError(val);
-            }
+            default -> throw new AssertionError(val);
         };
+
     }
 
     private static Operand dePseudo(Operand in, Map<String, Long> varTable,
@@ -594,7 +593,7 @@ public class Codegen {
             } else {
                 List<TypedOperand> intDests = new ArrayList<>();
                 List<Operand> doubleDests = new ArrayList<>();
-                int structSize = (int) Mcc.size(st);
+                int structSize = (int) size(st);
                 int offset = 0;
                 for (var c : classes) {
                     var operand = new PseudoMem(nameOfRetVal, offset);
@@ -647,7 +646,7 @@ public class Codegen {
             }
             ParameterClassification classifiedArgs =
                     classifyParameters(operands, returnInMemory);
-            PARAMETER_CLASSIFICATION_MAP.put(Mcc.funType(name), classifiedArgs);
+            PARAMETER_CLASSIFICATION_MAP.put(funType(name), classifiedArgs);
             ArrayList<TypedOperand> integerArguments =
                     classifiedArgs.integerArguments();
             ArrayList<Operand> doubleArguments =
@@ -700,7 +699,7 @@ public class Codegen {
                 instructionAsms.add(new Mov(LONGWORD,
                         new Imm(doubleArguments.size()), AX));
             }
-            instructionAsms.add(new Call(toOperand(name), Mcc.funType(name)));
+            instructionAsms.add(new Call(toOperand(name), funType(name)));
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD,
@@ -768,7 +767,7 @@ public class Codegen {
         List<InstructionIr> instructionIrs = functionIr.instructions();
         Set<VarIr> aliasedVars = Optimizer.addressTakenAnalysis(instructionIrs);
         for (var v : aliasedVars) {
-            Mcc.setAliased(v.identifier());
+            setAliased(v.identifier());
         }
         List<Var> functionType = functionIr.type();
         List<TypedOperand> operands = new ArrayList<>();
@@ -874,15 +873,15 @@ public class Codegen {
 
 
                     Operand dst = toOperand(dstName);
-                    LabelIr label1 = newLabel(Mcc.makeTemporary(".Lno."));
+                    LabelIr label1 = newLabel(makeTemporary(".Lno."));
                     ins.add(new Mov(BYTE, Imm.ZERO, dst));
 
                     ins.add(new JmpCC(CC.NO, label1.label()));
                     ins.add(new Mov(BYTE, Imm.ONE, dst));
                     ins.add(label1);
                     // if we have to downcast and result can't fit then that is overflow
-                    if (Mcc.size(outputType) < Mcc.size(inputType)) {
-                        LabelIr label2 = newLabel(Mcc.makeTemporary(".Lno."));
+                    if (size(outputType) < size(inputType)) {
+                        LabelIr label2 = newLabel(makeTemporary(".Lno."));
                         ins.add(new Movsx(dstTypeAsm, srcTypeAsm, DX, AX));
                         ins.add(new Cmp(QUADWORD, DX, AX));
                         ins.add(new JmpCC(CC.E, label2.label()));
@@ -1001,34 +1000,7 @@ public class Codegen {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
-                case CopyBitsToOffset(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
-                                      int bitWidth) -> {
-                    Operand src = toOperand(srcV);
-                    Operand dst = toOperand(dstV, (int) offset1);
-                    TypeAsm typeAsm = valToAsmType(srcV);
-                    ins.add(new Mov(typeAsm, src, AX));
 
-                    long srcMask = (1L << bitWidth) - 1;
-                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(srcMask), AX));
-                    ins.add(new Binary(SHL,  typeAsm, new Imm(bitOffset), AX));
-
-                    // now we have the value we want to copy in AX, with just the bits we want
-                    // suppose the bits we want are abc
-                    // now we have 000abc000
-
-                    ins.add(new Mov(typeAsm, dst, DX));
-                    // AND it with a mask the keeps all but the bits we want to set
-                    int typeSizeBits= (int) (typeAsm.size()*8);
-                    long typeSizeBitsOnes = ~(-1L << typeSizeBits);
-                    long destMask=srcMask<<bitOffset;
-                    // zero out the bits in DX at abc position
-                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(~destMask & typeSizeBitsOnes), DX));
-                    ins.add(new Binary(BITWISE_OR, typeAsm , AX, DX));
-                    ins.add(new Mov(typeAsm, DX, dst));
-
-
-
-                }
                 case DoubleToInt(ValIr src, VarIr dst) -> {
                     var dstType = valToType(dst);
                     var dstTypeAsm = toTypeAsm(dstType);
@@ -1058,8 +1030,8 @@ public class Codegen {
                             TypeAsm srcAsmType = valToAsmType(src);
                             //p.335
                             LabelIr label1 =
-                                    newLabel(Mcc.makeTemporary(".Laub."));
-                            LabelIr label2 = newLabel(Mcc.makeTemporary(
+                                    newLabel(makeTemporary(".Laub."));
+                            LabelIr label2 = newLabel(makeTemporary(
                                     ".LendCmp" + "."));
                             var UPPER_BOUND = resolveConstantDouble(0x1.0p63);
                             ins.add(new Cmp(DOUBLE, UPPER_BOUND, toOperand(src)));
@@ -1121,7 +1093,7 @@ public class Codegen {
                             ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0,
                                     XMM0));
                             ins.add(new Cmp(typeAsm, XMM0, toOperand(v)));
-                            LabelIr endLabel = newLabel(Mcc.makeTemporary(
+                            LabelIr endLabel = newLabel(makeTemporary(
                                     ".Lend."));
                             ins.add(newJmpCC(null, true, endLabel.label()));
 
@@ -1222,9 +1194,9 @@ public class Codegen {
                         case null, default -> {
                             // see description on p. 320
                             LabelIr label1 =
-                                    newLabel(Mcc.makeTemporary(".LoutOfRange."));
+                                    newLabel(makeTemporary(".LoutOfRange."));
                             LabelIr label2 =
-                                    newLabel(Mcc.makeTemporary(".Lend."));
+                                    newLabel(makeTemporary(".Lend."));
                             var asmSrcType = srcType ==
                                     Primitive.UINT ? LONGWORD : QUADWORD;
                             ins.add(new Cmp(QUADWORD, new Imm(0), src));
@@ -1300,6 +1272,82 @@ public class Codegen {
                     long mask = (1L << bitWidth) - 1;
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(mask), dst));
                 }
+                case CopyBitsFromOffsetViaPointer(ValIr srcV, long offset1,int bitOffset,
+                                        int bitWidth, VarIr dstV) -> {
+                    // srcV is a pointer, load the address srcV into DX
+                    ins.add(new Mov(QUADWORD, toOperand(srcV), DX));
+
+                    Operand src = new Memory(DX, (int) offset1);
+                    TypeAsm typeAsm = valToAsmType(dstV);
+                    var dst=toOperand(dstV);
+                    ins.add(new Mov(typeAsm, src, dst));
+                    ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, typeAsm , new Imm(bitOffset), dst));
+                    //bit mask to just keep width bits
+                    long mask = (1L << bitWidth) - 1;
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(mask), dst));
+                }
+                case CopyBitsToOffset(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
+                                      int bitWidth) -> {
+                    Operand src = toOperand(srcV);
+                    Operand dst = toOperand(dstV, (int) offset1);
+                    TypeAsm typeAsm = valToAsmType(srcV);
+                    ins.add(new Mov(typeAsm, src, AX));
+
+                    long srcMask = (1L << bitWidth) - 1;
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(srcMask), AX));
+                    ins.add(new Binary(SHL,  typeAsm, new Imm(bitOffset), AX));
+
+                    // now we have the value we want to copy in AX, with just the bits we want
+                    // suppose the bits we want are abc
+                    // now we have 000abc000
+
+                    ins.add(new Mov(typeAsm, dst, DX));
+                    // AND it with a mask the keeps all but the bits we want to set
+                    int typeSizeBits= (int) (typeAsm.size()*8);
+                    long typeSizeBitsOnes = ~(-1L << typeSizeBits);
+                    long destMask=srcMask<<bitOffset;
+                    // zero out the bits in DX at abc position
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(~destMask & typeSizeBitsOnes), DX));
+                    ins.add(new Binary(BITWISE_OR, typeAsm , AX, DX));
+                    ins.add(new Mov(typeAsm, DX, dst));
+                }
+
+                case CopyBitsToOffsetViaPointer(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
+                                      int bitWidth) -> {
+                    Operand src = toOperand(srcV);
+                   // Operand dst = toOperand(dstV, (int) offset1);
+
+
+
+                    TypeAsm typeAsm = valToAsmType(srcV);
+                    ins.add(new Mov(typeAsm, src, AX));
+
+                    long srcMask = (1L << bitWidth) - 1;
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(srcMask), AX));
+                    ins.add(new Binary(SHL,  typeAsm, new Imm(bitOffset), AX));
+
+                    // now we have the value we want to copy in AX, with just the bits we want
+                    // suppose the bits we want are abc
+                    // now we have 000abc000
+
+                    // dstV is a pointer, load the address dstV into DX
+                    ins.add(new Mov(QUADWORD, toOperand(dstV), DX));
+
+                    // load value at address dstV + offset1 into DX
+                    ins.add(new Mov(typeAsm, new Memory(DX, offset1), DX));
+                    // AND it with a mask the keeps all but the bits we want to set
+                    int typeSizeBits= (int) (typeAsm.size()*8);
+                    long typeSizeBitsOnes = ~(-1L << typeSizeBits);
+                    long destMask=srcMask<<bitOffset;
+                    // zero out the bits in DX at abc position
+                    ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(~destMask & typeSizeBitsOnes), DX));
+                    ins.add(new Binary(BITWISE_OR, typeAsm , AX, DX));
+
+                    // dstV is a pointer, load the address dstV into AX
+                    ins.add(new Mov(QUADWORD, toOperand(dstV), AX));
+
+                    ins.add(new Mov(typeAsm, DX, new Memory(AX, offset1)));
+                }
                 case Ignore.IGNORE -> {}
                 case BuiltinC23VaStartIr(VarIr vaList) -> {
 //                    field   offset
@@ -1348,13 +1396,14 @@ public class Codegen {
                                        List<Instruction> ins) {
         if (vaListIsPointer) {
             Operand ptr = toOperand(vaList);
-            String name = Mcc.makeTemporary("tmp");
+            String name = makeTemporary("tmp");
             TypeAsm t = switch(offset) {
-                case 0, 4 -> PrimitiveTypeAsm.LONGWORD;
-                case 8, 16 -> PrimitiveTypeAsm.QUADWORD;
+                case 0, 4 -> LONGWORD;
+                case 8, 16 -> QUADWORD;
                 default -> throw new IllegalArgumentException("bad offset " + offset);
             };
-            Operand dst = new Pseudo(name, PrimitiveTypeAsm.LONGWORD, false, false);
+            Operand dst = new Pseudo(name, LONGWORD, false, false);
+            Mcc.SYMBOL_TABLE.put(name, new SymbolTableEntry(Primitive.INT, LOCAL_ATTR));
             ins.add(new Mov(QUADWORD, ptr, R10));
             ins.add(new Mov(t, new Memory(R10, offset), dst));
             return dst;
@@ -1365,13 +1414,14 @@ public class Codegen {
     private static void emitBuiltInVarArg(VarIr vaList, VarIr dst,
                                           List<Instruction> ins, Type type) {
 
-        boolean vaListIsPointer = Mcc.SYMBOL_TABLE.get(vaList.identifier()).type() instanceof Pointer;
+        boolean vaListIsPointer = SYMBOL_TABLE.get(vaList.identifier()).type() instanceof Pointer;
 
         int numGp = 0;
         int numFp = 0;
         boolean floatFirst = false;
         boolean canBePassedInRegisters = false;
-        long typeSize = Mcc.size(type);
+        long typeSize = size(type);
+        List<StructureType> classes = null;
 
         if (type.isScalar()) {
             canBePassedInRegisters = true;
@@ -1379,20 +1429,17 @@ public class Codegen {
             else numGp++;
         } else if (typeSize <= 16) {
             canBePassedInRegisters = true;
-            if (type instanceof Structure structure) {
-                List<StructureType> classes = classifyStructure(structure);
-                for (int i = 0; i < classes.size(); i++) {
-                    var c = classes.get(i);
-                    if (c == StructureType.SSE) {
-                        numFp++;
-                        floatFirst = i == 0;
-                    } else if (c == StructureType.INTEGER) numGp++;
-                }
+            classes = classifyStructure(type);
+            for (int i = 0; i < classes.size(); i++) {
+                var c = classes.get(i);
+                if (c == StructureType.SSE) {
+                    numFp++;
+                    floatFirst = i == 0;
+                } else if (c == StructureType.INTEGER) numGp++;
             }
         }
-
-        LabelIr stackLabel = newLabel(Mcc.makeTemporary(".Lstack."));
-        LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
+        LabelIr stackLabel = newLabel(makeTemporary(".Lstack."));
+        LabelIr endLabel = newLabel(makeTemporary(".Lend."));
 
 // 1. Determine whether type may be passed in the registers. If not go to
 // step 7.
@@ -1434,10 +1481,11 @@ public class Codegen {
                 ins.add(new Mov(LONGWORD, isFp ? vaListField(vaList, 4, vaListIsPointer, ins) : vaListField(vaList, 0, vaListIsPointer, ins), DX));
                 ins.add(new Binary(ADD, QUADWORD, DX, AX));
                 // mov what's at address gp_offset+reg_save_area to dst
-                int offset=i*8;
+                int offset = i*8;
 // 6. Return the fetched type.
+                Operand dstOperand = type.isScalar() ?toOperand(dst):toOperand(dst, offset);
                 ins.add(new Mov(QUADWORD, new Memory(AX, 0),
-                        toOperand(dst, offset)));
+                        dstOperand));
             }
 
 // 5. Set:
@@ -1468,10 +1516,11 @@ public class Codegen {
         var overFlowArgArea = vaListField(vaList, 8, vaListIsPointer, ins);
         ins.add(new Mov(QUADWORD, overFlowArgArea, AX));
 //        ins.add(new Mov(QUADWORD, new Memory(AX, 0), toOperand(dst)));
-        copyBytes(ins,new Memory(AX, 0),toOperand(dst,0), typeSize);
+        copyBytes(ins,new Memory(AX, 0),toOperand(dst//,0
+        ), typeSize);
 // 10. Align l->overflow_arg_area upwards to an 8 byte boundary.
 // 11. Return the fetched type.
-        long nextSlotOffset=ProgramAsm.roundAwayFromZero(typeSize, Math.max(Mcc.typeAlignment(type), 8));
+        long nextSlotOffset=ProgramAsm.roundAwayFromZero(typeSize, Math.max(typeAlignment(type), 8));
         ins.add(new Binary(ADD, QUADWORD, new Imm(nextSlotOffset), overFlowArgArea));
         ins.add(endLabel);
 
@@ -1482,14 +1531,14 @@ public class Codegen {
                                       Operand dst, List<Instruction> ins) {
         ins.add(new Cmp(typeAsm, subtrahend, minuend));
         if (op1 == EQUALS || op1 == NOT_EQUALS) {
-            LabelIr isANLabel = newLabel(Mcc.makeTemporary(".Lan."));
+            LabelIr isANLabel = newLabel(makeTemporary(".Lan."));
 
             ins.add(newJmpCC(null, false, // null false -> jnp (i.e. jump if
                     // not NaN)
                     isANLabel.label()));
             // for NaN : == is always false and != is always true
             ins.add(new Mov(LONGWORD, op1 == EQUALS ? Imm.ZERO : Imm.ONE, dst));
-            LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
+            LabelIr endLabel = newLabel(makeTemporary(".Lend."));
             ins.add(new Jump(endLabel.label()));
 
             ins.add(isANLabel);
@@ -1500,7 +1549,7 @@ public class Codegen {
 
         } else {
             ins.add(new Mov(LONGWORD, Imm.ZERO, dst));
-            LabelIr isNaNLabel = newLabel(Mcc.makeTemporary(".Lnan."));
+            LabelIr isNaNLabel = newLabel(makeTemporary(".Lnan."));
             ins.add(new OldJmpCC(null, true, isNaNLabel.label()).toJmpCC2());
             ins.add(new SetCC(op1, true, dst));
             ins.add(isNaNLabel);
@@ -1537,7 +1586,7 @@ public class Codegen {
             ins.add(new Mov(QUADWORD, new Memory(BP, -8), AX));
             var returnStorage = new Memory(AX, 0);
             Type t = valToType(val);
-            copyBytes(ins, retVal, returnStorage, (int) Mcc.size(t));
+            copyBytes(ins, retVal, returnStorage, (int) size(t));
         } else {
             int regIndex = 0;
             for (TypedOperand to : intDests) {
@@ -1667,7 +1716,7 @@ public class Codegen {
     public enum StructureType {MEMORY, SSE, INTEGER}
 
     public static List<StructureType> classifyStructure(Type t) {
-        long size = Mcc.size(t);
+        long size = size(t);
         if (size > 16) {
             long eightbyteCount = (size / 8) + (size % 8 == 0 ? 0 : 1);
             List<StructureType> result = new ArrayList<>();
@@ -1702,7 +1751,7 @@ public class Codegen {
                 return new StructureType[]{first, StructureType.INTEGER};
             }
         } else if (type instanceof Structure s && s.isUnion()) {
-            ArrayList<MemberEntry> members = Mcc.members(s);
+            ArrayList<MemberEntry> members = members(s);
             StructureType one = first, two = second;
             for (var memberEntry : members) {
                 Type member = memberEntry.type();
@@ -1713,7 +1762,7 @@ public class Codegen {
             }
             return new StructureType[]{one, two};
         } else if (type instanceof Structure s) { // structOrUnionSpecifier is not uniion
-            ArrayList<MemberEntry> members = Mcc.members(s);
+            ArrayList<MemberEntry> members = members(s);
             StructureType one = first, two = second;
             for (var memberEntry : members) {
                 Type member = memberEntry.type();
@@ -1725,7 +1774,7 @@ public class Codegen {
             }
             return new StructureType[]{one, two};
         } else if (type instanceof Array(Type element, Constant arraySize)) {
-            long elemSize = Mcc.size(element);
+            long elemSize = size(element);
             StructureType one = first, two = second;
             for (long i = 0; i < arraySize.toLong(); i++) {
                 long currentOffset = offset + (i * elemSize);
