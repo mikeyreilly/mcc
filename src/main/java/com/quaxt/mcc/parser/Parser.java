@@ -90,11 +90,12 @@ public class Parser {
     public static void skipRestrictAndConst(TokenList tokens) {
         while (true) {
             if (tokens.isEmpty()) return;
-            if (tokens.getFirst() == RESTRICT) tokens.removeFirst();
-            else if (tokens.getFirst() == CONST) {
-                tokens.removeFirst();
+            switch (tokens.getFirst()) {
+                case RESTRICT, CONST, VOLATILE -> tokens.removeFirst();
+                default -> {
+                    return;
+                }
             }
-            else break;
         }
     }
 

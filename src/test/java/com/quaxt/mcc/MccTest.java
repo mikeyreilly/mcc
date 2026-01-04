@@ -369,6 +369,20 @@ class MccTest {
         outputs("funcall_cast_to_void","hello\n");
     }
 
+    @Test
+    void volatile_test() throws Exception {
+        returns("volatile",0);
+    }
+
+    @Test
+    void static_ptr_nested_array() throws Exception {
+        returns("static_ptr_nested_array", 0);
+    }
+    @Test
+    void
+    convert_by_assignment_signed_to_unsigned() throws Exception {
+        outputs("convert_by_assignment_signed_to_unsigned", "4294967295\n");
+    }
 
     @AfterAll
     static void tearDown() {

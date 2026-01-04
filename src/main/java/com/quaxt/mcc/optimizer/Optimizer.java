@@ -10,7 +10,6 @@ import com.quaxt.mcc.tacky.*;
 import java.util.*;
 import java.util.function.Predicate;
 
-import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.Optimization.*;
 import static com.quaxt.mcc.asm.Nullary.MFENCE;
 import static com.quaxt.mcc.semantic.Primitive.DOUBLE;
@@ -450,28 +449,32 @@ public class Optimizer {
                              VarIr dstName) when v1 instanceof Constant c1 -> {
                     Constant co = c1.apply(op);
                     if (co == null) yield null;
-                    yield new Copy((ValIr) convertConst(co,
-                            valToType(dstName)), dstName);
+                    yield new Copy((ValIr) convertConst(co, Mcc.type(dstName)), dstName);
                 }
 
                 case DoubleToInt(ValIr src,
-                                 VarIr dst) when src instanceof Constant c1 ->
-                        new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
+                                 VarIr dst) when src instanceof Constant c1 -> {
+                    yield new Copy((ValIr) convertConst(c1, Mcc.type(dst)), dst);
+                }
                 case DoubleToUInt(ValIr src,
-                                  VarIr dst) when src instanceof Constant c1 ->
-                        new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
+                                  VarIr dst) when src instanceof Constant c1 -> {
+                    yield new Copy((ValIr) convertConst(c1, Mcc.type(dst)), dst);
+                }
                 case IntToDouble(ValIr src,
                                  VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, DOUBLE), dst);
                 case SignExtendIr(ValIr src,
-                                  VarIr dst) when src instanceof Constant c1 ->
-                        new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
+                                  VarIr dst) when src instanceof Constant c1 -> {
+                    yield new Copy((ValIr) convertConst(c1, Mcc.type(dst)), dst);
+                }
                 case ZeroExtendIr(ValIr src,
-                                  VarIr dst) when src instanceof Constant c1 ->
-                        new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
+                                  VarIr dst) when src instanceof Constant c1 -> {
+                    yield new Copy((ValIr) convertConst(c1, Mcc.type(dst)), dst);
+                }
                 case TruncateIr(ValIr src,
-                                VarIr dst) when src instanceof Constant c1 ->
-                        new Copy((ValIr) convertConst(c1, valToType(dst)), dst);
+                                VarIr dst) when src instanceof Constant c1 -> {
+                    yield new Copy((ValIr) convertConst(c1, Mcc.type(dst)), dst);
+                }
                 case UIntToDouble(ValIr src,
                                   VarIr dst) when src instanceof Constant c1 ->
                         new Copy((ValIr) convertConst(c1, DOUBLE), dst);
@@ -483,8 +486,7 @@ public class Optimizer {
                         throw new Todo();
                         //yield null;
                     }
-                    yield new Copy((ValIr) convertConst(co,
-                            valToType(dstName)), dstName);
+                    yield new Copy((ValIr) convertConst(co, Mcc.type(dstName)), dstName);
                 }
                 case JumpIfZero(ValIr v,
                                 String label) when v instanceof Constant<?> c -> {
@@ -503,8 +505,8 @@ public class Optimizer {
 
                 case Copy(ValIr src,
                           VarIr dst) when src instanceof Constant c1 -> {
-                    var dstT = valToType(dst);
-                    var srcT = valToType(src);
+                    var dstT = Mcc.type(dst);
+                    var srcT = Mcc.type(src);
                     if (srcT.equals(dstT) || (srcT.isSigned() == dstT.isSigned()))
                         yield null;
                     yield new Copy((ValIr) convertConst(c1, dstT), dst);

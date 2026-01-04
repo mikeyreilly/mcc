@@ -138,12 +138,11 @@ public class Mcc {
         };
     }
 
-    public static Type valToType(ValIr val) {
-        return switch (val) {
+    public static Type type(ValIr val) {
+        return switch(val){
             case null -> VOID;
             case Constant constant -> constant.type();
-            case VarIr(String identifier) ->
-                    SYMBOL_TABLE.get(identifier).type();
+            case VarIr v -> Mcc.SYMBOL_TABLE.get(v.identifier()).type();
         };
     }
 
@@ -170,12 +169,6 @@ public class Mcc {
         return null;
     }
 
-    public static Type type(ValIr val) {
-        return switch(val){
-            case Constant constant -> constant.type();
-            case VarIr v -> Mcc.SYMBOL_TABLE.get(v.identifier()).type();
-        };
-    }
     public static FunType funType(VarIr v) {
         Type t = type(v);
         if (t instanceof FunType ft) return ft;

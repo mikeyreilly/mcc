@@ -430,7 +430,7 @@ public class Codegen {
     }
 
     private static TypeAsm valToAsmType(ValIr val) {
-        return toTypeAsm(valToType(val));
+        return toTypeAsm(type(val));
     }
 
     public static TypeAsm toTypeAsm(Type type) {
@@ -484,7 +484,7 @@ public class Codegen {
             case UShortInit(short i) -> new Imm(i & 0xffff);
             case IntInit(int i) -> new Imm(i);
             case VarIr(String identifier) -> {
-                Type t = valToType(val);
+                Type t = type(val);
                 var ste = SYMBOL_TABLE.get(identifier);
                 if (t instanceof Array || t instanceof Structure)
                     yield new PseudoMem(identifier, 0);
@@ -855,8 +855,8 @@ public class Codegen {
 
                 case BinaryWithOverflowIr(ArithmeticOperator op1, ValIr v1, ValIr v2, ValIr v3,
                               VarIr dstName) -> {
-                    Type inputType = valToType(v1);
-                    Type outputType = valToType(v3);
+                    Type inputType = type(v1);
+                    Type outputType = type(v3);
                     if (outputType instanceof Pointer(Type referenced))
                         outputType = referenced;
                     TypeAsm srcTypeAsm = toTypeAsm(inputType);
@@ -894,8 +894,11 @@ public class Codegen {
                 }
                 case BinaryIr(ArithmeticOperator op1, ValIr v1, ValIr v2,
                               VarIr dstName) -> {
-                    Type type = v1 ==
-                            null ? valToType(v2) : valToType(v1);// v1 might
+                    Type type;// v1 might
+                    if (v1 == null) {
+                        type = type(v2);} else {
+                        type = type(v1);
+                    }
                     // be null because of VOID v1 in COMMA op
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (typeAsm == DOUBLE || typeAsm == FLOAT) {
@@ -959,7 +962,7 @@ public class Codegen {
                 }
                 case BinaryIr(CmpOperator op1, ValIr v1, ValIr v2,
                               VarIr dstName) -> {
-                    Type type = valToType(v1);
+                    Type type = type(v1);
                     TypeAsm typeAsm = toTypeAsm(type);
                     assert (typeAsm == valToAsmType(v2));
 
@@ -1004,7 +1007,7 @@ public class Codegen {
                 }
 
                 case DoubleToInt(ValIr src, VarIr dst) -> {
-                    var dstType = valToType(dst);
+                    var dstType = type(dst);
                     var dstTypeAsm = toTypeAsm(dstType);
                     if (dstType == Primitive.CHAR || dstType == Primitive.SCHAR) {
                         ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
@@ -1014,7 +1017,7 @@ public class Codegen {
                                 toOperand(dst)));
                 }
                 case DoubleToUInt(ValIr src, ValIr dst) -> {
-                    Type dstType = valToType(dst);
+                    Type dstType = type(dst);
                     switch (dstType) {
                         case Primitive.UCHAR -> {
                             ins.add(new Cvt(valToAsmType(src), LONGWORD, toOperand(src), AX));
@@ -1061,7 +1064,7 @@ public class Codegen {
                         ins.add(new Lea(src, dst));
                 }
                 case IntToDouble(ValIr src, VarIr dst) -> {
-                    Type srcType = valToType(src);
+                    Type srcType = type(src);
                     var srcTypeAsm = toTypeAsm(srcType);
                     var dstTypeAsm = valToAsmType(dst);
                     if (srcType == Primitive.CHAR || srcType == Primitive.SCHAR) {
@@ -1073,7 +1076,7 @@ public class Codegen {
                 }
                 case Jump jump -> ins.add(jump);
                 case JumpIfNotZero(ValIr v, String label) -> {
-                    Type type = valToType(v);
+                    Type type = type(v);
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (typeAsm == DOUBLE) {
                         ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0, XMM0));
@@ -1089,7 +1092,7 @@ public class Codegen {
                 }
                 case JumpIfZero(ValIr v, String label) -> {
                     if (v != null) {
-                        Type type = valToType(v);
+                        Type type = type(v);
                         TypeAsm typeAsm = toTypeAsm(type);
                         if (typeAsm == DOUBLE) {
                             ins.add(new Binary(BITWISE_XOR, typeAsm, XMM0,
@@ -1117,7 +1120,7 @@ public class Codegen {
                 case Load(ValIr ptrV, VarIr dstV) -> {
                     Operand ptr = toOperand(ptrV);
                     Operand dst = toOperand(dstV);
-                    TypeAsm dstType = toTypeAsm(valToType(dstV));
+                    TypeAsm dstType = toTypeAsm(type(dstV));
                     ins.add(new Mov(QUADWORD, ptr, AX));
                     if (dstType instanceof ByteArray(long size, _)) {
                         Operand src = new Memory(AX, 0);
@@ -1137,7 +1140,7 @@ public class Codegen {
                     Operand src = toOperand(srcV);
                     Operand ptr = toOperand(ptrV);
                     ins.add(new Mov(QUADWORD, ptr, AX));
-                    TypeAsm srcType = toTypeAsm(valToType(srcV));
+                    TypeAsm srcType = toTypeAsm(type(srcV));
                     if (srcType instanceof ByteArray(long size, _)) {
                         Operand dst = new Memory(AX, 0);
                         copyBytes(ins, src, dst, size);
@@ -1149,7 +1152,7 @@ public class Codegen {
                 Operand src = toOperand(srcV);
                 Operand ptr = toOperand(ptrV);
                 ins.add(new Mov(QUADWORD, ptr, AX));
-                TypeAsm srcType = toTypeAsm(valToType(srcV));
+                TypeAsm srcType = toTypeAsm(type(srcV));
                 switch (memOrder) {
                     case ACQ_REL, SEQ_CST -> {
                         ins.add(new Xchg(srcType, src, DX));
@@ -1161,9 +1164,9 @@ public class Codegen {
                 case TruncateIr(ValIr srcV, VarIr dstV) -> {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);
-                    Type dstType = valToType(dstV);
+                    Type dstType = type(dstV);
                     if (dstType == Primitive.BOOL){
-                        TypeAsm srcAsmType = toTypeAsm(valToType(srcV));
+                        TypeAsm srcAsmType = toTypeAsm(type(srcV));
                         ins.add(new Cmp(srcAsmType, new Imm(0), src));
                         ins.add(new SetCC(NOT_EQUALS, true, dst));
                     }else {
@@ -1174,7 +1177,7 @@ public class Codegen {
                 case UIntToDouble(ValIr srcV, ValIr dstV) -> {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);
-                    Type srcType = valToType(srcV);
+                    Type srcType = Mcc.type(srcV);
                     TypeAsm dstType = valToAsmType(dstV);
                     switch (srcType) {
                         case Primitive.UCHAR -> {
@@ -1223,7 +1226,7 @@ public class Codegen {
                    // Type type = valToType(dstIr);
                    // TypeAsm typeAsm = toTypeAsm(type);
                     if (op1 == UnaryOperator.NOT) {
-                        Type srcType = valToType(srcIr);
+                        Type srcType = type(srcIr);
                         TypeAsm srcTypeAsm = toTypeAsm(srcType);
                         if (srcTypeAsm == DOUBLE) {
                             ins.add(new Binary(BITWISE_XOR, DOUBLE, XMM0,
@@ -1235,10 +1238,10 @@ public class Codegen {
                             ins.add(new Mov(valToAsmType(srcIr), new Imm(0),
                                     dst1));
                             ins.add(new SetCC(EQUALS,
-                                    valToType(dstIr).unsignedOrDoubleOrPointer(), dst1));
+                                    type(dstIr).unsignedOrDoubleOrPointer(), dst1));
                         }
                     } else {
-                        Type type = valToType(dstIr);
+                        Type type = type(dstIr);
                         TypeAsm typeAsm = toTypeAsm(type);
                         if (op1 == UnaryOperator.UNARY_MINUS &&
                                 typeAsm == DOUBLE) {
@@ -1592,7 +1595,7 @@ public class Codegen {
         if (returnInMemory) {
             ins.add(new Mov(QUADWORD, new Memory(BP, -8), AX));
             var returnStorage = new Memory(AX, 0);
-            Type t = valToType(val);
+            Type t = type(val);
             copyBytes(ins, retVal, returnStorage, (int) size(t));
         } else {
             int regIndex = 0;

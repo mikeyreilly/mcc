@@ -8,7 +8,6 @@ import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
 
-import static com.quaxt.mcc.Mcc.valToType;
 import static com.quaxt.mcc.optimizer.Optimizer.removeIf;
 
 public class PropagateCopies {
@@ -158,8 +157,8 @@ public class PropagateCopies {
                         continue;
                     }
                     currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                    Type srcT = valToType(src);
-                    Type dstT = valToType(dst);
+                    Type srcT = Mcc.type(src);
+                    Type dstT = Mcc.type(dst);
                     if (srcT.equals(dstT) || Mcc.isSigned(srcT) == Mcc.isSigned(dstT))
                         currentReachingCopies.add((Copy) instruction);
                 }
