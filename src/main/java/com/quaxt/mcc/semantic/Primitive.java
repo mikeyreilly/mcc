@@ -33,8 +33,8 @@ public enum Primitive implements Type {
 
     public static Type fromTokenType(TokenType tokenType) {
         return switch (tokenType) {
-            case DOUBLE_LITERAL -> DOUBLE;
-            case FLOAT_LITERAL -> FLOAT;
+            case HEX_DOUBLE_LITERAL, DOUBLE_LITERAL -> DOUBLE;
+            case HEX_FLOAT_LITERAL, FLOAT_LITERAL -> FLOAT;
             case UNSIGNED_LONG_LITERAL -> ULONG;
             case HEX_INT_LITERAL -> INT;
             case UNSIGNED_HEX_INT_LITERAL ->UINT;

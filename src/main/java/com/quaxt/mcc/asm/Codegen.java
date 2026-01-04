@@ -894,7 +894,9 @@ public class Codegen {
                 }
                 case BinaryIr(ArithmeticOperator op1, ValIr v1, ValIr v2,
                               VarIr dstName) -> {
-                    Type type = valToType(v2);// v1 might be null because of VOID v1 in COMMA op
+                    Type type = v1 ==
+                            null ? valToType(v2) : valToType(v1);// v1 might
+                    // be null because of VOID v1 in COMMA op
                     TypeAsm typeAsm = toTypeAsm(type);
                     if (typeAsm == DOUBLE || typeAsm == FLOAT) {
                         if (op1 == COMMA) {
@@ -1218,35 +1220,40 @@ public class Codegen {
                 case UnaryIr(UnaryOperator op1, ValIr srcIr, ValIr dstIr) -> {
                     Operand dst1 = toOperand(dstIr);
                     Operand src1 = toOperand(srcIr);
-                    Type type = valToType(dstIr);
-                    TypeAsm typeAsm = toTypeAsm(type);
+                   // Type type = valToType(dstIr);
+                   // TypeAsm typeAsm = toTypeAsm(type);
                     if (op1 == UnaryOperator.NOT) {
-                        if (typeAsm == DOUBLE) {
+                        Type srcType = valToType(srcIr);
+                        TypeAsm srcTypeAsm = toTypeAsm(srcType);
+                        if (srcTypeAsm == DOUBLE) {
                             ins.add(new Binary(BITWISE_XOR, DOUBLE, XMM0,
                                     XMM0));
                             compareDouble(EQUALS, DOUBLE, XMM0, src1, dst1,
                                     ins);
                         } else {
-                            ins.add(new Cmp(typeAsm, new Imm(0), src1));
-                            ins.add(new Mov(valToAsmType(dstIr), new Imm(0),
+                            ins.add(new Cmp(srcTypeAsm, new Imm(0), src1));
+                            ins.add(new Mov(valToAsmType(srcIr), new Imm(0),
                                     dst1));
                             ins.add(new SetCC(EQUALS,
-                                    type.unsignedOrDoubleOrPointer(), dst1));
+                                    valToType(dstIr).unsignedOrDoubleOrPointer(), dst1));
                         }
-                    } else if (op1 == UnaryOperator.UNARY_MINUS && typeAsm == DOUBLE) {
-                        ins.add(new Mov(typeAsm, src1, dst1));
-                        var NEGATIVE_ZERO = resolveConstantDouble(-0.0);
-                        ins.add(new Binary(BITWISE_XOR, typeAsm,
-                                NEGATIVE_ZERO, dst1));
-                    } else if (op1 == UnaryOperator.CLZ) {
-                        ins.add(new Mov(typeAsm, src1, dst1));
-                        ins.add(new Binary(BSR, typeAsm, dst1 , dst1));
-                        long bits = typeAsm.size() * 8 - 1;
-                        ins.add(new Binary(BITWISE_XOR, typeAsm,
-                                new Imm(bits), dst1));
                     } else {
-                        ins.add(new Mov(typeAsm, src1, dst1));
-                        ins.add(new Unary(op1, typeAsm, dst1));
+                        Type type = valToType(dstIr);
+                        TypeAsm typeAsm = toTypeAsm(type);
+                        if (op1 == UnaryOperator.UNARY_MINUS &&
+                                typeAsm == DOUBLE) {
+                            ins.add(new Mov(typeAsm, src1, dst1));
+                            var NEGATIVE_ZERO = resolveConstantDouble(-0.0);
+                            ins.add(new Binary(BITWISE_XOR, typeAsm, NEGATIVE_ZERO, dst1));
+                        } else if (op1 == UnaryOperator.CLZ) {
+                            ins.add(new Mov(typeAsm, src1, dst1));
+                            ins.add(new Binary(BSR, typeAsm, dst1, dst1));
+                            long bits = typeAsm.size() * 8 - 1;
+                            ins.add(new Binary(BITWISE_XOR, typeAsm, new Imm(bits), dst1));
+                        } else {
+                            ins.add(new Mov(typeAsm, src1, dst1));
+                            ins.add(new Unary(op1, typeAsm, dst1));
+                        }
                     }
                 }
                 case ZeroExtendIr(ValIr src, VarIr dst) ->

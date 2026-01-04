@@ -1526,6 +1526,8 @@ public class Parser {
                 case LONG_LITERAL:
                     if (value.endsWith("LL")||value.endsWith("ll")) isLongLong = true;
                 case FLOAT_LITERAL:
+                case HEX_FLOAT_LITERAL:
+                case HEX_DOUBLE_LITERAL:
                 case DOUBLE_LITERAL:
                 case UNSIGNED_INT_LITERAL:
                 case UNSIGNED_HEX_INT_LITERAL:

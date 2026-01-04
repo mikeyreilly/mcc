@@ -545,6 +545,12 @@ class MccTest {
         returns("parenthesized_lvalue", 17);
     }
 
+    @Test
+    void hex_float() throws Exception {
+        returns("hex_float", 0);
+    }
+
+
     private static String assemble(String testProgram,
                                    boolean optimize) throws Exception {
         String baseFileName = "src/test/resources/" + testProgram;

@@ -8,11 +8,13 @@ public enum TokenType implements Token {
     OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), CHAR_LITERAL("'([^'\\\\\n" +
             "]|\\\\['\"\\\\?abfnrtv0])'"),
     STRING_LITERAL("\"([^\"\\\\\n]|\\\\['\"\\\\?abfnrtvox]|\\\\[0-7]{1,3})*\""),
-    DOUBLE_LITERAL("(([0-9]*\\" +
-            ".[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)" +
-            "[^\\w.]", 1),
+    DOUBLE_LITERAL("((([0-9]*\\.[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)[lL]?)[^\\w.]", 1),
     FLOAT_LITERAL(
             "((([0-9]*\\.[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)[fF])[^\\w.]", 1),
+    HEX_FLOAT_LITERAL(
+            "0x((([0-9A-Fa-f]*\\.[0-9A-Fa-f]+|[0-9A-Fa-f]+\\.?)[Pp][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)[fF])[^\\w.]", 1),
+    HEX_DOUBLE_LITERAL(
+            "0x((([0-9A-Fa-f]*\\.[0-9A-Fa-f]+|[0-9A-Fa-f]+\\.?)[Pp][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.))[lL]?[^\\w.]", 1),
     UNSIGNED_LONG_LITERAL("([0-9]+([lL][uU]|[uU][lL]|[lL][lL][uU]|[uU][lL][lL]))" +
             "[^\\w.]", 1), UNSIGNED_INT_LITERAL("([0-9]+[uU])[^\\w.]", 1),
     UNSIGNED_HEX_INT_LITERAL("0x([a-fA-F0-9]+[uU])"),
@@ -133,6 +135,8 @@ public enum TokenType implements Token {
             case UNSIGNED -> "unsigned";
             case UNSIGNED_INT_LITERAL -> "unsigned_int_literal";
             case FLOAT_LITERAL -> "float_literal";
+            case HEX_FLOAT_LITERAL -> "hex_float_literal";
+            case HEX_DOUBLE_LITERAL -> "hex_double_literal";
             case UNSIGNED_LONG_LITERAL -> "unsigned_long_literal";
             case CONST -> "const";
             case VOLATILE -> "volatile";

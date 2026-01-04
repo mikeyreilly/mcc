@@ -425,11 +425,7 @@ public class IrGen {
             }
             case UnaryOp(UnaryOperator op, Exp exp, Type type): {
                 if (op == UnaryOperator.POST_INCREMENT || op == UnaryOperator.POST_DECREMENT) {
-                    boolean post = switch (op) {
-                        case POST_INCREMENT, POST_DECREMENT -> true;
-                        default -> false;
-                    };
-                    if (!post) throw new Todo();
+                    boolean post = true;
                     ExpResult lval = emitTacky(exp, instructions, inlineFunctions);
                     var newOp = switch (op) {
                         case POST_INCREMENT -> ADD;

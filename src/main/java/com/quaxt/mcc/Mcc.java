@@ -2,7 +2,6 @@ package com.quaxt.mcc;
 
 import com.quaxt.mcc.asm.Codegen;
 import com.quaxt.mcc.asm.ProgramAsm;
-import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.*;
@@ -14,6 +13,7 @@ import com.quaxt.mcc.tacky.VarIr;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -190,10 +190,13 @@ public class Mcc {
 
 
     public static int preprocess(Path cFile,
-                                 Path iFile) throws IOException,
+                                 Path iFile, List<String> includePaths) throws IOException,
             InterruptedException {
-        return startProcess("gcc", "-E", "-std=c23", "-D_POSIX_C_SOURCE=200809",
-                cFile.toString(), "-o", iFile.toString());
+        ArrayList<String> args = new ArrayList<>();
+        args.addAll(Arrays.asList("gcc", "-E", "-std=c23", "-D_POSIX_C_SOURCE=200809",
+                cFile.toString(), "-o", iFile.toString()));
+        args.addAll(includePaths);
+        return startProcess(args.toArray(new String[0]));
     }
 
     public static int startProcess(String... args) throws InterruptedException, IOException {
@@ -203,15 +206,15 @@ public class Mcc {
 
     private static int assembleAndLink(Path asmFile, String bareFileName,
                                        boolean doNotCompile,
-                                       List<String> libs) throws InterruptedException, IOException {
+                                       List<String> libs,
+    String outputFileName) throws InterruptedException, IOException {
         List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc",
                 asmFile.toString()));
         if (doNotCompile) {
             gccArgs.add("-c");
         }
         gccArgs.addAll(Arrays.asList("-o",
-                asmFile.resolveSibling(bareFileName + (doNotCompile ? ".o" :
-                        "")).toString()));
+                outputFileName));
         gccArgs.addAll(libs);
         return startProcess(gccArgs.toArray(new String[0]));
     }
@@ -238,8 +241,10 @@ public class Mcc {
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;
         List<String> libs = new ArrayList<>();
+        List<String> includePaths = new ArrayList<>();
         EnumSet<Optimization> optimizations =
                 EnumSet.noneOf(Optimization.class);
+        String outputFileName = null;
         for (int i = args.size() - 1; i >= 0; i--) {
             String arg = args.get(i);
             Mode newMode = switch (arg) {
@@ -273,11 +278,20 @@ public class Mcc {
                     doNotCompile = true;
                     yield Mode.DUMMY;
                 }
+                case "-o" -> {
+                    outputFileName = removeArg(args, i + 1, "missing filename after -o");
+                    yield Mode.DUMMY;
+                }
                 default -> {
                     if (arg.startsWith("-l")) {
                         libs.addFirst(arg);
                         yield Mode.DUMMY;
                     }
+                    if (arg.startsWith("-I")) {
+                        includePaths.addFirst(arg);
+                        yield Mode.DUMMY;
+                    }
+
                     yield null;
                 }
             };
@@ -296,7 +310,7 @@ public class Mcc {
         String bareFileName = removeEnding(srcFile.getFileName().toString());
         Path intermediateFile = srcFile.resolveSibling(bareFileName + ".i");
 
-        int preprocessExitCode = preprocess(srcFile, intermediateFile);
+        int preprocessExitCode = preprocess(srcFile, intermediateFile, includePaths);
         if (preprocessExitCode != 0) {
             return preprocessExitCode;
         }
@@ -316,13 +330,29 @@ public class Mcc {
 
                 typedef struct __builtin_va_list_item  __builtin_va_list[1];
                 """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null,
-                null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null);
+                null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null,null);
         BUILTIN_VA_LIST =
                 (Array) Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
         ArrayList<Declaration> declarations = new ArrayList<>();
+        //Path asmFile = srcFile.resolveSibling(bareFileName + ".s");
+        if (outputFileName == null) {
+            outputFileName = srcFile.resolveSibling(
+                    bareFileName + (doNotCompile ? ".o" : "")).toString();
+            if (mode == Mode.COMPILE) outputFileName = outputFileName + ".s";
+        }
 
-        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations);
+        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations, outputFileName);
     }
+
+    private static String removeArg(ArrayList<String> args, int argIndex, String error) {
+        if (argIndex < args.size()) {
+            return args.remove(argIndex);
+        }
+        System.err.println(error);
+        System.exit(-1);
+        return null;
+    }
+
     public static Type decayArrayType(Type t) {
         return t instanceof Array(Type r, Constant _) ? new Pointer(r) : t;
     }
@@ -336,7 +366,8 @@ public class Mcc {
                                  Map<String, SemanticAnalysis.Entry> identifierMap,
                                  Map<String, SemanticAnalysis.TagEntry> structureMap,
                                  ArrayList<Declaration> declarations,
-                                 ArrayList<Declaration> builtinDeclarations) throws IOException, InterruptedException {
+                                 ArrayList<Declaration> builtinDeclarations,
+    String outputFileName) throws IOException, InterruptedException {
         TokenList l = Lexer.lex(cSource);
         if (mode == Mode.LEX) {
             return 0;
@@ -379,7 +410,7 @@ public class Mcc {
         if (mode == Mode.CODEGEN) {
             return 0;
         }
-        Path asmFile = srcFile.resolveSibling(bareFileName + ".s");
+        Path asmFile = mode == Mode.COMPILE ? Paths.get(outputFileName) : Paths.get(outputFileName+".s");
         try (PrintWriter pw =
                      new PrintWriter(Files.newBufferedWriter(asmFile))) {
             programAsm.emitAsm(pw);
@@ -389,7 +420,8 @@ public class Mcc {
         if (mode == Mode.COMPILE) {
             return 0;
         }
-        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile, libs);
+
+        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile, libs, outputFileName);
         Files.delete(asmFile);
         return exitCode;
     }
