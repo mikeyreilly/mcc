@@ -343,7 +343,7 @@ public class Codegen {
                 }
 
                 case Cmp(TypeAsm typeAsm, Operand src, Operand dst) -> {
-                    if (typeAsm == DOUBLE && !(dst instanceof DoubleReg)) {
+                    if ((typeAsm == DOUBLE || typeAsm == FLOAT) && !(dst instanceof DoubleReg)) {
                         instructions.set(i, new Mov(typeAsm, dst,
                                 dstReg(typeAsm)));
                         instructions.add(i + 1, new Cmp(typeAsm, src,
@@ -410,9 +410,9 @@ public class Codegen {
                             instructions.set(i, new Cvt(srcType, dstType, src, XMM15));
                             instructions.add(i + 1, new Mov(QUADWORD, XMM15, dst));
                         }
-                    }else if (isRam(dst)) {
-                        instructions.set(i, new Cvt(srcType, dstType, src, R11));
-                        instructions.add(i + 1, new Mov(dstType, R11, dst));
+                    } else if (isRam(dst)) {
+                        instructions.set(i, new Cvt(srcType, dstType, src, dstReg(dstType)));
+                        instructions.add(i + 1, new Mov(dstType, dstReg(dstType), dst));
                     }
                 }
                 default -> {
@@ -422,11 +422,11 @@ public class Codegen {
     }
 
     private static Operand dstReg(TypeAsm typeAsm) {
-        return typeAsm == DOUBLE ? XMM15 : R11;
+        return typeAsm == DOUBLE || typeAsm == FLOAT ? XMM15 : R11;
     }
 
     private static Operand srcReg(TypeAsm typeAsm) {
-        return typeAsm == DOUBLE ? XMM14 : R10;
+        return typeAsm == DOUBLE || typeAsm == FLOAT ? XMM14 : R10;
     }
 
     private static TypeAsm valToAsmType(ValIr val) {
@@ -577,7 +577,7 @@ public class Codegen {
     private static ReturnValueClassification classifyReturnValue(ValIr retVal) {
         TypeAsm t = valToAsmType(retVal);
         Operand v = toOperand(retVal);
-        if (t == DOUBLE) {
+        if (t == DOUBLE || t == FLOAT) {
             return new ReturnValueClassification(Collections.emptyList(),
                     Collections.singletonList(v), false);
         } else if (t.isScalar()) {
@@ -1174,6 +1174,16 @@ public class Codegen {
                         ins.add(new Mov(targetType, src, dst));
                     }
                 }
+                case FloatToDouble(ValIr srcV, ValIr dstV) -> {
+                    var src = toOperand(srcV);
+                    var dst = toOperand(dstV);
+                    ins.add(new Cvt(FLOAT, DOUBLE, src, dst));
+                }
+                case DoubleToFloat(ValIr srcV, ValIr dstV) -> {
+                    var src = toOperand(srcV);
+                    var dst = toOperand(dstV);
+                    ins.add(new Cvt(DOUBLE, FLOAT, src, dst));
+                }
                 case UIntToDouble(ValIr srcV, ValIr dstV) -> {
                     var src = toOperand(srcV);
                     var dst = toOperand(dstV);
@@ -1651,7 +1661,7 @@ public class Codegen {
         for (TypedOperand to : operands) {
             TypeAsm type = to.type();
             Operand v = to.operand();
-            if (type == DOUBLE) {
+            if (type == DOUBLE || type==FLOAT) {
                 if (doubleArguments.size() < 8) doubleArguments.add(v);
                 else stackArguments.add(to);
             } else if (type.isScalar()) {

@@ -157,6 +157,16 @@ public class Optimizer {
                         aliasedVars.add(var1);
                     if (dst.isStatic()) aliasedVars.add(dst);
                 }
+                case FloatToDouble(ValIr v1, VarIr dst) -> {
+                    if (v1 instanceof VarIr var1 && var1.isStatic())
+                        aliasedVars.add(var1);
+                    if (dst.isStatic()) aliasedVars.add(dst);
+                }
+                case DoubleToFloat(ValIr v1, VarIr dst) -> {
+                    if (v1 instanceof VarIr var1 && var1.isStatic())
+                        aliasedVars.add(var1);
+                    if (dst.isStatic()) aliasedVars.add(dst);
+                }
                 case Jump _ -> {}
                 case MFENCE -> {}
                 case JumpIfNotZero(ValIr v1, String _) -> {

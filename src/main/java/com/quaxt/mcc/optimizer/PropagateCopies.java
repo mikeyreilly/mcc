@@ -105,6 +105,10 @@ public class PropagateCopies {
                                 new DoubleToUInt(replaceOperand(v1, reachingCopies), dst);
                         case IntToDouble(ValIr v1, VarIr dst) ->
                                 new IntToDouble(replaceOperand(v1, reachingCopies), dst);
+                        case FloatToDouble(ValIr v1, VarIr dst) ->
+                                new FloatToDouble(replaceOperand(v1, reachingCopies), dst);
+                        case DoubleToFloat(ValIr v1, VarIr dst) ->
+                                new DoubleToFloat(replaceOperand(v1, reachingCopies), dst);
                         case SignExtendIr(ValIr v1, VarIr dst) ->
                                 new SignExtendIr(replaceOperand(v1, reachingCopies), dst);
                         case TruncateIr(ValIr v1, VarIr dst) ->
@@ -195,6 +199,10 @@ public class PropagateCopies {
                 case DoubleToUInt(ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case IntToDouble(ValIr _, ValIr dst) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case FloatToDouble(ValIr _, ValIr dst) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case DoubleToFloat(ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case UIntToDouble(ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));

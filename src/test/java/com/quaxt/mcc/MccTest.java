@@ -384,6 +384,15 @@ class MccTest {
         outputs("convert_by_assignment_signed_to_unsigned", "4294967295\n");
     }
 
+    @Test
+    void
+    cast_float_and_double() throws Exception {
+        outputs("cast_float_and_double", "f  = 1.5000000000000000\n" +
+                "d  = 3.9999999999999996\n" + "fd = 1.5000000000000000\n" +
+                "df = 4.0000000000000000\n");
+    }
+
+
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {

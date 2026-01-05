@@ -245,6 +245,18 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
+                case FloatToDouble(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
+                case DoubleToFloat(ValIr src, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                }
                 case TruncateIr(ValIr src, ValIr dst) -> {
                     currentLiveVars.remove(dst);
                     if (src instanceof VarIr v) {

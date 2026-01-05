@@ -327,16 +327,25 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     String srcF = formatOperand(srcType, instruction, src);
                     String dstF = formatOperand(DOUBLE, instruction, dst);
                     yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
-                }else {
+                } else {
                     String srcF = formatOperand(srcType, instruction, src);
                     String dstF = formatOperand(dstType, instruction, dst);
-                    if (srcType==DOUBLE)
-                        yield (dstType ==
-                                QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") + srcF +
-                                ", " + dstF;
-                    else yield (dstType ==
-                            QUADWORD ? "cvttss2siq\t" : "cvttss2sil\t") + srcF +
-                            ", " + dstF;
+
+                    if (srcType == DOUBLE) {
+                        yield dstType == FLOAT ?
+                                "vcvtsd2ss\t" + srcF + ", " + dstF + ", " +
+                                        dstF : (dstType ==
+                                QUADWORD ? "cvttsd2siq\t" : "cvttsd2sil\t") +
+                                srcF + ", " + dstF;
+                    } else if (srcType == FLOAT) {
+                        yield dstType == DOUBLE ?
+                                "vcvtss2sd\t" + srcF + ", " + dstF + ", " +
+                                        dstF :
+                                (dstType == QUADWORD ? "cvttss2siq\t" :
+                                        "cvttss2sil" + "\t") + srcF + ", " +
+                                        dstF;
+                    }
+                    else throw new Todo("can't happen");
 
                 }
             }

@@ -1130,7 +1130,7 @@ public class Parser {
                             if (type != null | signedness!=0) {
                                 fail("can't combine float with other type specifiers");
                             }
-                            type=Primitive.DOUBLE;
+                            type=Primitive.FLOAT;
                             foundSolo=true;
                         }
                         case BOOL -> {
