@@ -386,12 +386,17 @@ class MccTest {
 
     @Test
     void
+    float_unary_minus() throws Exception {
+        outputs("float_unary_minus", "-0.500000\n" + "-0.500000\n", false, false);
+    }
+
+    @Test
+    void
     cast_float_and_double() throws Exception {
         outputs("cast_float_and_double", "f  = 1.5000000000000000\n" +
                 "d  = 3.9999999999999996\n" + "fd = 1.5000000000000000\n" +
                 "df = 4.0000000000000000\n");
     }
-
 
     @Test
     void unsigned_right_shift() throws Exception {
@@ -399,7 +404,7 @@ class MccTest {
         outputs("unsigned_right_shift", "7FFFFFFF\n", false, false);
         outputs("unsigned_right_shift", "7FFFFFFF\n", false, true);
     }
-    
+
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {

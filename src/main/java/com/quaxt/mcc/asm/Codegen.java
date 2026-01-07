@@ -1258,6 +1258,11 @@ public class Codegen {
                             ins.add(new Mov(typeAsm, src1, dst1));
                             var NEGATIVE_ZERO = resolveConstantDouble(-0.0);
                             ins.add(new Binary(BITWISE_XOR, typeAsm, NEGATIVE_ZERO, dst1));
+                        } else if (op1 == UnaryOperator.UNARY_MINUS &&
+                                typeAsm == FLOAT) {
+                            ins.add(new Mov(typeAsm, src1, dst1));
+                            var NEGATIVE_ZERO = resolveConstantFloat(-0.0F);
+                            ins.add(new Binary(BITWISE_XOR, typeAsm, NEGATIVE_ZERO, dst1));
                         } else if (op1 == UnaryOperator.CLZ) {
                             ins.add(new Mov(typeAsm, src1, dst1));
                             ins.add(new Binary(BSR, typeAsm, dst1, dst1));
