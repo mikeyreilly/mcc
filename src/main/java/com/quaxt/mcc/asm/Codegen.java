@@ -741,7 +741,7 @@ public class Codegen {
             Operand dstByte = dstOp.plus(offset);
             ins.add(new Mov(BYTE, srcReg, dstByte));
             if (offset < byteCount - 1)
-                ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, QUADWORD, new Imm(8)
+                ins.add(new Binary(SHR, QUADWORD, new Imm(8)
                         , srcReg));
             offset++;
         }
@@ -914,7 +914,7 @@ public class Codegen {
                         }
                     } else {
                         switch (op1) {
-                            case SHL, SAR, UNSIGNED_RIGHT_SHIFT -> {
+                            case SHL, SAR, SHR -> {
                                 ins.add(new Mov(typeAsm, toOperand(v1),
                                         toOperand(dstName)));
                                 // v1 is what we're shifting, v2 is how much
@@ -1287,7 +1287,7 @@ public class Codegen {
                     TypeAsm typeAsm = valToAsmType(dstV);
                     var dst=toOperand(dstV);
                     ins.add(new Mov(typeAsm, src, dst));
-                    ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, typeAsm , new Imm(bitOffset), dst));
+                    ins.add(new Binary(SHR, typeAsm , new Imm(bitOffset), dst));
                     //bit mask to just keep width bits
                     long mask = (1L << bitWidth) - 1;
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(mask), dst));
@@ -1301,7 +1301,7 @@ public class Codegen {
                     TypeAsm typeAsm = valToAsmType(dstV);
                     var dst=toOperand(dstV);
                     ins.add(new Mov(typeAsm, src, dst));
-                    ins.add(new Binary(UNSIGNED_RIGHT_SHIFT, typeAsm , new Imm(bitOffset), dst));
+                    ins.add(new Binary(SHR, typeAsm , new Imm(bitOffset), dst));
                     //bit mask to just keep width bits
                     long mask = (1L << bitWidth) - 1;
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(mask), dst));

@@ -1934,7 +1934,7 @@ public class Parser {
             case OPEN_PAREN -> 70;
             case IMUL, DIVIDE, REMAINDER -> 50;
             case SUB, ADD -> 45;
-            case SHL, SAR, UNSIGNED_RIGHT_SHIFT -> 40;
+            case SHL, SAR, SHR -> 40;
             case LESS_THAN, LESS_THAN_OR_EQUAL, GREATER_THAN,
                  GREATER_THAN_OR_EQUAL -> 35;
             case EQUALS, NOT_EQUALS -> 30;

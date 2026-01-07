@@ -12,6 +12,8 @@ import java.util.*;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.CmpOperator.*;
+import static com.quaxt.mcc.CompoundAssignmentOperator.SAR_EQ;
+import static com.quaxt.mcc.CompoundAssignmentOperator.SHR_EQ;
 import static com.quaxt.mcc.IdentifierAttributes.LocalAttr.LOCAL_ATTR;
 import static com.quaxt.mcc.InitialValue.NoInitializer.NO_INITIALIZER;
 import static com.quaxt.mcc.InitialValue.Tentative.TENTATIVE;
@@ -1397,6 +1399,7 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                     case BITWISE_XOR_EQ -> BITWISE_XOR;
                     case SHL_EQ -> SHL;
                     case SAR_EQ -> SAR;
+                    case SHR_EQ -> SHR;
                 };
 
                 BinaryOp binaryOp =
@@ -1416,6 +1419,9 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                     fail("can't assign void");
                 }
 
+                if (!typedLeft.type().isSigned() && compoundOp == SAR_EQ){
+                    compoundOp = SHR_EQ;
+                }
                 yield new CompoundAssignment(compoundOp, typedLeft,
                  typedRight, binaryOp.type(), leftType);
             }
@@ -1492,7 +1498,10 @@ commonType);
                 if (op == AND || op == OR) {
                     yield new BinaryOp(op, typedE1, typedE2, INT);
                 }
-                if (op == SAR || op == SHL || op == UNSIGNED_RIGHT_SHIFT) {
+                if (op == SAR && !t1.isSigned()){
+                    op = SHR;
+                }
+                if (op == SAR || op == SHL || op == SHR) {
                     if (t1 == DOUBLE || t2 == DOUBLE) {
                         fail("invalid operands to binary " + op + " (have ‘" +
                                 t1 + "’ " + "and" + " ‘" + t2 + "’");

@@ -27,7 +27,7 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case BITWISE_XOR -> "xorq   ";
             case SHL -> "shlq	";
             case SAR -> "sarq	";
-            case UNSIGNED_RIGHT_SHIFT -> "shrq  ";
+            case SHR -> "shrq  ";
             case BSR -> "bsrq\t";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
@@ -46,7 +46,7 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case DOUBLE_DIVIDE -> "divl	";
             case SHL -> "shll	";
             case SAR -> "sarl	";
-            case UNSIGNED_RIGHT_SHIFT -> "shrl  ";
+            case SHR -> "shrl  ";
             case BSR -> "bsrl\t";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
@@ -77,7 +77,7 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case BITWISE_XOR -> "xorw   ";
             case SHL -> "shlw	";
             case SAR -> "sarw	";
-            case UNSIGNED_RIGHT_SHIFT -> "shrw  ";
+            case SHR -> "shrw  ";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
         } : switch (op) {
@@ -91,7 +91,7 @@ public record Binary(ArithmeticOperator op, TypeAsm type, Operand src,
             case BITWISE_XOR -> "xorb   ";
             case SHL -> "shlb	";
             case SAR -> "sarb	";
-            case UNSIGNED_RIGHT_SHIFT -> "shrb  ";
+            case SHR -> "shrb  ";
             default ->
                     throw new IllegalStateException("Unexpected value: " + op);
         };

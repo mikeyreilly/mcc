@@ -462,6 +462,7 @@ public class IrGen {
                     case BITWISE_XOR_EQ -> BITWISE_XOR;
                     case SHL_EQ -> SHL;
                     case SAR_EQ -> SAR;
+                    case SHR_EQ -> SHR;
                 };
                 ValIr rightVal = emitTackyAndConvert(right, instructions, inlineFunctions);
                 return applyOperatorAndAssign(instructions, left, lval,
@@ -569,7 +570,7 @@ public class IrGen {
                                                 "Unexpected value: " + op);
                             }
                         } else
-                            instructions.add(new BinaryIr(op == SAR && !left.type().isSigned() ? UNSIGNED_RIGHT_SHIFT : op, v1, v2, dstName));
+                            instructions.add(new BinaryIr(op == SAR && !left.type().isSigned() ? SHR : op, v1, v2, dstName));
                         return new PlainOperand(dstName);
                     }
                 }

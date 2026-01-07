@@ -393,6 +393,13 @@ class MccTest {
     }
 
 
+    @Test
+    void unsigned_right_shift() throws Exception {
+        outputs("unsigned_right_shift", "7FFFFFFF\n");
+        outputs("unsigned_right_shift", "7FFFFFFF\n", false, false);
+        outputs("unsigned_right_shift", "7FFFFFFF\n", false, true);
+    }
+    
     @AfterAll
     static void tearDown() {
         try (var st = Files.walk(Paths.get("src/test/resources"))) {

@@ -73,7 +73,7 @@ public record BoolInit(byte i) implements StaticInit, Constant<BoolInit> {
             case BITWISE_XOR -> c = a ^ b;
             case SAR -> c = a >> b;
             case SHL -> c = a << b;
-            case UNSIGNED_RIGHT_SHIFT -> c = a >>> b;
+            case SHR -> c = a >>> b;
             case COMMA -> c = b;
             default -> {
                 return null;

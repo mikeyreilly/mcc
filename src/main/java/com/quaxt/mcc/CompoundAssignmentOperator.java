@@ -14,8 +14,8 @@ public enum CompoundAssignmentOperator implements BinaryOperator {
     BITWISE_OR_EQ("\\|="),
     BITWISE_XOR_EQ("\\^="),
     SHL_EQ("<<="),
-    SAR_EQ(">>=");
-
+    SAR_EQ(">>="),
+    SHR_EQ(">>>=");
     final Pattern regex;
 
     CompoundAssignmentOperator(String pattern) {
