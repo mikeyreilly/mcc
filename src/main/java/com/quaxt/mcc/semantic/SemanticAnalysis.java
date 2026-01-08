@@ -322,6 +322,7 @@ bitFieldWidth);
 
 
     private static int roundUp(int x, int n) {
+        if (x == 0) return 0;
         int rem = x % n;
         if (rem == 0) return x;
         return x - rem + n;
@@ -398,9 +399,21 @@ bitFieldWidth);
                                 null ? new IntInit(initsSize) : arraySize;
                     }
 
-                    case Pointer _, NullptrT _, FunType _, Primitive _ ->
-                            throw new Err("illegal compound initializer for " +
-                                    "scalar type:" + targetType);
+                    case Pointer _, NullptrT _, FunType _, Primitive _ ->{
+
+                        switch (inits.size()) {
+                            case 1 -> {
+                                Initializer v = inits.getFirst();
+                                convertCompoundInitializerToStaticInitList(v, targetType, acc);
+                                return null;
+                            }
+                            case 0 -> {
+                                return convertCompoundInitializerToStaticInitList(new SingleInit((Constant<?>) targetType.zero(), targetType), targetType, acc);
+                            }
+                            default -> throw new Err("Can't use compound initializer to " +
+                                    "initialize scalar type: " + targetType);
+                        }
+                    }
 
                     case Structure(boolean isUnion, String tag,
                                    StructDef _) -> {
@@ -1159,6 +1172,20 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
 
     private static Initializer typeCheckInit(Initializer init,
                                              Type targetType) {
+        if (targetType.isScalar() && init instanceof CompoundInit(ArrayList<Initializer> inits, Type type)) {
+            switch (inits.size()) {
+                case 1 -> {
+                    Initializer v = inits.getFirst();
+                    return typeCheckInit(v, targetType);
+                }
+                case 0 -> {
+                    SingleInit i = new SingleInit((Constant<?>) targetType.zero(), targetType);
+                    return typeCheckInit(i, targetType);
+                }
+                default -> throw new Err("Can't use compound initializer to " +
+                        "initialize scalar type: " + targetType);
+            }
+        }
         return switch (init) {
             case SingleInit(Exp exp, Type _) -> {
                 if (exp instanceof Str(String s, Type _) &&

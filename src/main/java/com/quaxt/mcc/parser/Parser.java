@@ -912,6 +912,10 @@ public class Parser {
             ArrayList<Initializer> inits = new ArrayList<>();
 
             while (!done) {
+                if (tokens.getFirst() == CLOSE_BRACE) {
+                    tokens.removeFirst();
+                    break;
+                }
                 Initializer init = parseInitializer(tokens, typeAliases, labels, enclosingSwitch);
                 inits.add(init);
                 Token t = tokens.removeFirst();

@@ -390,6 +390,13 @@ class MccTest {
         outputs("float_unary_minus", "-0.500000\n" + "-0.500000\n", false, false);
     }
 
+
+    @Test
+    void
+    scalar_init() throws Exception {
+        outputs("scalar_init", "0 2 3\n" + "0 5 7\n", false, false);
+    }
+
     @Test
     void
     cast_float_and_double() throws Exception {
