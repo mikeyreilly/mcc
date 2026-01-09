@@ -26,7 +26,7 @@ import static com.quaxt.mcc.asm.IntegerReg.*;
 import static com.quaxt.mcc.tacky.IrGen.newLabel;
 
 public class Codegen {
-    static HashMap<Number, StaticConstant> CONSTANT_TABLE = new HashMap<>();
+    static HashMap<String, StaticConstant> CONSTANT_TABLE = new HashMap<>();
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE =
             new HashMap<>();
 
@@ -44,7 +44,7 @@ public class Codegen {
     }
 
     private static String floatToHexString(float d) {
-        return Float.toHexString(d).replaceAll("-", "_");
+        return Float.toHexString(d).replaceAll("-", "_")+'F';
     }
 
 
@@ -459,8 +459,9 @@ public class Codegen {
     }
 
     public static Data resolveConstantDouble(double d) {
-        StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d,
-                _ -> new StaticConstant("c." + doubleToHexString(d),
+        String k="c." + doubleToHexString(d);
+        StaticConstant c = CONSTANT_TABLE.computeIfAbsent(k,
+                _ -> new StaticConstant(k,
                         /* -0.0 is 16 byte aligned because it is used in xorpd*/
                         d == -0.0 ? 16 : 8,
                         new DoubleInit(d)));
@@ -468,8 +469,9 @@ public class Codegen {
     }
 
     public static Data resolveConstantFloat(float d) {
-        StaticConstant c = CONSTANT_TABLE.computeIfAbsent(d,
-                _ -> new StaticConstant("f." + floatToHexString(d), 8,
+        String k = "f." + floatToHexString(d);
+        StaticConstant c = CONSTANT_TABLE.computeIfAbsent(k,
+                _ -> new StaticConstant(k, 8,
                         new FloatInit(d)));
         return new Data(c.label(), 0);
     }
@@ -1288,14 +1290,21 @@ public class Codegen {
                 }
                 case CopyBitsFromOffset(ValIr srcV, long offset1,int bitOffset,
                                         int bitWidth, VarIr dstV) -> {
+                    ins.add(new Comment("COPY FROM START"));
                     Operand src = toOperand(srcV, (int) offset1);
-                    TypeAsm typeAsm = valToAsmType(dstV);
+                    Type destType = type(dstV);
+                    TypeAsm typeAsm = toTypeAsm(destType);
                     var dst=toOperand(dstV);
                     ins.add(new Mov(typeAsm, src, dst));
                     ins.add(new Binary(SHR, typeAsm , new Imm(bitOffset), dst));
                     //bit mask to just keep width bits
                     long mask = (1L << bitWidth) - 1;
+
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(mask), dst));
+                    if (destType.isSigned()) {
+                        ins.add(new Binary(SHL,typeAsm , new Imm(typeAsm.size()*8-bitWidth), dst));
+                        ins.add(new Binary(SAR,typeAsm , new Imm(typeAsm.size()*8-bitWidth), dst));
+                    }
                 }
                 case CopyBitsFromOffsetViaPointer(ValIr srcV, long offset1,int bitOffset,
                                         int bitWidth, VarIr dstV) -> {
@@ -1303,16 +1312,25 @@ public class Codegen {
                     ins.add(new Mov(QUADWORD, toOperand(srcV), DX));
 
                     Operand src = new Memory(DX, (int) offset1);
-                    TypeAsm typeAsm = valToAsmType(dstV);
+                    Type destType = type(dstV);
+                    TypeAsm typeAsm = toTypeAsm(destType);
                     var dst=toOperand(dstV);
                     ins.add(new Mov(typeAsm, src, dst));
-                    ins.add(new Binary(SHR, typeAsm , new Imm(bitOffset), dst));
+                    ins.add(new Binary(SAR, typeAsm , new Imm(bitOffset), dst));
                     //bit mask to just keep width bits
                     long mask = (1L << bitWidth) - 1;
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(mask), dst));
+                    // if the destination type is unsigned we're done -
+                    // otherwise we may need to shift right then left to set
+                    // leading ones and get the right signed result
+                    if (destType.isSigned()) {
+                        ins.add(new Binary(SHL,typeAsm , new Imm(typeAsm.size()-bitWidth), dst));
+                        ins.add(new Binary(SAR,typeAsm , new Imm(typeAsm.size()-bitWidth), dst));
+                    }
                 }
                 case CopyBitsToOffset(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
                                       int bitWidth) -> {
+                    ins.add(new Comment("COPY TO START"));
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV, (int) offset1);
                     TypeAsm typeAsm = valToAsmType(srcV);
@@ -1335,6 +1353,7 @@ public class Codegen {
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(~destMask & typeSizeBitsOnes), DX));
                     ins.add(new Binary(BITWISE_OR, typeAsm , AX, DX));
                     ins.add(new Mov(typeAsm, DX, dst));
+                    ins.add(new Comment("COPY TO DONE"));
                 }
 
                 case CopyBitsToOffsetViaPointer(ValIr srcV, VarIr dstV, long offset1, int bitOffset,

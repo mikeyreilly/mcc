@@ -344,14 +344,16 @@ class MccTest {
 
     @Test
     void nested_struct() throws Exception {
-        outputs("nested_struct", """
+        String expected="""
                 sizeof(struct Outer) = 8
                 offsetof(struct Outer, inner) = 8
                 Outer.i = 42
                   Inner[0]: j=0, s="string 0"
                   Inner[1]: j=10, s="string 1"
                   Inner[2]: j=20, s="string 2"
-                """);
+                """;
+        outputs("nested_struct", expected);
+        outputs("nested_struct", expected, false, true);
     }
 
     @Test
@@ -403,6 +405,12 @@ class MccTest {
         outputs("cast_float_and_double", "f  = 1.5000000000000000\n" +
                 "d  = 3.9999999999999996\n" + "fd = 1.5000000000000000\n" +
                 "df = 4.0000000000000000\n");
+    }
+
+    @Test
+    void
+    bitfield3() throws Exception {
+        outputs("bitfield3", "-2\n", false, false);
     }
 
     @Test
