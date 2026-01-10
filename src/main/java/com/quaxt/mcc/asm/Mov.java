@@ -6,6 +6,5 @@ public record Mov(TypeAsm type, Operand src,
         this.type = type;
         this.src = src;
         this.dst = dst;
-        dst=dst;
     }
 }

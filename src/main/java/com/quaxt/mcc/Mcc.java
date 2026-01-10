@@ -26,11 +26,7 @@ import java.util.logging.*;
 public class Mcc {
     private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
-    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new HashMap<>(){
-        public SymbolTableEntry put(String key, SymbolTableEntry value) {
-            return super.put(key, value);
-        }
-    };
+    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new DebugHashMap<>();
     public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>() {
         public StructDef put(String key, StructDef value) {
             return super.put(key, value);
@@ -284,6 +280,11 @@ public class Mcc {
                         includePaths.addFirst(arg);
                         yield Mode.DUMMY;
                     }
+                    if (arg.equals("--no-register-allocator")) {
+                        registerAllocatorDisabled = true;
+                        yield Mode.DUMMY;
+                    }
+
 
                     yield null;
                 }

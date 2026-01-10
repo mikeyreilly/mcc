@@ -59,9 +59,9 @@ public class RegisterAllocator {
             switch (oldInst) {
                 case Mov(TypeAsm type, Operand src, Operand dst) -> {
                     src = find(src, coalescedRegs);
-                    dst = find(dst, coalescedRegs);
+                    var newDst = find(dst, coalescedRegs);
                     if (!src.equals(dst)) {
-                        instructions.set(copyTo++, new Mov(type, src, dst));
+                        instructions.set(copyTo++, new Mov(type, src, newDst));
                     }
                 }
                 case Xchg(TypeAsm type, Operand src, Operand dst) -> {

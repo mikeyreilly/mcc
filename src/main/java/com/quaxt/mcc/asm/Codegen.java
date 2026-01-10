@@ -28,7 +28,7 @@ import static com.quaxt.mcc.tacky.IrGen.newLabel;
 public class Codegen {
     static HashMap<String, StaticConstant> CONSTANT_TABLE = new HashMap<>();
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE =
-            new HashMap<>();
+            new DebugHashMap<>();
 
     private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L << 63);
 
@@ -539,6 +539,8 @@ public class Codegen {
         }
         if (BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry(
                 TypeAsm type, boolean isStatic, boolean _)) {
+            assert (!(in instanceof Pseudo p) || type.size() == p.type.size());
+
             long size = type.size();
             long alignment = type.alignment();
 
@@ -560,7 +562,6 @@ public class Codegen {
                 offsetA.set(varOffset);
             }
             return new Memory(BP, varOffset + offsetFromStartOfArray);
-
 
         } else throw new IllegalArgumentException(identifier);
     }
@@ -993,7 +994,7 @@ public class Codegen {
                 case Copy(ValIr srcV, VarIr dstV) -> {
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV);
-                    TypeAsm typeAsm = valToAsmType(srcV);
+                    TypeAsm typeAsm = valToAsmType(dstV);
                     assert (valToAsmType(dstV).equals(typeAsm));
                     if (typeAsm instanceof ByteArray(long size, _)) {
                         copyBytes(ins, src, dst, size);
@@ -1128,7 +1129,6 @@ public class Codegen {
                         Operand src = new Memory(AX, 0);
                         copyBytes(ins, src, dst, size);
                     } else {
-                        ins.add(new Comment("load:  " + dst));
                         ins.add(new Mov(dstType, new Memory(AX, 0), dst));
                     }
                 }
@@ -1247,7 +1247,7 @@ public class Codegen {
                                     ins);
                         } else {
                             ins.add(new Cmp(srcTypeAsm, new Imm(0), src1));
-                            ins.add(new Mov(valToAsmType(srcIr), new Imm(0),
+                            ins.add(new Mov(valToAsmType(dstIr), new Imm(0),
                                     dst1));
                             ins.add(new SetCC(EQUALS,
                                     type(dstIr).unsignedOrDoubleOrPointer(), dst1));
@@ -1290,7 +1290,6 @@ public class Codegen {
                 }
                 case CopyBitsFromOffset(ValIr srcV, long offset1,int bitOffset,
                                         int bitWidth, VarIr dstV) -> {
-                    ins.add(new Comment("COPY FROM START"));
                     Operand src = toOperand(srcV, (int) offset1);
                     Type destType = type(dstV);
                     TypeAsm typeAsm = toTypeAsm(destType);
@@ -1330,7 +1329,6 @@ public class Codegen {
                 }
                 case CopyBitsToOffset(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
                                       int bitWidth) -> {
-                    ins.add(new Comment("COPY TO START"));
                     Operand src = toOperand(srcV);
                     Operand dst = toOperand(dstV, (int) offset1);
                     TypeAsm typeAsm = valToAsmType(srcV);
@@ -1353,7 +1351,6 @@ public class Codegen {
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(~destMask & typeSizeBitsOnes), DX));
                     ins.add(new Binary(BITWISE_OR, typeAsm , AX, DX));
                     ins.add(new Mov(typeAsm, DX, dst));
-                    ins.add(new Comment("COPY TO DONE"));
                 }
 
                 case CopyBitsToOffsetViaPointer(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
@@ -1441,15 +1438,16 @@ public class Codegen {
         if (vaListIsPointer) {
             Operand ptr = toOperand(vaList);
             String name = makeTemporary("tmp");
-            TypeAsm t = switch(offset) {
-                case 0, 4 -> LONGWORD;
-                case 8, 16 -> QUADWORD;
+            Type t = switch(offset) {
+                case 0, 4 -> Primitive.INT;
+                case 8, 16 -> Primitive.LONG;
                 default -> throw new IllegalArgumentException("bad offset " + offset);
             };
-            Operand dst = new Pseudo(name, LONGWORD, false, false);
-            Mcc.SYMBOL_TABLE.put(name, new SymbolTableEntry(Primitive.INT, LOCAL_ATTR));
+            TypeAsm asmType = toTypeAsm(t);
+            Operand dst = new Pseudo(name, asmType, false, false);
+            Mcc.SYMBOL_TABLE.put(name, new SymbolTableEntry(t, LOCAL_ATTR));
             ins.add(new Mov(QUADWORD, ptr, R10));
-            ins.add(new Mov(t, new Memory(R10, offset), dst));
+            ins.add(new Mov(asmType, new Memory(R10, offset), dst));
             return dst;
         }
         return new PseudoMem(vaList.identifier(), offset);
@@ -1528,7 +1526,7 @@ public class Codegen {
                 int offset = i*8;
 // 6. Return the fetched type.
                 Operand dstOperand = type.isScalar() ?toOperand(dst):toOperand(dst, offset);
-                ins.add(new Mov(QUADWORD, new Memory(AX, 0),
+                ins.add(new Mov(toTypeAsm(type), new Memory(AX, 0),
                         dstOperand));
             }
 

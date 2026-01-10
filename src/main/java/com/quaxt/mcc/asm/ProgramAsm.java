@@ -253,9 +253,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     private static void emitInstruction(PrintWriter out,
                                         Instruction instruction) {
         String s = switch (instruction) {
-            case Mov(TypeAsm t, Operand src, Operand dst) ->
-                    instruction.format(t) + formatOperand(t, instruction,
-                            src) + ", " + formatOperand(t, instruction, dst);
+            case Mov(TypeAsm t, Operand src, Operand dst) -> {
+                yield instruction.format(t) +
+                        formatOperand(t, instruction, src) + ", " +
+                        formatOperand(t, instruction, dst);
+            }
             case Xchg(TypeAsm t, Operand src, Operand dst) ->
                     instruction.format(t) + formatOperand(t, instruction,
                             src) + ", " + formatOperand(t, instruction, dst);
