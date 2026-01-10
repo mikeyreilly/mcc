@@ -1973,8 +1973,12 @@ commonType);
     }
 
     public static Type getCommonType(Type t1, Type t2) {
-        t1 = t1.isCharacter() ? INT : t1;
-        t2 = t2.isCharacter() ? INT : t2;
+        /* c23 6.3.1.1 paragraph 2
+          ...if an int can represent all
+         values of the original type (as restricted by the width, for a bit-field), the value is converted to an
+         int); */
+        t1 = size(t1) < 4 ? INT : t1;
+        t2 = size(t2) < 4 ? INT : t2;
         if (t1 == t2) return t1;
         if (t1 == DOUBLE || t2 == DOUBLE) return DOUBLE;
         if (t1 == FLOAT || t2 == FLOAT) return FLOAT;
