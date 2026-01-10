@@ -1113,16 +1113,18 @@ public class IrGen {
             }
             case DereferencedPointer(VarIr ptr) -> {
                 instructions.add(new Store(rval, ptr));
-                yield new PlainOperand(rval);
+                //yield new PlainOperand(rval);
+                yield lval;
             }
             case SubObject(VarIr base, int offset) -> {
                 instructions.add(new CopyToOffset(rval, base, offset));
-                yield new PlainOperand(rval);
+                //yield new PlainOperand(rval);
+                yield lval;
             }
             case BitFieldSubObject(VarIr base, int byteOffset, int bitOffset,
                                    int bitWidth)->{
                 instructions.add(new CopyBitsToOffset(rval, base, byteOffset, bitOffset, bitWidth));
-                yield new PlainOperand(rval);
+                yield lval;
             }
 
             case BitFieldSubObjectViaPointer(VarIr base, int byteOffset, int bitOffset,

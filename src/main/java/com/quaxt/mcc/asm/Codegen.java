@@ -30,6 +30,11 @@ public class Codegen {
     public static Map<String, SymTabEntryAsm> BACKEND_SYMBOL_TABLE =
             new DebugHashMap<>();
 
+    public static void clear() {
+        CONSTANT_TABLE.clear();
+        BACKEND_SYMBOL_TABLE.clear();
+    }
+
     private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L << 63);
 
     public final static IntegerReg[] INTEGER_RETURN_REGISTERS =

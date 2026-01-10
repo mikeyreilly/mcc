@@ -193,10 +193,10 @@ public class Mcc {
         return pb.start().waitFor();
     }
 
-    private static int assembleAndLink(Path asmFile, String bareFileName,
-                                       boolean doNotCompile,
-                                       List<String> libs,
-    String outputFileName) throws InterruptedException, IOException {
+    public static int assembleAndLink(Path asmFile,
+                                      boolean doNotCompile,
+                                      List<String> libs,
+                                      String outputFileName) throws InterruptedException, IOException {
         List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc",
                 asmFile.toString()));
         if (doNotCompile) {
@@ -223,7 +223,7 @@ public class Mcc {
         SYMBOL_TABLE.clear();
         TYPE_TABLE.clear();
         TEMP_COUNT.set(0L);
-
+        Codegen.clear();
         ArrayList<String> args =
                 Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
 
@@ -323,8 +323,7 @@ public class Mcc {
                 };
 
                 typedef struct __builtin_va_list_item  __builtin_va_list[1];
-                """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null,
-                null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null,null);
+                """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null,null);
         BUILTIN_VA_LIST =
                 (Array) Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
         ArrayList<Declaration> declarations = new ArrayList<>();
@@ -335,7 +334,7 @@ public class Mcc {
             if (mode == Mode.COMPILE) outputFileName = outputFileName + ".s";
         }
 
-        return mccHelper(cSource, mode, optimizations, srcFile, bareFileName, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations, outputFileName);
+        return mccHelper(cSource, mode, optimizations, srcFile, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations, outputFileName);
     }
 
     private static String removeArg(ArrayList<String> args, int argIndex, String error) {
@@ -354,7 +353,7 @@ public class Mcc {
     public static Array BUILTIN_VA_LIST = null;
     private static int mccHelper(String cSource, Mode mode,
                                  EnumSet<Optimization> optimizations,
-                                 Path srcFile, String bareFileName,
+                                 Path srcFile,
                                  boolean doNotCompile,
                                  List<String> libs,
                                  Map<String, SemanticAnalysis.Entry> identifierMap,
@@ -415,7 +414,7 @@ public class Mcc {
             return 0;
         }
 
-        int exitCode = assembleAndLink(asmFile, bareFileName, doNotCompile, libs, outputFileName);
+        int exitCode = assembleAndLink(asmFile, doNotCompile, libs, outputFileName);
         Files.delete(asmFile);
         return exitCode;
     }
