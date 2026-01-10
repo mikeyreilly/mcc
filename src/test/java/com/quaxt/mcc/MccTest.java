@@ -9,21 +9,23 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.*;
 import java.util.stream.Stream;
 
+import static com.quaxt.mcc.Mcc.assembleAndLink;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MccTest {
 
-    public static String startProcessAndCaptureOutput(String... args) throws InterruptedException, IOException {
+    public static Pair<String, Integer> startProcessAndCaptureOutput(String... args) throws InterruptedException, IOException {
         ProcessBuilder pb = new ProcessBuilder(args);
         pb.redirectErrorStream(true);
         Process p=pb.start();
-        pb.start().waitFor();
+        int exitCode = pb.start().waitFor();
         byte[] bytes;
         try (InputStream is = p.getInputStream()) {
             bytes = is.readAllBytes();
-            return new String(bytes, StandardCharsets.UTF_8);
+            return new Pair<>(new String(bytes, StandardCharsets.UTF_8), exitCode);
         }
     }
 
@@ -144,7 +146,51 @@ class MccTest {
         }
         Mcc.registerAllocatorDisabled = false;
         assertEquals(expectedOutput, startProcessAndCaptureOutput(
-                "src/test/resources/" + testProgram));
+                "src/test/resources/" + testProgram).key());
+    }
+
+    static void matchesGcc(Path testProgram,
+                           boolean optimize,
+                           boolean disableRegisterAllocator) throws Exception {
+        if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
+        int mccExitCode;
+        String mccExe = testProgram +"-mcc";
+        try {
+            if (optimize) {
+                mccExitCode =
+                        Mcc.mcc("-o", mccExe, testProgram.toString(), "--optimize");
+            } else {
+                mccExitCode = Mcc.mcc("-o", mccExe, testProgram.toString());
+            }
+            if (mccExitCode != 0) {
+                System.out.println("Can't compile " + testProgram);
+                return;
+            }
+        } catch (Exception ex) {
+            return;
+        }
+        String trustedExe = testProgram + "-gcc";
+        List<String>    gccOptions=extractGccOptions(testProgram);
+        int gccExitCode = assembleAndLink(testProgram, false, gccOptions, trustedExe);
+        assertEquals(0, gccExitCode);
+        var expected = startProcessAndCaptureOutput(trustedExe);
+        Mcc.registerAllocatorDisabled = false;
+        assertEquals(expected, startProcessAndCaptureOutput(
+                 mccExe));
+    }
+
+    private static List<String> extractGccOptions(Path testProgram) throws IOException {
+        try(Stream<String> lines = Files.lines(testProgram)){
+            Optional<String> opt =
+                    lines.filter(x -> x.contains("dg-options")).findFirst();
+            if (opt.isEmpty()) {
+                return Collections.emptyList();
+            }
+            String s = opt.get();
+            int start= s.indexOf('"')+1;
+            int end= s.lastIndexOf('"');
+            return Arrays.asList(s.substring(start, end).split(" "));
+        }
     }
 
     @Test
@@ -265,6 +311,11 @@ class MccTest {
     @Test
     void bitfield2_test()  throws Exception {
         outputs("bitfield2", "x.a=0", false, true);
+    }
+
+    @Test
+    void bitfield4_test()  throws Exception {
+        returns("bitfield4", 0, false);
     }
 
     @Test
