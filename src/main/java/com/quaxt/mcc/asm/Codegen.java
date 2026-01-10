@@ -473,11 +473,13 @@ public class Codegen {
         return new Data(c.label(), 0);
     }
 
-    public static Data resolveConstantFloat(float d) {
-        String k = "f." + floatToHexString(d);
+    public static Data resolveConstantFloat(float f) {
+        String k = "f." + floatToHexString(f);
         StaticConstant c = CONSTANT_TABLE.computeIfAbsent(k,
-                _ -> new StaticConstant(k, 8,
-                        new FloatInit(d)));
+                _ -> new StaticConstant(k,
+                        /* -0.0 is 16 byte aligned because it is used in xorps*/
+                        f == -0.0f ? 16 : 8,
+                        new FloatInit(f)));
         return new Data(c.label(), 0);
     }
 
