@@ -151,7 +151,7 @@ public class IrGen {
                 }
                 long structSize = Mcc.size(compoundInitType);
                 if (initsLen == 0 && 0L < structSize) {
-                    instructions.add(new MemsetToOffset(name, offset, 0, structSize));
+                    memsetToOffset(name, instructions, offset, 0, structSize);
                 }
                 return offset + structSize;
             }
@@ -198,6 +198,20 @@ public class IrGen {
 
     }
 
+    private static void memsetToOffset(VarIr name,
+                                  List<InstructionIr> instructions,
+                                  long offset,
+                                  int c,
+                                       long byteCount) {
+        if (offset !=0) {
+            VarIr ptr =
+                    makeTemporary("ptr", new Pointer(VOID));
+            instructions.add(new AddPtr(name, new IntInit((int) offset), 1, ptr));
+            instructions.add(new Memset(ptr, c, byteCount));
+        }
+        instructions.add(new Memset(name, c, byteCount));
+    }
+
     private static void initMember(Initializer memInit, MemberEntry member, VarIr name,
                                    List<InstructionIr> instructions, long offset,
                                    Map<String, FunctionIr> inlineFunctions) {
@@ -230,9 +244,10 @@ public class IrGen {
                         long initTypeSize = Mcc.size(initType);
                         long memberTypeSize = Mcc.size(member.type());
                         if (initTypeSize < memberTypeSize) {
-                            instructions.add(new MemsetToOffset(name,
+                            memsetToOffset(name,
+                                    instructions,
                                     offset + member.byteOffset() + initTypeSize,
-                                    0, memberTypeSize - initTypeSize));
+                                    0, memberTypeSize - initTypeSize);
                         }
 
                     }
@@ -880,13 +895,14 @@ public class IrGen {
                     }
                     case BUILTIN_MEMSET -> {
 
-                        if (emitTacky(args.get(0), instructions, inlineFunctions) instanceof PlainOperand(VarIr ptr)){
-
-                            Constant b = SemanticAnalysis.evaluateExpAsConstant(args.get(1));
-                            Constant c = SemanticAnalysis.evaluateExpAsConstant(args.get(2));
-
-                            instructions.add(new MemsetToOffset(ptr, 0,
-                                    (int) b.toLong(), c.toLong()));
+                        if (emitTacky(args.get(0), instructions, inlineFunctions) instanceof PlainOperand(
+                                VarIr ptr)) {
+                            int ch =
+                                    (int) SemanticAnalysis.evaluateExpAsConstant(args.get(1)).toLong();
+                            long byteCount =
+                                    SemanticAnalysis.evaluateExpAsConstant(args.get(2)).toLong();
+                            instructions.add(new Memset(ptr, ch,
+                                    byteCount));
                         } else throw new Todo();
                         return null;
 

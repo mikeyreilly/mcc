@@ -122,7 +122,7 @@ public class Optimizer {
                     if (dstName.isStatic()) aliasedVars.add(dstName);
                 }
 
-                case MemsetToOffset(VarIr dstName, long _, int _, long _)-> {
+                case Memset(VarIr dstName, int _, long _)-> {
                     if (dstName.isStatic()) aliasedVars.add(dstName);
                 }
                 case CopyBitsToOffset(ValIr v1, VarIr dstName, long _, int _, int _) -> {

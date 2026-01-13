@@ -1020,8 +1020,8 @@ public class Codegen {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
-                case MemsetToOffset(VarIr dstV, long offset1, int c,
-                                    long byteCount) -> {
+                case Memset(VarIr dstV, int c,
+                            long byteCount) -> {
                     Operand dst = toOperand(dstV);
                     memsetBytes(ins, c, dst, byteCount);
                 }
@@ -1693,28 +1693,32 @@ public class Codegen {
     private static void memsetBytes(List<Instruction> ins, int c,
                                   Operand dst, long size) {
         // dst is a pointer - load it into dx
-        ins.add(new Comment("memset"));
+        //ins.add(new Comment("memset"));
 
-        ins.add(new Mov(QUADWORD, dst, DX));
-        dst = new Memory(DX, 0);
-        int offset = 0;
+        long offset = 0;
         long cl = c & 0xff;
         var q = new Imm(cl << 56 | cl << 48 | cl << 40 | cl << 32 | cl << 24 |
                 cl << 16 | cl << 8 | cl);
         var l = new Imm(cl << 24 | cl << 16 | cl << 8 | cl);
         var w = new Imm(cl << 8 | cl);
         var b = new Imm(cl);
-//        if (size > 16) {
-//            long count = size-(size%8);
-//            ins.add(new Lea(dst, SI));
-//            ins.add(new Mov(QUADWORD, q, AX));
-//            ins.add(new Mov(LONGWORD, new Imm(count), DX));
-//            ins.add(new Mov(QUADWORD, SI, DI));
-//            ins.add(new Mov(QUADWORD, DX, CX));
-//            ins.add(new Literal("rep stosq"));
-//            size-=count;
-//            offset += count;
-//        }
+        if (size > 16) {
+            long count = size-(size%8);
+            ins.add(new Mov(QUADWORD, dst, SI));
+            ins.add(new Mov(QUADWORD, q, AX));
+            ins.add(new Mov(QUADWORD, SI, DI));
+            ins.add(new Mov(LONGWORD, new Imm(count/8), CX));
+
+
+
+            ins.add(new Literal("rep stosq"));
+            size-=count;
+            offset += count;
+        }
+        if (size == 0) return;
+        ins.add(new Mov(QUADWORD, dst, DX));
+        dst = new Memory(DX, 0);
+
         while (size >= 8) {
             ins.add(new Mov(QUADWORD, q, dst.plus(offset)));
             offset += 8;
