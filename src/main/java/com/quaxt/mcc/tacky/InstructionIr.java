@@ -32,6 +32,7 @@ public sealed interface InstructionIr extends AbstractInstruction permits Ignore
         JumpIfZero,
         LabelIr,
         Load,
+        MemsetToOffset,
         ReturnIr,
         SignExtendIr,
         Store,

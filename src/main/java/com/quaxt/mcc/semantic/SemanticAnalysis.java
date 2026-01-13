@@ -1244,9 +1244,9 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                         typeCheckedList.add(typeCheckInit(inits.get(i),
  members.get(i).type()));
                     }
-                    for (; i < (isUnion ? 1 : members.size()); i++) {
-                        typeCheckedList.add(zeroInitializer(members.get(i).type()));
-                    }
+//                    for (; i < (isUnion ? 1 : members.size()); i++) {
+//                        typeCheckedList.add(zeroInitializer(members.get(i).type()));
+//                    }
                     yield new CompoundInit(typeCheckedList, targetType);
                 } else {
                     throw new Err("Can't use compound initializer to " +

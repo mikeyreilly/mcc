@@ -183,7 +183,7 @@ public class Codegen {
                         new Lea(dePseudo(src, varTable, offset), dePseudo(dst
                                 , varTable, offset));
                 case Comment comment -> comment;
-
+                case Literal l -> l;
                 default -> throw new IllegalStateException("Unexpected value: " + oldInst);
             };
             instructions.set(i, newInst);
@@ -525,6 +525,11 @@ public class Codegen {
 
     }
 
+
+    /* MR-TODO there is a big mess here:
+    * this function can't tell when a PseudoMem with offset 0 is the first byte
+    * of an aggregate or if it is a pointer
+    * */
     private static Operand dePseudo(Operand in, Map<String, Long> varTable,
                                     AtomicLong offsetA) {
         long offsetFromStartOfArray;
@@ -1014,6 +1019,11 @@ public class Codegen {
                     if (typeAsm instanceof ByteArray(long size, _)) {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, dst));
+                }
+                case MemsetToOffset(VarIr dstV, long offset1, int c,
+                                    long byteCount) -> {
+                    Operand dst = toOperand(dstV);
+                    memsetBytes(ins, c, dst, byteCount);
                 }
 
                 case DoubleToInt(ValIr src, VarIr dst) -> {
@@ -1675,6 +1685,53 @@ public class Codegen {
         }
         while (size > 0) {
             ins.add(new Mov(BYTE, src.plus(offset), dst.plus(offset)));
+            offset++;
+            size--;
+        }
+    }
+
+    private static void memsetBytes(List<Instruction> ins, int c,
+                                  Operand dst, long size) {
+        // dst is a pointer - load it into dx
+        ins.add(new Comment("memset"));
+
+        ins.add(new Mov(QUADWORD, dst, DX));
+        dst = new Memory(DX, 0);
+        int offset = 0;
+        long cl = c & 0xff;
+        var q = new Imm(cl << 56 | cl << 48 | cl << 40 | cl << 32 | cl << 24 |
+                cl << 16 | cl << 8 | cl);
+        var l = new Imm(cl << 24 | cl << 16 | cl << 8 | cl);
+        var w = new Imm(cl << 8 | cl);
+        var b = new Imm(cl);
+//        if (size > 16) {
+//            long count = size-(size%8);
+//            ins.add(new Lea(dst, SI));
+//            ins.add(new Mov(QUADWORD, q, AX));
+//            ins.add(new Mov(LONGWORD, new Imm(count), DX));
+//            ins.add(new Mov(QUADWORD, SI, DI));
+//            ins.add(new Mov(QUADWORD, DX, CX));
+//            ins.add(new Literal("rep stosq"));
+//            size-=count;
+//            offset += count;
+//        }
+        while (size >= 8) {
+            ins.add(new Mov(QUADWORD, q, dst.plus(offset)));
+            offset += 8;
+            size -= 8;
+        }
+        while (size >= 4) {
+            ins.add(new Mov(LONGWORD, l, dst.plus(offset)));
+            offset += 4;
+            size -= 4;
+        }
+        while (size >= 2) {
+            ins.add(new Mov(WORD, w, dst.plus(offset)));
+            offset += 2;
+            size -= 2;
+        }
+        while (size > 0) {
+            ins.add(new Mov(BYTE, b, dst.plus(offset)));
             offset++;
             size--;
         }

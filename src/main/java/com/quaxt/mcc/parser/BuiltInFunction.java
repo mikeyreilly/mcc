@@ -8,6 +8,11 @@ import com.quaxt.mcc.semantic.Type;
 import java.util.List;
 
 public enum BuiltInFunction {
+    BUILTIN_MEMSET("__builtin_memset", 3){
+        public Type determineReturnType(List<Exp> args) {
+            return Primitive.VOID;
+        }
+    },
     ATOMIC_STORE_N("__atomic_store_n", 3){
         public Type determineReturnType(List<Exp> args) {
             return Primitive.VOID;

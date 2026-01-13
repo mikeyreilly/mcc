@@ -254,7 +254,23 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                                         Instruction instruction) {
         String s = switch (instruction) {
             case Mov(TypeAsm t, Operand src, Operand dst) -> {
-                yield instruction.format(t) +
+
+                String o;
+                if (src instanceof Imm imm && imm.isAwkward()) {
+                    o="movabs\t";
+                }
+                o="mov" + switch (t) {
+                    case ByteArray byteArray -> "q";
+                    case BYTE -> "b";
+                    case WORD -> "w";
+                    case LONGWORD -> "l";
+                    case QUADWORD -> "q";
+                    case DOUBLE -> "sd";
+                    case FLOAT -> "ss";
+                } + "\t";
+
+
+                yield o +
                         formatOperand(t, instruction, src) + ", " +
                         formatOperand(t, instruction, dst);
             }
@@ -352,6 +368,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 }
             }
             case Comment(String comment) -> "# " + comment;
+            case Literal(String string) -> string;
             case Pop(IntegerReg arg) ->
                     "popq\t" + formatOperand(instruction, arg);
             case Test(TypeAsm t, Operand src1, Operand src2) ->

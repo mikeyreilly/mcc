@@ -36,7 +36,7 @@ class MccTest {
 
     @Test
     void function_pointer() throws Exception {
-        returns("function_pointer", 38, true);
+        returns("function_pointer", 38, true, false);
     }
 
     @Test
@@ -121,12 +121,13 @@ class MccTest {
 
     private static void returns(String testProgram,
                                 int expectedExitCode) throws Exception {
-        returns(testProgram, expectedExitCode, true);
+        returns(testProgram, expectedExitCode, true, false);
     }
 
 
     private static void returns(String testProgram,
-                                int expectedExitCode, boolean optimize) throws Exception {
+                                int expectedExitCode, boolean optimize, boolean disableRegisterAllocator) throws Exception {
+        Mcc.registerAllocatorDisabled = !disableRegisterAllocator;
         if (optimize) assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c", "--optimize"));
         else assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c"));
         assertEquals(expectedExitCode,
@@ -136,7 +137,7 @@ class MccTest {
     private static void outputs(String testProgram,
                                 String expectedOutput,
                                 boolean optimize, boolean disableRegisterAllocator) throws Exception {
-        if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
+        Mcc.registerAllocatorDisabled = disableRegisterAllocator;
         if (optimize) {
             assertEquals(0, Mcc.mcc(
                     "src/test/resources/" + testProgram + ".c", "--optimize"));
@@ -144,7 +145,7 @@ class MccTest {
             assertEquals(0, Mcc.mcc(
                     "src/test/resources/" + testProgram + ".c"));
         }
-        Mcc.registerAllocatorDisabled = false;
+
         assertEquals(expectedOutput, startProcessAndCaptureOutput(
                 "src/test/resources/" + testProgram).key());
     }
@@ -209,6 +210,12 @@ class MccTest {
     }
 
     @Test
+    void memset()  throws Exception {
+        outputs("memset", "done", false, false);
+        outputs("memset", "done", false, true);
+    }
+
+    @Test
     void varargs2()  throws Exception {
         returns("varargs2", 66);
     }
@@ -230,7 +237,7 @@ class MccTest {
 
     @Test
     void static_struct_string_member() throws Exception {
-        returns("static_struct_string_member", 12, false);
+        returns("static_struct_string_member", 12, false, false);
     }
 
     @Test
@@ -315,7 +322,7 @@ class MccTest {
 
     @Test
     void bitfield4_test()  throws Exception {
-        returns("bitfield4", 0, false);
+        returns("bitfield4", 0, false, false);
     }
 
     @Test
@@ -338,7 +345,7 @@ class MccTest {
 
     @Test
     void multiple_deref_function_pointer() throws Exception {
-        returns("multiple_deref_function_pointer", 42, false);
+        returns("multiple_deref_function_pointer", 42, false, false);
     }
 
     @Test
@@ -541,7 +548,7 @@ class MccTest {
 
     @Test
     void clzll() throws Exception {
-        returns("clzll", 63, false);
+        returns("clzll", 63, false, false);
     }
 
     @Test
@@ -617,12 +624,12 @@ class MccTest {
 
     @Test
     void duplicate_goto_labels() throws Exception {
-        returns("duplicate_goto_labels", 42, false);
+        returns("duplicate_goto_labels", 42, false, false);
     }
 
     @Test
     void shl() throws Exception {
-        returns("shl", 64, false);
+        returns("shl", 64, false, false);
     }
 
     @Test
@@ -664,7 +671,7 @@ class MccTest {
 
     @Test
     void inline() throws Exception {
-        returns("inline", 36, false);
+        returns("inline", 36, false, false);
         Stream<String> lines = assemble("inline", false).lines();
         assertTrue(lines.filter(x -> x.contains("call\tsum")).findAny().isEmpty());
     }

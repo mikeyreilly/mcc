@@ -527,7 +527,7 @@ See p. 606 */
                 addMemoryAndIndexedRegsToUsed(op, used);
                 return new Pair<>(used, Set.of());
             }
-            case LabelIr _, Jump _, Comment _, Nullary _ -> {}
+            case LabelIr _, Jump _, Comment _, Nullary _, Literal _ -> {}
             case Test test -> throw new Todo();
         }
         return EMPTY_PAIR;

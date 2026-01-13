@@ -72,7 +72,7 @@ public class RegisterAllocator {
                     }
                 }
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _,
-                     Comment _ -> instructions.set(copyTo++, oldInst);
+                     Comment _, Literal _ -> instructions.set(copyTo++, oldInst);
                 case Call(Operand operand, FunType t) -> {
                      instructions.set(copyTo++,
                              new Call(find(operand,
@@ -293,7 +293,7 @@ public class RegisterAllocator {
      * p. 647
      */
     private static void replacePseudoRegs(List<Instruction> instructions,
-                                          Map<Pseudo, Reg> registerMap) {
+                                          Map<String, Reg> registerMap) {
         int copyTo = 0;
         for (int copyFrom = 0; copyFrom < instructions.size(); copyFrom++) {
             Instruction instr = instructions.get(copyFrom);
@@ -347,15 +347,19 @@ public class RegisterAllocator {
     }
 
     private static Operand replaceOperand(Operand op,
-                                          Map<Pseudo, Reg> registerMap) {
+                                          Map<String, Reg> registerMap) {
         if (op instanceof Pseudo p) {
-            Reg r = registerMap.get(p);
+            Reg r = registerMap.get(p.identifier);
             if (r != null) return r;
         }
+//        else if (op instanceof PseudoMem(String identifier, long offset)) {
+//            Reg r = registerMap.get(identifier);
+//            if (r instanceof IntegerReg intReg) return new Memory(intReg, offset);
+//        }
         return op;
     }
 
-    private static Pair<Map<Pseudo, Reg>, Map<Pseudo, Reg>> createRegisterMap(
+    private static Pair<Map<String, Reg>, Map<String, Reg>> createRegisterMap(
             List<Node> coloredGraph, List<Node> coloredGraphMmx,
             FunctionAsm function) {
         Map<Integer, IntegerReg> colorMap = new HashMap<>();
@@ -370,15 +374,15 @@ public class RegisterAllocator {
                 colorMapMmx.put(node.color, reg);
             }
         }
-        Map<Pseudo, Reg> registerMap = new HashMap<>();
-        Map<Pseudo, Reg> registerMapMmx = new HashMap<>();
+        Map<String, Reg> registerMap = new HashMap<>();
+        Map<String, Reg> registerMapMmx = new HashMap<>();
         Set<IntegerReg> calleeSavedRegs = EnumSet.noneOf(IntegerReg.class);
         for (Node node : coloredGraph) {
             switch (node.operand) {
                 case Pseudo p -> {
                     if (node.color != -1) {
                         var hardReg = colorMap.get(node.color);
-                        registerMap.put(p, hardReg);
+                        registerMap.put(p.identifier, hardReg);
                         if (hardReg.isCalleeSaved) {
                             calleeSavedRegs.add(hardReg);
                         }
@@ -394,7 +398,7 @@ public class RegisterAllocator {
                 case Pseudo p -> {
                     if (node.color != -1) {
                         DoubleReg doubleReg = colorMapMmx.get(node.color);
-                        registerMapMmx.put(p, doubleReg);
+                        registerMapMmx.put(p.identifier, doubleReg);
                     }
                 }
                 default -> {}
@@ -517,7 +521,7 @@ public class RegisterAllocator {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, operand);
                 }
-                case Comment _, JmpCC _, Nullary _, Jump _, LabelIr _ -> {}
+                case Comment _, Literal _, JmpCC _, Nullary _, Jump _, LabelIr _ -> {}
                 case Test test -> {throw new Todo();}
             }
         }
@@ -744,7 +748,7 @@ public class RegisterAllocator {
                     }
                 }
                 case Jump _, LabelIr _, Nullary _, JmpCC _,
-                     Comment _ -> {}
+                     Comment _, Literal _ -> {}
             }
         }
     }

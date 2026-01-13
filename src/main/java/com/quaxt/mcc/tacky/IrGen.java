@@ -120,43 +120,40 @@ public class IrGen {
                               Type compoundInitType) when compoundInitType instanceof Structure(boolean isUnion,
                                                                                                 String tag,
             StructDef _) -> {
-                List<MemberEntry> members =
-                        Mcc.TYPE_TABLE.get(tag).namedMembers();
-                int limit = inits.size();
-                if (isUnion && limit > 1) limit = 1;
-                for (int i = 0; i < limit; i++) {
-                    Initializer memInit = inits.get(i);
-                    MemberEntry member = members.get(i);
-                    switch (memInit) {
-                        case CompoundInit _ ->
-                                assign(name, memInit, instructions,
-                                        offset + member.byteOffset(), inlineFunctions);
-                        case SingleInit(Exp exp, Type targetType) -> {
-                            if (exp instanceof Str(String s,
-                                                   Type type) && type instanceof Array(
-                                    Type _, Constant arraySize)) {
-                                initializeArrayWithStringLiteral(name,
-                                        instructions,
-                                        offset + member.byteOffset(), s, arraySize);
-                            } else {
-                                var val = emitTackyAndConvert(exp,
-                                        instructions, inlineFunctions);
-                                if (member instanceof BitFieldMember(        String _,
-                                                                             Type _,
-                                                                             int _,
-                                                                             int bitOffset,
-                                                                             int bitWidth
-                                )){
-                                    instructions.add(new CopyBitsToOffset(val, name,
-                                            offset + member.byteOffset(), bitOffset, bitWidth));
-                                }else instructions.add(new CopyToOffset(val, name,
-                                        offset + member.byteOffset()));
-                            }
+                StructDef sd =
+                        Mcc.TYPE_TABLE.get(tag);
+                List<MemberEntry> members = sd.namedMembers();
 
+
+                int initsLen = inits.size();
+                int membersLen = members.size();
+                if (isUnion && initsLen > 0) {
+                    long biggest = Mcc.size(members.getFirst().type());
+                    MemberEntry best = members.getFirst();
+                    for (int i = 1; i < membersLen; i++) {
+                        var m = members.get(i);
+                        long s = Mcc.size(m.type());
+                        if (s > biggest) {
+                            biggest = s;
+                            best = m;
                         }
                     }
+                    Initializer memInit = inits.getFirst();
+                    initMember(memInit, best, name,
+                            instructions,  offset, inlineFunctions);
+                } else {
+                    for (int i = 0; i < initsLen; i++) {
+                        Initializer memInit = inits.get(i);
+                        MemberEntry member = members.get(i);
+                        initMember(memInit, member, name, instructions,
+                                offset, inlineFunctions);
+                    }
                 }
-                return offset + Mcc.size(compoundInitType);
+                long structSize = Mcc.size(compoundInitType);
+                if (initsLen == 0 && 0L < structSize) {
+                    instructions.add(new MemsetToOffset(name, offset, 0, structSize));
+                }
+                return offset + structSize;
             }
             case CompoundInit(ArrayList<Initializer> inits,
                               Type compoundInitType) -> {
@@ -199,6 +196,50 @@ public class IrGen {
 
         }
 
+    }
+
+    private static void initMember(Initializer memInit, MemberEntry member, VarIr name,
+                                   List<InstructionIr> instructions, long offset,
+                                   Map<String, FunctionIr> inlineFunctions) {
+
+        switch (memInit) {
+            case CompoundInit _ ->
+                    assign(name, memInit, instructions,
+                            offset + member.byteOffset(), inlineFunctions);
+            case SingleInit(Exp exp, Type initType) -> {
+                if (exp instanceof Str(String s,
+                                       Type type) && type instanceof Array(
+                        Type _, Constant arraySize)) {
+                    initializeArrayWithStringLiteral(name,
+                            instructions,
+                            offset + member.byteOffset(), s, arraySize);
+                } else {
+                    var val = emitTackyAndConvert(exp,
+                            instructions, inlineFunctions);
+                    if (member instanceof BitFieldMember(        String _,
+                                                                 Type _,
+                                                                 int _,
+                                                                 int bitOffset,
+                                                                 int bitWidth
+                    )){
+                        instructions.add(new CopyBitsToOffset(val, name,
+                                offset + member.byteOffset(), bitOffset, bitWidth));
+                    } else {
+                        instructions.add(new CopyToOffset(val, name,
+                                offset + member.byteOffset()));
+                        long initTypeSize = Mcc.size(initType);
+                        long memberTypeSize = Mcc.size(member.type());
+                        if (initTypeSize < memberTypeSize) {
+                            instructions.add(new MemsetToOffset(name,
+                                    offset + member.byteOffset() + initTypeSize,
+                                    0, memberTypeSize - initTypeSize));
+                        }
+
+                    }
+                }
+
+            }
+        }
     }
 
 
@@ -836,6 +877,19 @@ public class IrGen {
                     }
                     case BUILTIN_INFF -> {
                         return new PlainOperand(new FloatInit(Float.POSITIVE_INFINITY));
+                    }
+                    case BUILTIN_MEMSET -> {
+
+                        if (emitTacky(args.get(0), instructions, inlineFunctions) instanceof PlainOperand(VarIr ptr)){
+
+                            Constant b = SemanticAnalysis.evaluateExpAsConstant(args.get(1));
+                            Constant c = SemanticAnalysis.evaluateExpAsConstant(args.get(2));
+
+                            instructions.add(new MemsetToOffset(ptr, 0,
+                                    (int) b.toLong(), c.toLong()));
+                        } else throw new Todo();
+                        return null;
+
                     }
                 }
             }
