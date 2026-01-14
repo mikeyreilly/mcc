@@ -1021,9 +1021,13 @@ public class Codegen {
                     } else ins.add(new Mov(typeAsm, src, dst));
                 }
                 case Memset(VarIr dstV, int c,
-                            long byteCount) -> {
+                            long byteCount, boolean viaPointer) -> {
                     Operand dst = toOperand(dstV);
-                    memsetBytes(ins, c, dst, byteCount);
+                    if (!viaPointer && dst instanceof PseudoMem(String identifier, long offset1) && offset1==0L) {
+                        SymbolTableEntry e = Mcc.SYMBOL_TABLE.get(identifier);
+                        dst = new Pseudo(identifier, toTypeAsm(e.type()), e.isStatic(), e.aliased);
+                    }
+                    memsetBytes(ins, c, dst, byteCount, viaPointer);
                 }
 
                 case DoubleToInt(ValIr src, VarIr dst) -> {
@@ -1691,10 +1695,12 @@ public class Codegen {
     }
 
     private static void memsetBytes(List<Instruction> ins, int c,
-                                  Operand dst, long size) {
-        // dst is a pointer - load it into dx
-        //ins.add(new Comment("memset"));
-
+                                    Operand dst, long size,
+                                    boolean viaPointer) {
+        if (!viaPointer) {
+            ins.add(new Lea(dst, DX));
+            dst = DX;
+        }
         long offset = 0;
         long cl = c & 0xff;
         var q = new Imm(cl << 56 | cl << 48 | cl << 40 | cl << 32 | cl << 24 |
@@ -1708,9 +1714,6 @@ public class Codegen {
             ins.add(new Mov(QUADWORD, q, AX));
             ins.add(new Mov(QUADWORD, SI, DI));
             ins.add(new Mov(LONGWORD, new Imm(count/8), CX));
-
-
-
             ins.add(new Literal("rep stosq"));
             size-=count;
             offset += count;

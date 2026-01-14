@@ -95,6 +95,8 @@ public class PropagateCopies {
                                           long offset) ->
                                 new CopyToOffset(replaceOperand(v1, reachingCopies),
                                         dstName, offset);
+                        case Memset(VarIr dst, int c, long byteCount, boolean viaPointer) ->
+                                new Memset((VarIr) replaceOperand(dst, reachingCopies), c, byteCount, viaPointer);
                         case CopyBitsToOffset(ValIr v1, VarIr dstName,
                                           long byteOffset, int bitOffset, int bitWidth) ->
                                 new CopyBitsToOffset(replaceOperand(v1, reachingCopies), dstName,
@@ -189,6 +191,8 @@ public class PropagateCopies {
                 case CopyBitsFromOffset(ValIr _, long _, int _, int _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyToOffset(ValIr _, VarIr dst, long _) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case Memset(VarIr dst, int c, long byteCount, boolean viaPointer) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyBitsToOffset(ValIr _, VarIr dst, long _, int _, int _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));

@@ -208,11 +208,16 @@ See p. 606 */
                 case CopyToOffset(ValIr src, VarIr dst, long _) -> {
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
+                        currentLiveVars.add(dst); // it's used for indirect addressing (so it is read)
                     }
+                }
+                case Memset(VarIr dst, int _, long _, boolean _) -> {
+                    currentLiveVars.remove(dst);
                 }
                 case CopyBitsToOffset(ValIr src, VarIr dst, long _, int _, int _) -> {
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
+                        currentLiveVars.add(dst); // it's used for indirect addressing (so it is read)
                     }
                 }
                 case ZeroExtendIr(ValIr src, ValIr dst) -> {

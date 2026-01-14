@@ -1347,7 +1347,7 @@ public class Parser {
             return new DoubleInit(Double.parseDouble(value));
         if (type == Primitive.FLOAT)
             return new FloatInit(Float.parseFloat(value));
-        if (type.isSigned() && base == 10) {
+        if (type.isSigned()) {
             long v = Long.parseLong(value, base);
             if (v < 1L << 31 && type == Primitive.INT)
                 return new IntInit((int) v);

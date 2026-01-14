@@ -170,6 +170,7 @@ public class SemanticAnalysis {
                                                     String currentLabel,
                                                     String currentNonSwitchLabel) {
         return switch (init) {
+            case null -> null;
             case CompoundInit(ArrayList<Initializer> inits, Type t) -> {
                 inits.replaceAll(i -> loopLabelInitializer(i, currentLabel,
                  currentNonSwitchLabel));
@@ -178,7 +179,7 @@ public class SemanticAnalysis {
             case SingleInit(Exp exp, Type targetType) ->
                     new SingleInit(loopLabelStatement(exp, currentLabel,
                      currentNonSwitchLabel), targetType);
-            case null -> null;
+            default -> init;
         };
     }
 
@@ -371,6 +372,7 @@ bitFieldWidth);
             List<StaticInit> acc) {
         switch (init) {
             case null -> acc.add(createZeroInit(targetType));
+            case ZeroInit zinit -> acc.add(zinit);
             case CompoundInit(ArrayList<Initializer> inits, Type type) -> {
                 final int initsSize = inits.size();
                 switch (targetType) {
@@ -580,7 +582,7 @@ false);
             temp.add(new StringInit(s, zeroCount >= 0));
             if (zeroCount > 0) temp.add(new ZeroInit(zeroCount));
             String symbolName =
-                    addStringToSymbolTable(new Pointer(Primitive.CHAR), temp);
+                    addStringToSymbolTable(new Pointer(CHAR), temp);
             acc.add(new PointerInit(symbolName, 0));
         } else {
             acc.add(new StringInit(s, zeroCount >= 0));
@@ -1134,7 +1136,7 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                 new SymbolTableEntry(new Array(referenced,
           new IntInit((int) strlen(staticInits))),
            new StaticAttributes(new Initial(staticInits), false,
-    StorageClass.STATIC)));
+    STATIC)));
         return uniqueName;
     }
 
@@ -1220,10 +1222,12 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                         zerosToAdd = l - initsSize;
                     }
                     inits.replaceAll(i -> typeCheckInit(i, elementType));
-
-                    for (long i = 0; i < zerosToAdd; i++) {
-                        inits.add(zeroInitializer(elementType));
-                    }
+//
+//                    for (long i = 0; i < zerosToAdd; i++) {
+//                        inits.add(zeroInitializer(elementType));
+//                    }
+                    if (zerosToAdd>0)
+                        inits.add(new ZeroInit(zerosToAdd*Mcc.size(elementType)));
                     yield new CompoundInit(inits, arraySize ==
                             null ? new Array(elementType,
                              new ULongInit(initsSize)) : targetType);
@@ -1254,6 +1258,7 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                 }
             }
 
+            case ZeroInit zeroInit -> throw new Todo();
         };
     }
 
@@ -1333,7 +1338,7 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
         if (targetType instanceof Pointer(Type targetReferenced) &&
                 e.type() instanceof Pointer(Type eReferenced) &&
                 eReferenced.isInteger() && targetReferenced.isInteger() &&
-                Mcc.size(eReferenced) == Mcc.size(targetReferenced)) {
+                size(eReferenced) == size(targetReferenced)) {
             return convertTo(e, targetType);
         }
 
@@ -1941,7 +1946,7 @@ commonType);
         if (t1 instanceof Pointer(Type r1) && t2 instanceof Pointer(Type r2)) {
             if (r1 == VOID) return t1;
             if (r2 == VOID) return t2;
-            if (r1.isInteger() && r2.isInteger() && Mcc.size(r1)==Mcc.size(r2)) {
+            if (r1.isInteger() && r2.isInteger() && size(r1)== size(r2)) {
                 return r1.isSigned()? r1 : r2;
             }
         }
@@ -2491,6 +2496,7 @@ structureMap, enclosingFunction);
             case SingleInit(Exp exp, Type targetType) ->
                     new SingleInit(resolveExp(exp, identifierMap,
                      structureMap, enclosingFunction), targetType);
+            default -> init;
         };
 
     }

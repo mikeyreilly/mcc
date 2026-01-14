@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Lea;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.atomics.MemoryOrder;
@@ -151,7 +152,7 @@ public class IrGen {
                 }
                 long structSize = Mcc.size(compoundInitType);
                 if (initsLen == 0 && 0L < structSize) {
-                    memsetToOffset(name, instructions, offset, 0, structSize);
+                    memsetToOffset(name, instructions, offset, 0, structSize, false);
                 }
                 return offset + structSize;
             }
@@ -177,6 +178,15 @@ public class IrGen {
                             offset += Mcc.size(exp.type());
                         }
 
+                        case ZeroInit(long bytes) -> {
+                            if (offset!=0) {
+                                VarIr ptr =
+                                        makeTemporary("ptr", new Pointer(VOID));
+                                instructions.add(new GetAddress(name, ptr));
+                                instructions.add(new AddPtr(ptr, new IntInit((int) offset), 1, ptr));
+                                instructions.add(new Memset(ptr, 0, bytes - offset, true));
+                            }else instructions.add(new Memset(name, 0, bytes, false));
+                        }
                     }
                 }
                 return offset;
@@ -194,6 +204,7 @@ public class IrGen {
                 return offset + Mcc.size(targetType);
             }
 
+            case ZeroInit zeroInit -> {throw new Todo();}
         }
 
     }
@@ -202,14 +213,15 @@ public class IrGen {
                                   List<InstructionIr> instructions,
                                   long offset,
                                   int c,
-                                       long byteCount) {
+                                       long byteCount, boolean viaPointer) {
         if (offset !=0) {
             VarIr ptr =
                     makeTemporary("ptr", new Pointer(VOID));
             instructions.add(new AddPtr(name, new IntInit((int) offset), 1, ptr));
-            instructions.add(new Memset(ptr, c, byteCount));
+            instructions.add(new Memset(ptr, c, byteCount, true));
+        } else {
+            instructions.add(new Memset(name, c, byteCount, viaPointer));
         }
-        instructions.add(new Memset(name, c, byteCount));
     }
 
     private static void initMember(Initializer memInit, MemberEntry member, VarIr name,
@@ -247,13 +259,14 @@ public class IrGen {
                             memsetToOffset(name,
                                     instructions,
                                     offset + member.byteOffset() + initTypeSize,
-                                    0, memberTypeSize - initTypeSize);
+                                    0, memberTypeSize - initTypeSize, false);
                         }
 
                     }
                 }
 
             }
+            case ZeroInit zeroInit -> {throw new Todo();}
         }
     }
 
@@ -902,7 +915,7 @@ public class IrGen {
                             long byteCount =
                                     SemanticAnalysis.evaluateExpAsConstant(args.get(2)).toLong();
                             instructions.add(new Memset(ptr, ch,
-                                    byteCount));
+                                    byteCount, true));
                         } else throw new Todo();
                         return null;
 
