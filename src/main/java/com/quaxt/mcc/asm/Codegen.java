@@ -1695,10 +1695,11 @@ public class Codegen {
     }
 
     private static void memsetBytes(List<Instruction> ins, int c,
-                                    Operand dst, long size,
+                                    Operand dstIn, long size,
                                     boolean viaPointer) {
+        Operand dst = dstIn;
         if (!viaPointer) {
-            ins.add(new Lea(dst, DX));
+            ins.add(new Lea(dstIn, DX));
             dst = DX;
         }
         long offset = 0;
@@ -1719,9 +1720,10 @@ public class Codegen {
             offset += count;
         }
         if (size == 0) return;
-        ins.add(new Mov(QUADWORD, dst, DX));
-        dst = new Memory(DX, 0);
-
+        if (!viaPointer) {
+            ins.add(new Mov(QUADWORD, dstIn, DX));
+            dst = new Memory(DX, 0);
+        }
         while (size >= 8) {
             ins.add(new Mov(QUADWORD, q, dst.plus(offset)));
             offset += 8;

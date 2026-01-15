@@ -184,7 +184,7 @@ public class IrGen {
                                         makeTemporary("ptr", new Pointer(VOID));
                                 instructions.add(new GetAddress(name, ptr));
                                 instructions.add(new AddPtr(ptr, new IntInit((int) offset), 1, ptr));
-                                instructions.add(new Memset(ptr, 0, bytes - offset, true));
+                                instructions.add(new Memset(ptr, 0, bytes, true));
                             }else instructions.add(new Memset(name, 0, bytes, false));
                         }
                     }

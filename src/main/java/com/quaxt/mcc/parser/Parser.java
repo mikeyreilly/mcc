@@ -1348,7 +1348,7 @@ public class Parser {
         if (type == Primitive.FLOAT)
             return new FloatInit(Float.parseFloat(value));
         if (type.isSigned()) {
-            long v = Long.parseLong(value, base);
+            long v = Long.parseUnsignedLong(value, base);
             if (v < 1L << 31 && type == Primitive.INT)
                 return new IntInit((int) v);
             else return isLongLong ? new LongLongInit(v) : new LongInit(v);
