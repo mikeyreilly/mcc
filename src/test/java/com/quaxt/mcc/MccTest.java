@@ -338,7 +338,10 @@ class MccTest {
                 y=1030
                 """);
     }
-
+@Test
+void chars() throws Exception {
+        returns("chars",65);
+}
 
     @Test
     void bytes_swap()  throws Exception {

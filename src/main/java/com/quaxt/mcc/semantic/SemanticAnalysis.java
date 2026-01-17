@@ -229,6 +229,12 @@ toInteger(member.bitFieldWidth()));
                                 toInteger(member.bitFieldWidth()));
             }
         }
+        // remove nameless bitfields from the struct - addMemberToStruct had to
+        // add them to work properly but their continued presence at this point
+        // would mess up initializers
+        sd.members().removeIf(m -> m instanceof BitFieldMember bfm &&
+                bfm.name() == null);
+
         validateStructDefinition(structDecl);
 
         int structSize = roundUp(sd.size(), sd.alignment());
@@ -288,7 +294,7 @@ bitFieldWidth);
                 members.isEmpty() ? null : members.get(members.size() - 1);
 
         int baseOffset, bitOffset;
-
+        // MR-TODO no need to separate signed and unsigned like we're doing here
         if (last instanceof BitFieldMember lastBF &&
                 lastBF.type().equals(memberType)) {
 
@@ -314,9 +320,9 @@ bitFieldWidth);
         MemberEntry m =
                 new BitFieldMember(name, memberType, baseOffset, bitOffset,
                  bitFieldWidth);
-        if(name != null) {
-            members.add(m);
-        }
+
+
+        members.add(m);
 
         // Compute new struct size:
         int endOfStruct = Math.max(sd.size(), baseOffset + memberSize);
