@@ -17,7 +17,7 @@ public record ULongLongInit(long l) implements StaticInit, Constant<ULongLongIni
 
     @Override
     public String toString() {
-        return "ConstULong[l=" + Long.toUnsignedString(l) + "]";
+        return "ULongLongInit[l=" + Long.toUnsignedString(l) + "]";
     }
 
     @Override

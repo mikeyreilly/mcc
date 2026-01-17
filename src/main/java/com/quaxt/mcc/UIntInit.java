@@ -17,7 +17,7 @@ public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
 
     @Override
     public String toString() {
-        return "ConstUInt[i=" + Integer.toUnsignedString(i) + "]";
+        return "UIntInit[i=" + Integer.toUnsignedString(i) + "]";
     }
 
     @Override

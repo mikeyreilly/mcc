@@ -28,7 +28,7 @@ public class IrGen {
         Map<String, FunctionIr> inlineFunctions = new HashMap<>();
 
         for (Function function : program.functions()) {
-            if (function.body != null)
+            if (function.body != null && !Mcc.IGNORE_LIST.contains(function.name))
                 tackyDefs.add(compileFunction(function, inlineFunctions));
         }
         convertSymbolsToTacky(tackyDefs);

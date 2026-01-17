@@ -1,6 +1,6 @@
 int printf(const char *s, ...);
 struct S1 {
-  int : 1
+  int : 1;
   signed f1 : 6;
 };
 

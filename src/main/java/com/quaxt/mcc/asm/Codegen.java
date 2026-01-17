@@ -1721,7 +1721,10 @@ public class Codegen {
         }
         if (size == 0) return;
         if (!viaPointer) {
-            ins.add(new Mov(QUADWORD, dstIn, DX));
+            ins.add(new Lea(dstIn, DX));
+            dst = new Memory(DX, 0);
+        } else {
+            ins.add(new Mov(QUADWORD, dst, DX));
             dst = new Memory(DX, 0);
         }
         while (size >= 8) {

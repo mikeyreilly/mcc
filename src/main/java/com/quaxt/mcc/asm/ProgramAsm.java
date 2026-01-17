@@ -341,10 +341,19 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
             case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
-                if (srcType.isInteger()){
+                if (srcType.isInteger()) {
                     String srcF = formatOperand(srcType, instruction, src);
-                    String dstF = formatOperand(DOUBLE, instruction, dst);
-                    yield (srcType == QUADWORD ? "cvtsi2sdq\t" : "cvtsi2sdl\t") + srcF + ", " + dstF;
+                    String dstF = formatOperand(dstType, instruction, dst);
+                    yield (srcType == QUADWORD
+                            ? dstType == DOUBLE
+                            ? "cvtsi2sdq\t"
+                            : "cvtsi2ssq\t"
+                            : dstType == DOUBLE
+                            ? "cvtsi2sdl\t"
+                            : "cvtsi2ssl\t") +
+                            srcF +
+                            ", " +
+                            dstF;
                 } else {
                     String srcF = formatOperand(srcType, instruction, src);
                     String dstF = formatOperand(dstType, instruction, dst);

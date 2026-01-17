@@ -315,9 +315,15 @@ class MccTest {
                 y=38
                 """);
     }
+
     @Test
     void bitfield2_test()  throws Exception {
         outputs("bitfield2", "x.a=0", false, true);
+    }
+
+    @Test
+    void bitfield5_test()  throws Exception {
+        outputs("bitfield5", "x.a=0\n" + "x.b=1\n" + "x.c=2\n" + "x.d=3\n", false, true);
     }
 
     @Test

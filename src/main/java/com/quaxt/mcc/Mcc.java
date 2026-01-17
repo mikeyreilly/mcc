@@ -24,24 +24,73 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 import java.util.logging.*;
 
 public class Mcc {
+
+    /* If the user defines functions of any of these functions then we ignore
+     those definitions, because that's what GCC does*/
+    public static final Set<String> IGNORE_LIST =
+            Set.of("_Exit", "abort", "abs", "acos", "acosh", "acoshf",
+                    "acoshl", "asin", "asinh", "asinhf", "asinhl", "atan",
+                    "atan2", "atanh", "atanhf", "atanhl", "cabs", "cabsf",
+                    "cabsl", "cacos", "cacosf", "cacosh", "cacoshf", "cacoshl"
+                    , "cacosl", "calloc", "carg", "cargf", "cargl", "casin",
+                    "casinf", "casinh", "casinhf", "casinhl", "casinl",
+                    "catan", "catanf", "catanh", "catanhf", "catanhl",
+                    "catanl", "cbrt", "cbrtf", "cbrtl", "ccos", "ccosf",
+                    "ccosh", "ccoshf", "ccoshl", "ccosl", "ceil", "cexp",
+                    "cexpf", "cexpl", "cimag", "cimagf", "cimagl", "clog",
+                    "clogf", "clogl", "conj", "conjf", "conjl", "copysign",
+                    "copysignf", "copysignl", "cos", "cosh", "cpow", "cpowf",
+                    "cpowl", "cproj", "cprojf", "cprojl", "creal", "crealf",
+                    "creall", "csin", "csinf", "csinh", "csinhf", "csinhl",
+                    "csinl", "csqrt", "csqrtf", "csqrtl", "ctan", "ctanf",
+                    "ctanh", "ctanhf", "ctanhl", "ctanl", "erf", "erfc",
+                    "erfcf", "erfcl", "erff", "erfl", "exp2", "exp2f", "exp2l"
+                    , "expm1", "expm1f", "expm1l", "fdim", "fdimf", "fdiml",
+                    "fma", "fmaf", "fmal", "fmax", "fmaxf", "fmaxl", "fmin",
+                    "fminf", "fminl", "hypot", "hypotf", "hypotl", "ilogb",
+                    "ilogbf", "ilogbl", "imaxabs", "isblank", "iswblank",
+                    "lgamma", "lgammaf", "lgammal", "llabs", "llrint",
+                    "llrintf", "llrintl", "llround", "llroundf", "llroundl",
+                    "log1p", "log1pf", "log1pl", "log2", "log2f", "log2l",
+                    "logb", "logbf", "logbl", "lrint", "lrintf", "lrintl",
+                    "lround", "lroundf", "lroundl", "nearbyint", "nearbyintf"
+                    , "nearbyintl", "nextafter", "nextafterf", "nextafterl",
+                    "nexttoward", "nexttowardf", "nexttowardl", "remainder",
+                    "remainderf", "remainderl", "remquo", "remquof", "remquol"
+                    , "rint", "rintf", "rintl", "round", "roundf", "roundl",
+                    "scalbln", "scalblnf", "scalblnl", "scalbn", "scalbnf",
+                    "scalbnl", "sin", "sinh", "snprintf", "sprintf", "sqrt",
+                    "sscanf", "strcat", "strchr", "strcmp", "strcpy",
+                    "strcspn", "strlen", "strncat", "strncmp", "strncpy",
+                    "strpbrk", "strrchr", "strspn", "strstr", "tan", "tanh",
+                    "tgamma", "tgammaf", "tgammal", "tolower", "toupper",
+                    "trunc", "truncf", "truncl", "vfprintf", "vfscanf",
+                    "vprintf", "vscanf", "vsnprintf", "vsprintf", "vsscanf");
+
     private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
-    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE = new DebugHashMap<>();
-    public static final HashMap<String, StructDef> TYPE_TABLE = new HashMap<>() {
-        public StructDef put(String key, StructDef value) {
-            return super.put(key, value);
-        }
-    };
-    public static final HashMap<String, EnumSpecifier> ENUM_MAP = new HashMap<>();
+    public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE =
+            new DebugHashMap<>();
+    public static final HashMap<String, StructDef> TYPE_TABLE =
+            new HashMap<>() {
+                public StructDef put(String key, StructDef value) {
+                    return super.put(key, value);
+                }
+            };
+    public static final HashMap<String, EnumSpecifier> ENUM_MAP =
+            new HashMap<>();
 
     public static final AtomicLong TEMP_COUNT = new AtomicLong(0L);
 
-    /** This is sometimes useful in testing*/
+    /**
+     * This is sometimes useful in testing
+     */
     public static boolean registerAllocatorDisabled = false;
 
     public static void setAliased(String identifier) {
         SYMBOL_TABLE.get(identifier).aliased = true;
     }
+
     public static String makeTemporary(String prefix) {
         return prefix + TEMP_COUNT.getAndIncrement();
     }
@@ -50,8 +99,8 @@ public class Mcc {
         return switch (type) {
             case Array(Type element, Constant _) -> {
                 long size = Mcc.size(type);
-                yield size < 16L && element.isScalar() ?
-                        (int) Mcc.size(element) : 16;
+                yield size < 16L &&
+                        element.isScalar() ? (int) Mcc.size(element) : 16;
             }
             case FunType _ -> 0;
             case Pointer _, NullptrT _ -> 8;
