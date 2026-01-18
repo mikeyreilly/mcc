@@ -6,4 +6,6 @@ public sealed interface MemberEntry permits BitFieldMember, OrdinaryMember {
     String name();
     Type type();
     int byteOffset();
+
+    Type internalType();
 }

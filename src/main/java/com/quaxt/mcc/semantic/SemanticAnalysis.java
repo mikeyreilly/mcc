@@ -711,6 +711,9 @@ false);
     }
 
     public static Constant convertConst(Constant init, Type type) {
+        if (type instanceof WidthRestricted(Type t, int w)){
+            type = t;
+        }
         if (init instanceof DoubleInit(double d)) {
             return switch (type) {
                 case DOUBLE -> (DoubleInit) init;
@@ -1251,7 +1254,7 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
 //                        inits.add(zeroInitializer(elementType));
 //                    }
                     if (zerosToAdd>0)
-                        inits.add(new ZeroInit(zerosToAdd*Mcc.size(elementType)));
+                        inits.add(new ZeroInit(zerosToAdd* size(elementType)));
                     yield new CompoundInit(inits, arraySize ==
                             null ? new Array(elementType,
                              new ULongInit(initsSize)) : targetType);
@@ -1328,6 +1331,9 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
 
 
     private static Exp convertByAssignment(Exp e, Type targetType) {
+        if (targetType instanceof WidthRestricted(Type integerType, int _)){
+            targetType = integerType;
+        }
         if (e.type() instanceof FunType) {
             if (e instanceof Conditional(Exp condition, Exp ifTrue, Exp ifFalse,
                                          Type type)) {
@@ -1370,7 +1376,7 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
     }
 
     private static boolean isArithmeticType(Type t) {
-        return t instanceof Primitive && t != VOID;
+        return t instanceof Primitive && t != VOID||t instanceof WidthRestricted;
     }
 
     public static Exp typeCheckAndConvert(Exp exp) {
@@ -1396,11 +1402,21 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
      */
     public static Exp typeCheckAndConvertWithDefaultArgumentPromotion(Exp exp) {
         var typedE = typeCheckAndConvert(exp);
-        return switch (typedE.type()) {
+        var t = typedE.type();
+
+        return switch (t) {
             case BOOL, SCHAR, CHAR, UCHAR, SHORT, USHORT ->
                     convertByAssignment(typedE, INT);
             case FLOAT -> convertByAssignment(typedE, DOUBLE);
-            default -> typedE;
+            default -> {
+                if (t.isInteger()) {
+                    long size = size(t);
+                    if(size < 4 || (t instanceof WidthRestricted(Type _, int width) && width < 32)) {
+                        yield convertByAssignment(typedE, INT);
+                    }
+                }
+                yield typedE;
+            }
         };
     }
 
@@ -1872,7 +1888,7 @@ commonType);
                     if (me == null) {
                         throw new Err("Structure has no member with this name");
                     }
-                    yield new Dot(typedStructure, member, me.type());
+                    yield new Dot(typedStructure, member, me.internalType());
                 }
                 throw new Err("Tried to get member of non-structure");
             }
@@ -2006,8 +2022,12 @@ commonType);
           ...if an int can represent all
          values of the original type (as restricted by the width, for a bit-field), the value is converted to an
          int); */
-        t1 = size(t1) < 4 ? INT : t1;
-        t2 = size(t2) < 4 ? INT : t2;
+        t1 = size(t1) < 4 ||
+                (t1 instanceof WidthRestricted(Type t, int width) &&
+                        width < 32) ? INT : t1;
+        t2 = size(t2) < 4 ||
+                (t2 instanceof WidthRestricted(Type t, int width) &&
+                        width < 32) ? INT : t2;
         if (t1 == t2) return t1;
         if (t1 == DOUBLE || t2 == DOUBLE) return DOUBLE;
         if (t1 == FLOAT || t2 == FLOAT) return FLOAT;
@@ -2070,6 +2090,7 @@ commonType);
             case TypeofT(Type innerType) ->
                     new TypeofT(resolveType(innerType, identifierMap,
                      structureMap, enclosingFunction));
+            case WidthRestricted _ -> typeSpecifier;
         };
     }
 

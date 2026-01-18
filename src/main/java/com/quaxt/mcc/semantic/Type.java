@@ -4,11 +4,20 @@ import com.quaxt.mcc.Err;
 import com.quaxt.mcc.StaticInit;
 import com.quaxt.mcc.parser.Typeof;
 import com.quaxt.mcc.parser.TypeofT;
+import com.quaxt.mcc.tacky.ValIr;
 
 import static com.quaxt.mcc.semantic.Primitive.*;
 import static com.quaxt.mcc.semantic.Primitive.LONG;
 
-public sealed interface Type permits Array, FunType, NullptrT, Pointer, Primitive, Structure, Typeof, TypeofT {
+public sealed interface Type permits Typeof,
+        TypeofT,
+        Array,
+        FunType,
+        NullptrT,
+        Pointer,
+        Primitive,
+        Structure,
+        WidthRestricted {
     default StaticInit zero() {
         throw new Err(this + " has no zero");
     }
@@ -49,4 +58,7 @@ public sealed interface Type permits Array, FunType, NullptrT, Pointer, Primitiv
         };
     }
 
+    default ValIr fromLong(long mask) {
+        throw new UnsupportedOperationException("No fromLong support on type " + this);
+    }
 }

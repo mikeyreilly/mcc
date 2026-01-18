@@ -330,7 +330,10 @@ class MccTest {
     void bitfield4_test()  throws Exception {
         returns("bitfield4", 0, false, false);
     }
-
+    @Test
+    void bitfield6() throws Exception {
+            outputs("bitfield6", "ffffffff00");
+    }
     @Test
     void bitfield_with_anon()  throws Exception {
         outputs("bitfield_with_anon", """

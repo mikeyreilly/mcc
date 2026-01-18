@@ -453,6 +453,7 @@ public class Codegen {
             case Array _, Structure _ ->
                     new ByteArray((int) size(type),
                             variableAlignment(type));
+            case WidthRestricted(Type element, int width) -> toTypeAsm(element);
 
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);

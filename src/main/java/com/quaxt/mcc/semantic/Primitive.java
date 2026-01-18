@@ -4,6 +4,7 @@ import com.quaxt.mcc.*;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.CharInit;
 import com.quaxt.mcc.UCharInit;
+import com.quaxt.mcc.tacky.ValIr;
 
 public enum Primitive implements Type {
     CHAR(new CharInit((byte) 0)), UCHAR(new UCharInit((byte) 0)),
@@ -29,6 +30,27 @@ public enum Primitive implements Type {
     @Override
     public boolean looseEquals(Type other) {
         return other == this;
+    }
+
+    @Override
+    public ValIr fromLong(long l) {
+        return switch (this) {
+            case CHAR -> new CharInit((byte) l);
+            case UCHAR -> new CharInit((byte) l);
+            case SCHAR -> new CharInit((byte) l);
+            case INT -> new IntInit((int) l);
+            case UINT -> new UIntInit((int) l);
+            case SHORT -> new UShortInit((short) l);
+            case USHORT -> new ShortInit((short) l);
+            case LONG -> new LongInit(l);
+            case ULONG -> new ULongInit(l);
+            case LONGLONG -> new LongLongInit(l);
+            case ULONGLONG -> new ULongLongInit( l);
+            case DOUBLE -> new DoubleInit((double) l);
+            case FLOAT -> new FloatInit((float) l);
+            case VOID -> throw new UnsupportedOperationException("Can't create void value from long");
+            case BOOL -> new BoolInit((byte) l);
+        };
     }
 
     public static Type fromTokenType(TokenType tokenType) {

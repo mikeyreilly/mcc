@@ -1802,30 +1802,49 @@ public class Parser {
                                 int len = 0;
                                 int base = 8;
                                 if (next == 'x') {
-                                    next = value.charAt(i+1);
+                                    i++;
                                     base = 16;
-                                    while (i + len < slen &&
-                                            ((next >= '0' && next <= '9') ||
-                                                    (next >= 'a' &&
-                                                            next <= 'f') ||
-                                                    (next >= 'A' &&
-                                                            next <= 'F'))) {
-                                        len++;
+
+                                    while (true) {
+                                        if (i + len >= slen) {
+                                            break;
+                                        }
                                         next = value.charAt(i + len);
+                                        if ((next < '0' || next > '9') &&
+                                                (next < 'a' || next > 'f') &&
+                                                (next < 'A' || next > 'F')) {
+                                            break;
+                                        }
+                                        len++;
+
                                     }
+                                    if (len == 0)
+                                        throw new AssertionError(next);
+                                    char r = (char) (0xff &
+                                            Integer.parseInt(value.substring(i,
+                                                    i + len), base));
+                                    i += len - 1;
+                                    yield r;
 
                                 } else {
-                                    while (i + len < slen && len < 3 &&
-                                            ((next >= '0' && next <= '7') )) {
-                                        len++;
+                                    while (true) {
+                                        if (i + len >= slen || len >= 3) {
+                                            break;
+                                        }
                                         next = value.charAt(i + len);
-                                    }
-                                }
-                                if (len == 0) throw new AssertionError(next);
+                                        if (next < '0' || next > '7') {
+                                            break;
+                                        }
+                                        len++;
 
-                                char r= (char) Integer.parseInt(value.substring(i+1, i+len+1), base);
-                                i+=len;
-                                yield r;
+                                    }
+                                    if (len == 0) throw new AssertionError(next);
+                                    char r= (char) (0xff&Integer.parseInt(value.substring(i, i+len), base));
+                                    i+=len-1;
+                                    yield r;
+
+                                }
+
                             }
 
                         };

@@ -180,6 +180,7 @@ public class Mcc {
             }
             case Typeof typeof -> 0L;
             case TypeofT typeofT -> 0L;
+            case WidthRestricted(Type element, int width) -> size(element);
         };
     }
 

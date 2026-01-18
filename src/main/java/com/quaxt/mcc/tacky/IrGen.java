@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Imm;
 import com.quaxt.mcc.asm.Lea;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
@@ -638,8 +639,16 @@ public class IrGen {
                                         throw new IllegalStateException(
                                                 "Unexpected value: " + op);
                             }
-                        } else
-                            instructions.add(new BinaryIr(op == SAR && !left.type().isSigned() ? SHR : op, v1, v2, dstName));
+                        } else {
+                            var leftType = left.type();
+                            instructions.add(new BinaryIr(op == SAR &&
+                                    !leftType.isSigned() ? SHR : op, v1, v2, dstName));
+                            if (leftType instanceof WidthRestricted(Type t, int width)
+                                    && width < Mcc.size(t) * 8){
+                                long mask = (1L << width) - 1L; // width ones in binary (works for width <= 63)
+                                instructions.add(new BinaryIr(BITWISE_AND, dstName, t.fromLong(mask), dstName));
+                            }
+                        }
                         return new PlainOperand(dstName);
                     }
                 }
