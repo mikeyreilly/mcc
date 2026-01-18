@@ -1567,35 +1567,33 @@ public class Parser {
 
     private static int parseChar(String s) {
         int len = s.length();
-        switch (len) {
-            case 2 -> {
-                assert (s.charAt(0) == '\\');
-                char c = s.charAt(1);
-                return switch (c) {
-                    case '\'' -> '\'';
-                    case '\"' -> '\"';
-                    case '?' -> '?';
-                    case '\\' -> '\\';
-                    case 'a' -> 7;
-                    case 'b' -> '\b';
-                    case 'f' -> '\f';
-                    case 'n' -> '\n';
-                    case 'r' -> '\r';
-                    case 't' -> '\t';
-                    case 'v' -> 11;
-                    default -> {
-                        if (c>='0' && c<='7'){
-                            yield (char) (0xff &
-                                    Integer.parseInt(s.substring(1), 8));
-                        } else throw new AssertionError(c);
-                    }
-                };
-            }
-            case 1 -> {
-                return s.charAt(0);
-            }
-            default -> throw new AssertionError(len);
+        if (len == 1) {
+            return s.charAt(0);
         }
+        assert (s.charAt(0) == '\\');
+        char c = s.charAt(1);
+        return switch (c) {
+        case '\'' -> '\'';
+        case '\"' -> '\"';
+        case '?' -> '?';
+        case '\\' -> '\\';
+        case 'a' -> 7;
+        case 'b' -> '\b';
+        case 'f' -> '\f';
+        case 'n' -> '\n';
+        case 'r' -> '\r';
+        case 't' -> '\t';
+        case 'v' -> 11;
+        default -> {
+            if (c>='0' && c<='7'){
+                yield (char) (0xff &
+                    Integer.parseInt(s.substring(1), 8));
+            } else if (c=='x'){
+                yield (char) (0xff &
+                        Integer.parseInt(s.substring(2), 16));
+            }else throw new AssertionError(c);
+        }
+        };
     }
 
 

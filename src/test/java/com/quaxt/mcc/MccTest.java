@@ -340,7 +340,7 @@ class MccTest {
     }
 @Test
 void chars() throws Exception {
-        returns("chars",65);
+        returns("chars", 0);
 }
 
     @Test
