@@ -1366,9 +1366,10 @@ public class Codegen {
 
                     ins.add(new Mov(typeAsm, dst, DX));
                     // AND it with a mask the keeps all but the bits we want to set
-                    int typeSizeBits= (int) (typeAsm.size()*8);
-                    long typeSizeBitsOnes = ~(-1L << typeSizeBits);
-                    long destMask=srcMask<<bitOffset;
+                    int typeSizeBits = (int) (typeAsm.size() * 8);
+                    long typeSizeBitsOnes =
+                            0xffff_ffff_ffff_ffffL >> (64 - typeSizeBits);
+                    long destMask = srcMask << bitOffset;
                     // zero out the bits in DX at abc position
                     ins.add(new Binary(BITWISE_AND, typeAsm , new Imm(~destMask & typeSizeBitsOnes), DX));
                     ins.add(new Binary(BITWISE_OR, typeAsm , AX, DX));
