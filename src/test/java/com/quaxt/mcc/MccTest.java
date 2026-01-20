@@ -134,7 +134,7 @@ class MccTest {
                 Mcc.startProcess("src/test/resources/" + testProgram));
     }
 
-    private static void outputs(String testProgram,
+    public static void outputs(String testProgram,
                                 String expectedOutput,
                                 boolean optimize, boolean disableRegisterAllocator) throws Exception {
         Mcc.registerAllocatorDisabled = disableRegisterAllocator;
@@ -686,5 +686,9 @@ void chars() throws Exception {
         returns("inline", 36, false, false);
         Stream<String> lines = assemble("inline", false).lines();
         assertTrue(lines.filter(x -> x.contains("call\tsum")).findAny().isEmpty());
+    }
+
+    @Test void alignment() throws Exception{
+        outputs("alignment", "PASS", false, false);
     }
 }

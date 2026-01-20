@@ -290,7 +290,13 @@ public class Parser {
 
         tokens.removeFirst(); //struct-or-union
         Token first = tokens.getFirst();
-
+        Map<String, ArrayList<Token>> attributes ;
+        int alignment = 0;
+        if (first == GCC_ATTRIBUTE) {
+            attributes = stripGccAttribute(tokens);
+            alignment=getAlignment(attributes);
+            first = tokens.getFirst();
+        }
         if (first instanceof TokenWithValue(Token type,
                                             String value) && type == IDENTIFIER) {
             tokens.removeFirst();
@@ -345,7 +351,17 @@ public class Parser {
             anonymous = true;
             tag = generatePseudoIdentifier();
         }
-        return new StructOrUnionSpecifier(isUnion, tag, members, anonymous);
+        return new StructOrUnionSpecifier(isUnion, tag, members, anonymous, alignment);
+    }
+
+    private static int getAlignment(Map<String, ArrayList<Token>> attributes) {
+        ArrayList<Token> l = attributes.get("aligned");
+        if (!l.isEmpty()) {
+            Token i = l.getFirst();
+            Constant c = parseConstant(i);
+            return (int) c.toLong();
+        }
+        return 0;
     }
 
     /* So that things (e.g. structs, unions, enums) can have a name even when in the code they are not given one*/
@@ -407,18 +423,27 @@ public class Parser {
 
     }
 
-    public static void stripGccAttribute(TokenList tokens) {
+    public static Map<String, ArrayList<Token>> stripGccAttribute(TokenList tokens) {
         int cursorAtStart = tokens.cursor;
         tokens.removeFirst();
-
+        Map<String,ArrayList<Token>> attributes = new HashMap<>();
         if (tokens.removeFirst() == OPEN_PAREN && tokens.removeFirst() == OPEN_PAREN) {
             int openCount = 2;
             while (!tokens.isEmpty()) {
                 Token t = tokens.removeFirst();
                 if (t == OPEN_PAREN) openCount++;
-                if (t == CLOSE_PAREN) {
+                else if (t == CLOSE_PAREN) {
                     openCount--;
-                    if (openCount == 0) return;
+                    if (openCount == 0) return attributes;
+                } else if (t instanceof TokenWithValue(Token type, String value)){
+                    int len = value.length();
+                    if (len > 4 && value.startsWith("__") &&
+                            value.endsWith("__")) {
+                        value = value.substring(2, len - 2);
+                    }
+
+                    attributes.put(value, readAttributeArgs(tokens));
+
                 }
             }
             tokens.cursor = cursorAtStart;
@@ -429,6 +454,27 @@ public class Parser {
             throw makeErr("Error: __attribute__ should be followed by \"((\""
                     , tokens);
         }
+    }
+
+    private static ArrayList<Token> readAttributeArgs(TokenList tokens) {
+        ArrayList<Token> l = new ArrayList<>();
+        Token t = tokens.getFirst();
+        if (t == OPEN_PAREN) {
+            tokens.removeFirst();
+            while (true) {
+                t = tokens.getFirst();
+                if (t == CLOSE_PAREN) {
+                    tokens.removeFirst();
+                    break;
+                } else if (t==COMMA) {
+                    tokens.removeFirst();
+                } else {
+                    l.add(t);
+                    tokens.removeFirst();
+                }
+            }
+        }
+        return l;
     }
 
     private static void stripAsm(TokenList tokens) {

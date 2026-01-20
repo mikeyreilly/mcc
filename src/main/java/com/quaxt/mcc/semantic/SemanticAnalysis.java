@@ -2196,7 +2196,7 @@ resolveFileScopeVariableDeclaration(varDecl,
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
-         processedMembers, decl.isAnonymous());
+         processedMembers, decl.isAnonymous(), decl.alignment());
     }
 
     /*
@@ -2216,7 +2216,7 @@ resolveFileScopeVariableDeclaration(varDecl,
             resolveStructureDeclaration(new StructOrUnionSpecifier(isUnion,
              tag, null,
                     tag ==
-                            null), identifierMap, structureMap,
+                            null, 0), identifierMap, structureMap,
                              enclosingFunction);
         }
     }

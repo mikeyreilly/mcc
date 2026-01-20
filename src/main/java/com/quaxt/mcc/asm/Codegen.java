@@ -1478,7 +1478,7 @@ public class Codegen {
 
     private static void emitBuiltInVarArg(VarIr vaList, VarIr dst,
                                           List<Instruction> ins, Type type) {
-
+        ins.add(new Comment("VA_ARG START"));
         boolean vaListIsPointer = SYMBOL_TABLE.get(vaList.identifier()).type() instanceof Pointer;
 
         int numGp = 0;
@@ -1549,6 +1549,7 @@ public class Codegen {
                 int offset = i*8;
 // 6. Return the fetched type.
                 Operand dstOperand = type.isScalar() ?toOperand(dst):toOperand(dst, offset);
+                ins.add(new Comment("write to dst"));
                 ins.add(new Mov(toTypeAsm(type), new Memory(AX, 0),
                         dstOperand));
             }
@@ -1581,6 +1582,7 @@ public class Codegen {
         var overFlowArgArea = vaListField(vaList, 8, vaListIsPointer, ins);
         ins.add(new Mov(QUADWORD, overFlowArgArea, AX));
 //        ins.add(new Mov(QUADWORD, new Memory(AX, 0), toOperand(dst)));
+        ins.add(new Comment("VA_ARG copy bytes"));
         copyBytes(ins,new Memory(AX, 0),toOperand(dst//,0
         ), typeSize);
 // 10. Align l->overflow_arg_area upwards to an 8 byte boundary.
@@ -1588,6 +1590,7 @@ public class Codegen {
         long nextSlotOffset=ProgramAsm.roundAwayFromZero(typeSize, Math.max(typeAlignment(type), 8));
         ins.add(new Binary(ADD, QUADWORD, new Imm(nextSlotOffset), overFlowArgArea));
         ins.add(endLabel);
+        ins.add(new Comment("VA_ARG END"));
 
     }
 
