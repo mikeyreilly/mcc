@@ -80,8 +80,7 @@ public class Codegen {
                 if(!registerAllocatorDisabled){
                     RegisterAllocator.allocateRegisters(functionAsm);
                 }
-                AtomicLong offset = replacePseudoRegisters(functionAsm);
-                functionAsm.stackSize = offset.get();
+                functionAsm.stackSize = replacePseudoRegisters(functionAsm);
                 fixUpInstructions(functionAsm);
             }
         }
@@ -124,16 +123,16 @@ public class Codegen {
         } : op1;
     }
 
-    private static AtomicLong replacePseudoRegisters(FunctionAsm functionAsm) {
+    private static long replacePseudoRegisters(FunctionAsm functionAsm) {
 
         List<Instruction> instructions = functionAsm.instructions;
 
         boolean returnInMemory = functionAsm.returnInMemory;
         // for varargs functions we reserve 176 bytes (8 bytes for each of 6
-        // GPRs and 16 bytes for each of XMM0-XMM8)
+        // GPRs and 16 bytes for each of XMM0-XMM7)
         long reservedSpace = functionAsm.callsVaStart ? 176 : 0;
         if (returnInMemory) reservedSpace += 8;
-        AtomicLong offset = new AtomicLong(reservedSpace);
+        AtomicLong offset = new AtomicLong(0);
         Map<String, Long> varTable = new HashMap<>();
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
@@ -188,7 +187,7 @@ public class Codegen {
             };
             instructions.set(i, newInst);
         }
-        return offset;
+        return offset.get()+reservedSpace;
     }
 
     private static void fixUpInstructions(FunctionAsm function) {
@@ -581,15 +580,17 @@ public class Codegen {
                 // when that var is written it will update bytes stack-8 to
                 // stack-1
                 varOffset = offsetA.get();
-                varOffset += size;
                 long remainder = varOffset % alignment;
                 if (remainder != 0) {
                     varOffset += (alignment - remainder);
                 }
                 varTable.put(identifier, varOffset);
+                var r = new Memory(SP, varOffset + offsetFromStartOfArray);
+                varOffset += size;
                 offsetA.set(varOffset);
+                return r;
             }
-            return new Memory(BP, -varOffset + offsetFromStartOfArray);
+            return new Memory(SP, varOffset + offsetFromStartOfArray);
 
         } else throw new IllegalArgumentException(identifier);
     }
