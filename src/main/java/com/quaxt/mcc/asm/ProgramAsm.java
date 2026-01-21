@@ -61,8 +61,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
                 case ByteArray(long size, long alignment) ->
-                        size < 9 ? reg.b :
-                                size < 17 ? reg.w : size < 33 ? reg.d : reg.w;
+                        size < 2 ? reg.b :
+                                size < 3 ? reg.w : size < 5 ? reg.d : reg.q;
                 default ->
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
             };
@@ -263,8 +263,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 }
                 o="mov" + switch (t) {
                     case ByteArray(long size, long alignment) ->
-                            size < 9 ? "b" :
-                                    size < 17 ? "w" : size < 33 ? "l" : "q";
+                            size < 2 ? "b" :
+                                    size < 3 ? "w" : size < 5 ? "l" : "q";
                     case BYTE -> "b";
                     case WORD -> "w";
                     case LONGWORD -> "l";

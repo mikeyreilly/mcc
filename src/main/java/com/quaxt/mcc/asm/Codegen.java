@@ -453,8 +453,8 @@ public class Codegen {
             case Array _, Structure _ ->
                     new ByteArray((int) size(type),
                             variableAlignment(type));
-            case WidthRestricted(Type element, int width) -> toTypeAsm(element);
-
+            case WidthRestricted(Type element, int _) -> toTypeAsm(element);
+            case Aligned(Type inner, int _) -> toTypeAsm(inner);
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
         };
@@ -496,14 +496,25 @@ public class Codegen {
             case VarIr(String identifier) -> {
                 Type t = type(val);
                 var ste = SYMBOL_TABLE.get(identifier);
-                if (t instanceof Array || t instanceof Structure)
-                    yield new PseudoMem(identifier, 0);
-
+                int alignment = 0;
+                if (t instanceof Aligned(Type inner, int a)) {
+                    alignment = a;
+                    t = inner;
+                }
+                if (t instanceof Array) {
+                    yield new PseudoMem(identifier, 0, alignment);
+                }
+                if (t instanceof Structure(boolean isUnion, String tag, StructDef structDef)) {
+                    yield new PseudoMem(identifier, 0, TYPE_TABLE.get(tag).alignment());
+                }
                 if (t instanceof FunType && ste.attrs() instanceof FunAttributes) {
                     yield new LabelAddress(identifier);
                 }
-                yield new Pseudo(identifier, toTypeAsm(t),
-                        ste.isStatic(), ste.aliased);
+                var p =
+                        new Pseudo(identifier, toTypeAsm(t), ste.isStatic(),
+                                ste.aliased);
+                p.alignment = alignment;
+                yield p;
             }
             case LongInit(long l) -> new Imm(l);
             case LongLongInit(long l) -> new Imm(l);
@@ -535,16 +546,19 @@ public class Codegen {
                                     AtomicLong offsetA) {
         long offsetFromStartOfArray;
         String identifier;
+        int alignment = 0;
         switch (in) {
             case Imm _, IntegerReg _, Memory _, DoubleReg _, Data _, Indexed _, LabelAddress _:
                 return in;
             case Pseudo p: {
                 identifier = p.identifier;
                 offsetFromStartOfArray = 0;
+                alignment = p.alignment;
                 break;
             }
             case PseudoMem p:
                 identifier = p.identifier();
+                alignment=p.alignment();
                 offsetFromStartOfArray = p.offset();
                 break;
             default:
@@ -555,7 +569,8 @@ public class Codegen {
             assert (!(in instanceof Pseudo p) || type.size() == p.type.size());
 
             long size = type.size();
-            long alignment = type.alignment();
+            if (alignment == 0)
+                alignment = type.alignment();
 
 
             if (isStatic) return new Data(identifier, offsetFromStartOfArray);
@@ -1024,9 +1039,9 @@ public class Codegen {
                 case Memset(VarIr dstV, int c,
                             long byteCount, boolean viaPointer) -> {
                     Operand dst = toOperand(dstV);
-                    if (!viaPointer && dst instanceof PseudoMem(String identifier, long offset1) && offset1==0L) {
+                    if (!viaPointer && dst instanceof PseudoMem(String identifier, long offset1, int alignment) && offset1==0L) {
                         SymbolTableEntry e = Mcc.SYMBOL_TABLE.get(identifier);
-                        dst = new Pseudo(identifier, toTypeAsm(e.type()), e.isStatic(), e.aliased);
+                        dst = new Pseudo(identifier, toTypeAsm(e.type()), e.isStatic(), e.aliased, alignment);
                     }
                     memsetBytes(ins, c, dst, byteCount, viaPointer);
                 }
@@ -1776,7 +1791,7 @@ public class Codegen {
                 long offset = 0;
                 String identifier = switch (v) {
                     case Pseudo p -> p.identifier;
-                    case PseudoMem(String id, long off) -> {
+                    case PseudoMem(String id, long off, int alignment) -> {
                         assert (off == 0);
                         offset = off;
                         yield id;

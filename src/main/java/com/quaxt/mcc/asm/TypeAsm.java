@@ -6,8 +6,8 @@ public sealed interface TypeAsm permits PrimitiveTypeAsm, ByteArray {
 
     long size();
 
-    default long alignment() {
-        return size();
+    default int alignment() {
+        return (int)size();
     }
 
     String suffix();

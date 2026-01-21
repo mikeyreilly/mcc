@@ -689,6 +689,10 @@ void chars() throws Exception {
     }
 
     @Test void alignment() throws Exception{
-        outputs("alignment", "PASS", false, false);
+        outputs("alignment", "PASS\n", false, false);
+    }
+
+    @Test void alignment2() throws Exception{
+        outputs("alignment2", "PASS\n", false, false);
     }
 }

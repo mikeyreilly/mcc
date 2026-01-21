@@ -9,12 +9,20 @@ public final class Pseudo implements Reg {
     public final TypeAsm type;
     public final boolean isStatic;
     public final boolean isAliased;
-
+    public int alignment = 0;
     public Pseudo(String identifier, TypeAsm type, boolean isStatic, boolean isAliased) {
         this.identifier = identifier;
         this.type = type;
         this.isStatic = isStatic;
         this.isAliased = isAliased;
+    }
+
+    public Pseudo(String identifier, TypeAsm type, boolean isStatic, boolean isAliased, int alignment) {
+        this.identifier = identifier;
+        this.type = type;
+        this.isStatic = isStatic;
+        this.isAliased = isAliased;
+        this.alignment = alignment;
     }
 
     @Override

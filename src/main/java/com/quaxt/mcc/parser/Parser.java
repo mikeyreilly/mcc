@@ -36,7 +36,11 @@ public class Parser {
     record PointerDeclarator(Declarator d) implements Declarator {}
     sealed interface DirectDeclarator extends Declarator permits ArrayDeclarator, Ident, FunctionDeclarator {};
     record Ident(String identifier) implements DirectDeclarator {}
-    sealed interface Declarator extends DeclaratorOrAbstractDeclarator permits  DirectDeclarator, PointerDeclarator {}
+    sealed interface Declarator extends DeclaratorOrAbstractDeclarator permits
+            DeclaratorWithAlignment,
+            DirectDeclarator,
+            PointerDeclarator {}
+    record DeclaratorWithAlignment(Declarator d, int alignment) implements Declarator{}
     record ArrayDeclarator(Declarator d, Exp arraySize) implements DirectDeclarator{};
     record FunctionDeclarator(DeclaratorOrAbstractDeclarator d, ParameterTypeList parameterTypeList) implements DirectDeclarator{};
     record ParameterTypeList(
@@ -356,12 +360,12 @@ public class Parser {
 
     private static int getAlignment(Map<String, ArrayList<Token>> attributes) {
         ArrayList<Token> l = attributes.get("aligned");
-        if (!l.isEmpty()) {
-            Token i = l.getFirst();
-            Constant c = parseConstant(i);
-            return (int) c.toLong();
+        if (l == null || l.isEmpty()) {
+            return 0;
         }
-        return 0;
+        Token i = l.getFirst();
+        Constant c = parseConstant(i);
+        return (int) c.toLong();
     }
 
     /* So that things (e.g. structs, unions, enums) can have a name even when in the code they are not given one*/
@@ -807,6 +811,14 @@ public class Parser {
                         tokens);
                 return new NameDeclTypeParams(null, derivedType, new ArrayList<>());
             }
+            case DeclaratorWithAlignment(Declarator d, int alignment):
+            {
+                NameDeclTypeParams inner = processDeclarator(d,
+                         baseType,
+                         typeAliases,
+                         tokens);
+                return new NameDeclTypeParams(inner.name, withAlignment(inner.type, alignment), inner.paramNames);
+            }
         }
 
     }
@@ -857,10 +869,13 @@ public class Parser {
             }
             default -> null;
         };
+        Map<String, ArrayList<Token>> attributes = null;
+
         while(true) {
             t = tokens.getFirst();
             if (t == GCC_ATTRIBUTE) {
-                Parser.stripGccAttribute(tokens);
+                attributes =
+                        Parser.stripGccAttribute(tokens);
             } else if (t == OPEN_BRACKET) {
                 tokens.removeFirst();
                 Constant arraySize=parseArraySize(tokens, typeAliases, labels, enclosingSwitch);
@@ -873,7 +888,13 @@ public class Parser {
                 d = new FunctionDeclarator(d, parameterTypeList);
             } else break;
         }
-        return d;
+
+        int alignment = attributes != null ? getAlignment(attributes) : 0;
+        return alignment == 0 ? d : new DeclaratorWithAlignment(d, alignment);
+    }
+
+    private static Type withAlignment(Type d, int alignment) {
+        return alignment == 0 ? d : new Aligned(d, alignment);
     }
 
     private static ParameterTypeList parseParameterTypeList(TokenList tokens,
@@ -1245,6 +1266,8 @@ public class Parser {
                         fail("can't combine struct or union with other type " + "specifiers");
                     type = new Structure(sous.isUnion(),
                             sous.tag(), null);
+                    int alignment = sous.alignment();
+                    if (alignment != 0) type = new Aligned(type, alignment);
                     structOrUnionSpecifier = sous;
                 }
                 case TypedefName(String name) -> {

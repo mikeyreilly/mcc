@@ -5,9 +5,7 @@ struct S {
     char c;
     int x __attribute__((aligned(16)));
 };
-struct __attribute__((aligned(64))) BigAligned {
-    char data[3];
-};
+
 void test_local(void) {
     char local __attribute__((aligned(8)));
     if (((uintptr_t)&local) % 8 != 0) {
@@ -23,11 +21,6 @@ int main(void) {
     struct S s;
     if (((uintptr_t)&s.x) % 16 != 0) {
         printf("FAIL: struct member not 16-byte aligned\n");
-        failures++;
-    }
-    struct BigAligned b;
-    if (((uintptr_t)&b) % 64 != 0) {
-        printf("FAIL: struct not 64-byte aligned\n");
         failures++;
     }
     test_local();

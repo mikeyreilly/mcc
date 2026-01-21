@@ -11,6 +11,7 @@ import static com.quaxt.mcc.semantic.Primitive.LONG;
 
 public sealed interface Type permits Typeof,
         TypeofT,
+        Aligned,
         Array,
         FunType,
         NullptrT,

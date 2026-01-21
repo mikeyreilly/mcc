@@ -6,6 +6,15 @@ import java.util.List;
 
 public record StructDef(boolean isUnion, int alignment, int size,
                         ArrayList<MemberEntry> members) {
+    public StructDef(boolean isUnion,
+                     int alignment,
+                     int size,
+                     ArrayList<MemberEntry> members) {
+        this.isUnion = isUnion;
+        this.alignment = alignment;
+        this.size = size;
+        this.members = members;
+    }
     public MemberEntry findMember(String member) {
         for (MemberEntry me : members) {
             if (me.name() != null && me.name().equals(member)) return me;

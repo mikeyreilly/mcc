@@ -209,7 +209,7 @@ public class SemanticAnalysis {
         var existing = TYPE_TABLE.get(structDecl.tag());
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
         boolean isUnion = structDecl.isUnion();
-        StructDef sd = new StructDef(isUnion, 0, 0, memberEntries);
+        StructDef sd = new StructDef(isUnion, structDecl.alignment(), 0, memberEntries);
 
         for (MemberDeclaration member : structDecl.members()) {
             var innerSd =
@@ -270,7 +270,7 @@ toInteger(member.bitFieldWidth()));
         if (sd.isUnion()) {
             int offset = 0;
             MemberEntry m = (bitFieldWidth ==
-                    null) ? new OrdinaryMember(name, memberType, offset) :
+                    null) ? new OrdinaryMember(name, memberType, offset, memberAlignment) :
                      new BitFieldMember(name, memberType, offset, 0,
 bitFieldWidth);
             members.add(m);
@@ -282,7 +282,7 @@ bitFieldWidth);
         if (bitFieldWidth == null) {
             // Align struct size to member's alignment.
             int offset = roundUp(sd.size(), memberAlignment);
-            members.add(new OrdinaryMember(name, memberType, offset));
+            members.add(new OrdinaryMember(name, memberType, offset, memberAlignment));
             int newSize = offset + memberSize;
             return new StructDef(false, structAlignment, newSize, members);
         }
@@ -2091,6 +2091,7 @@ commonType);
                     new TypeofT(resolveType(innerType, identifierMap,
                      structureMap, enclosingFunction));
             case WidthRestricted _ -> typeSpecifier;
+            case Aligned _ -> typeSpecifier;
         };
     }
 
@@ -2522,9 +2523,9 @@ structureMap, enclosingFunction);
         }
 
         return new VarDecl(new Var(uniqueName, null), resolveInitializer(init
- , identifierMap, structureMap, enclosingFunction),
- resolveType(decl.varType(), identifierMap, structureMap,
- enclosingFunction), decl.storageClass(), sous);
+                , identifierMap, structureMap, enclosingFunction),
+         resolveType(decl.varType(), identifierMap, structureMap,
+          enclosingFunction), decl.storageClass(), sous);
     }
 
     private static Initializer resolveInitializer(Initializer init,
