@@ -757,6 +757,12 @@ public class IrGen {
                         new ConstantAttr(new StringInit(s, true))));
                 return emitTacky(SemanticAnalysis.typeCheckExpression(new Var(uniqueName, type)), instructions, inlineFunctions);
             }
+            case Alignof(Exp exp): {
+                return new PlainOperand(new ULongInit(Mcc.typeAlignment(exp.type())));
+            }
+            case AlignofT(Type t): {
+                return new PlainOperand(new ULongInit(Mcc.typeAlignment(t)));
+            }
             case SizeOf(Exp exp): {
                 return new PlainOperand(new ULongInit(Mcc.size(exp.type())));
             }

@@ -1860,7 +1860,20 @@ commonType);
                 }
                 yield exp;
             }
-
+            case Alignof(Exp e) -> {
+                Exp typedE = typeCheckExpression(e);
+                if (!isComplete(typedE.type())) {
+                    fail("Complete type required here");
+                }
+                yield new Alignof(typedE);
+            }
+            case AlignofT(Type typeToSize) -> {
+                validateTypeSpecifier(typeToSize);
+                if (!isComplete(typeToSize)) {
+                    fail("Complete type required here");
+                }
+                yield exp;
+            }
             case Arrow(Exp pointer, String member, Type _) -> {
                 Exp typedPointer = typeCheckAndConvert(pointer);
                 if (typedPointer.type() instanceof Pointer(Type structure) &&
@@ -2638,6 +2651,12 @@ enclosingFunction), type);
             case SizeOfT(Type type) ->
                     new SizeOfT(resolveType(type, identifierMap, structureMap
                     , enclosingFunction));
+            case Alignof(Exp e) ->
+                    new Alignof(resolveExp(e, identifierMap, structureMap,
+                            enclosingFunction));
+            case AlignofT(Type type) ->
+                    new AlignofT(resolveType(type, identifierMap, structureMap
+                            , enclosingFunction));
             case Offsetof(Structure structure, String member) ->
                     new Offsetof((Structure) resolveType(structure,
                      identifierMap, structureMap, enclosingFunction), member);

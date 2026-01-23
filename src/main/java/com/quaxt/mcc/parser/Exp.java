@@ -1,7 +1,8 @@
 package com.quaxt.mcc.parser;
 import com.quaxt.mcc.semantic.Type;
 
-sealed public interface Exp extends Statement, ForInit permits AddrOf,
+sealed public interface Exp extends Statement, ForInit permits AddrOf, AlignofT,
+        Alignof,
         Arrow,
         Assignment,
         BinaryOp,

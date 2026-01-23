@@ -30,7 +30,7 @@ public enum TokenType implements Token {
     BUILTIN_VA_ARG, BUILTIN_VA_END, CASE, CHAR, CONST, CONTINUE, DEFAULT, DO,
     DOUBLE, ELSE, ENUM, EXTERN, FALSE, FLOAT, FOR, GCC_ATTRIBUTE, GENERIC,
     GOTO, IF, INLINE, INT, LONG, NULLPTR, REGISTER, RESTRICT, RETURN, SHORT, SIGNED,
-    SIZEOF, STATIC, STRUCT, SWITCH, TRUE, TYPEDEF, TYPEOF, UNION, UNSIGNED,
+    SIZEOF, ALIGNOF, ALIGNAS, STATIC, STRUCT, SWITCH, TRUE, TYPEDEF, TYPEOF, UNION, UNSIGNED,
     VOID, VOLATILE, WHILE, DECREMENT("--"), INCREMENT("\\+\\+"),
     BITWISE_NOT("~"), NOT("!"), QUESTION_MARK("\\?"), COLON(":"),
     OPEN_BRACKET("\\["), CLOSE_BRACKET("\\]"), ARROW("->"),
@@ -67,6 +67,8 @@ public enum TokenType implements Token {
     public String toString() {
         return switch (this) {
             case ARROW -> "->";
+            case ALIGNOF -> "alignof";
+            case ALIGNAS -> "alignas";
             case ASM -> "__asm__";
             case BITWISE_NOT -> "bitwise_not";
             case BREAK -> "break";

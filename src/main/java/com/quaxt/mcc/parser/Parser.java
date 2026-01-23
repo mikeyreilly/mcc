@@ -84,7 +84,10 @@ public class Parser {
                     value.equals("_NoReturn")) {
                     tokens.removeFirst();
             } else if (tokens.getFirst() == GCC_ATTRIBUTE) {
-                stripGccAttribute(tokens);
+                stripGccAttribute(tokens,
+                        typeAliases,
+                        labels,
+                        enclosingSwitch);
             }
             else break;
         }
@@ -297,8 +300,10 @@ public class Parser {
         Map<String, ArrayList<Token>> attributes ;
         int alignment = 0;
         if (first == GCC_ATTRIBUTE) {
-            attributes = stripGccAttribute(tokens);
-            alignment=getAlignment(attributes);
+            attributes =
+                    stripGccAttribute(tokens, typeAliases, labels,
+                            enclosingSwitch);
+            alignment = getAlignment(attributes);
             first = tokens.getFirst();
         }
         if (first instanceof TokenWithValue(Token type,
@@ -408,11 +413,7 @@ public class Parser {
         Token token = null;
         while(!tokens.isEmpty()) {
             token = tokens.getFirst();
-            if (token == GCC_ATTRIBUTE) {
-                stripGccAttribute(tokens);
-            } else if (token == ASM) {
-                stripAsm(tokens);
-            } else if (token == CONST) {
+            if (token == CONST) {
                 tokens.removeFirst();
             } else {
                 if (expected == token.type()) {
@@ -427,7 +428,11 @@ public class Parser {
 
     }
 
-    public static Map<String, ArrayList<Token>> stripGccAttribute(TokenList tokens) {
+    public static Map<String, ArrayList<Token>> stripGccAttribute(TokenList tokens,
+                                                                  ArrayList<Map<String,
+                                                                          Type>> typeAliases,
+                                                                  List<String> labels,
+                                                                  Switch enclosingSwitch) {
         int cursorAtStart = tokens.cursor;
         tokens.removeFirst();
         Map<String,ArrayList<Token>> attributes = new HashMap<>();
@@ -446,7 +451,14 @@ public class Parser {
                         value = value.substring(2, len - 2);
                     }
 
-                    attributes.put(value, readAttributeArgs(tokens));
+                    attributes.put(value, readAttributeArgs(
+                            tokens,
+                            typeAliases,
+                            labels,
+                            enclosingSwitch
+
+
+                    ));
 
                 }
             }
@@ -460,12 +472,20 @@ public class Parser {
         }
     }
 
-    private static ArrayList<Token> readAttributeArgs(TokenList tokens) {
+    private static ArrayList<Token> readAttributeArgs(TokenList tokens,
+                                                      ArrayList<Map<String,
+                                                              Type>> typeAliases,
+                                                      List<String> labels,
+                                                      Switch enclosingSwitch) {
         ArrayList<Token> l = new ArrayList<>();
         Token t = tokens.getFirst();
         if (t == OPEN_PAREN) {
             tokens.removeFirst();
             while (true) {
+                var e = parseExp(tokens, 0,
+                false,
+                typeAliases, labels,
+                        enclosingSwitch);
                 t = tokens.getFirst();
                 if (t == CLOSE_PAREN) {
                     tokens.removeFirst();
@@ -481,27 +501,30 @@ public class Parser {
         return l;
     }
 
-    private static void stripAsm(TokenList tokens) {
-        int cursorAtStart = tokens.cursor;
-        tokens.removeFirst();
+    public static void stripAsm(TokenList tokens) {
+        Token token = tokens.getFirst();
+        if (token == ASM) {
+            int cursorAtStart = tokens.cursor;
+            tokens.removeFirst();
 
-        if (tokens.removeFirst() == OPEN_PAREN ) {
-            int openCount = 1;
-            while (!tokens.isEmpty()) {
-                Token t = tokens.removeFirst();
-                if (t == OPEN_PAREN) openCount++;
-                if (t == CLOSE_PAREN) {
-                    openCount--;
-                    if (openCount == 0) return;
+            if (tokens.removeFirst() == OPEN_PAREN ) {
+                int openCount = 1;
+                while (!tokens.isEmpty()) {
+                    Token t = tokens.removeFirst();
+                    if (t == OPEN_PAREN) openCount++;
+                    if (t == CLOSE_PAREN) {
+                        openCount--;
+                        if (openCount == 0) return;
+                    }
                 }
+                tokens.cursor = cursorAtStart;
+                throw makeErr("Error parsing __asm__. I never found closing \")\""
+                        , tokens);
+            } else {
+                tokens.cursor = cursorAtStart;
+                throw makeErr("Error: __attribute__ should be followed by \"(\""
+                        , tokens);
             }
-            tokens.cursor = cursorAtStart;
-            throw makeErr("Error parsing __asm__. I never found closing \")\""
-                    , tokens);
-        } else {
-            tokens.cursor = cursorAtStart;
-            throw makeErr("Error: __attribute__ should be followed by \"(\""
-                    , tokens);
         }
     }
 
@@ -509,7 +532,7 @@ public class Parser {
                                     Switch enclosingSwitch,
                                     ArrayList<Map<String, Type>> typeAliases) {
         while (tokens.getFirst() == GCC_ATTRIBUTE) {
-            stripGccAttribute(tokens);
+            stripGccAttribute(tokens, typeAliases, labels, enclosingSwitch);
         }
 
         Token token = tokens.getFirst();
@@ -875,7 +898,8 @@ public class Parser {
             t = tokens.getFirst();
             if (t == GCC_ATTRIBUTE) {
                 attributes =
-                        Parser.stripGccAttribute(tokens);
+                        Parser.stripGccAttribute(tokens, typeAliases, labels,
+                                enclosingSwitch);
             } else if (t == OPEN_BRACKET) {
                 tokens.removeFirst();
                 Constant arraySize=parseArraySize(tokens, typeAliases, labels, enclosingSwitch);
@@ -1082,7 +1106,10 @@ public class Parser {
 
             Token token = tokens.getFirst();
             if (token == GCC_ATTRIBUTE){
-                stripGccAttribute(tokens);
+                stripGccAttribute(tokens,
+                        typeAliases,
+                        labels,
+                        enclosingSwitch);
             } else if (token.equals(SEMICOLON)) {
                 tokens.removeFirst();
                 break out;
@@ -1343,8 +1370,14 @@ public class Parser {
         }
 
         Block block;
+        var labels=new ArrayList<String>();
+        stripAsm(tokens);
+        while (tokens.getFirst() == GCC_ATTRIBUTE) {
+            stripGccAttribute(tokens, typeAliases, labels, null);
+            stripAsm(tokens);
+        }
         if (tokens.getFirst() == OPEN_BRACE) {
-            block = parseBlock(tokens, new ArrayList<>(), null, typeAliases);
+            block = parseBlock(tokens, labels, null, typeAliases);
         } else {
             expect(SEMICOLON, tokens);
             block = null;
@@ -1375,8 +1408,8 @@ public class Parser {
 
         while (tokens.getFirst() != CLOSE_BRACE) {
             // parse block-item
-            while(tokens.getFirst()==GCC_ATTRIBUTE){
-                stripGccAttribute(tokens);
+            while (tokens.getFirst() == GCC_ATTRIBUTE) {
+                stripGccAttribute(tokens, typeAliases, labels, enclosingSwitch);
             }
             Token t = tokens.getFirst();
             if (t == EXTERN || t == STATIC || t == TYPEDEF || t == REGISTER
@@ -1506,6 +1539,18 @@ public class Parser {
                     yield new SizeOfT(typeNameToType(typeName, tokens, typeAliases, labels, enclosingSwitch));
                 } else {
                     yield new SizeOf(parseUnaryExp(tokens, typeAliases, labels, enclosingSwitch));
+                }
+            }
+            case ALIGNOF -> {
+                tokens.removeFirst();
+                if (tokens.getFirst() == OPEN_PAREN && isTypeSpecifier(tokens
+                        , 1, typeAliases)) {
+                    tokens.removeFirst();
+                    TypeName typeName = parseTypeName(tokens, typeAliases, labels, enclosingSwitch);
+                    expect(CLOSE_PAREN, tokens);
+                    yield new AlignofT(typeNameToType(typeName, tokens, typeAliases, labels, enclosingSwitch));
+                } else {
+                    yield new Alignof(parseUnaryExp(tokens, typeAliases, labels, enclosingSwitch));
                 }
             }
             default -> parsePostfixExp(tokens, typeAliases, labels, enclosingSwitch);
@@ -1678,7 +1723,8 @@ public class Parser {
         //                   generic-selection
 
         while (tokens.getFirst() == GCC_ATTRIBUTE) {
-            stripGccAttribute(tokens);
+            stripGccAttribute(tokens, typeAliases, labels,
+                    enclosingSwitch);
         }
         return switch (tokens.getFirst()) {
             case BUILTIN_VA_ARG -> {

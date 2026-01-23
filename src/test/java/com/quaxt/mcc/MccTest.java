@@ -409,6 +409,11 @@ void chars() throws Exception {
     void sizeof_test()  throws Exception {
         returns("sizeof", 16);
     }
+
+    @Test void alignof() throws Exception{
+        returns("alignof", 8);
+    }
+
     @Test
     void struct_no_such_member_test()  {
         Err thrown = assertThrows(Err.class, () -> returns("struct_no_such_member", 0));
