@@ -711,6 +711,7 @@ public class Codegen {
                 DoubleReg r = DOUBLE_REGISTERS[i];
                 instructionAsms.add(new Mov(DOUBLE, doubleArg, r));
             }
+            int correction = stackPadding;
             for (int i = stackArguments.size() - 1; i >= 0; i--) {
                 TypedOperand to = stackArguments.get(i);
                 TypeAsm assemblyType = to.type();
@@ -720,8 +721,12 @@ public class Codegen {
                             SP));
                     copyBytes(instructionAsms, operand, new Memory(SP, 0),
                             size);
-                } else if (operand instanceof Imm || operand instanceof IntegerReg || assemblyType == QUADWORD || assemblyType == DOUBLE) {
-                    instructionAsms.add(new Push(operand));
+                } else if (operand instanceof Imm ||
+                        operand instanceof IntegerReg ||
+                        assemblyType == QUADWORD || assemblyType == DOUBLE) {
+                    instructionAsms.add(new Push(translate(operand,
+                            correction)));
+                    correction += 8;
                 } else {
                     instructionAsms.add(new Mov(assemblyType, operand, AX));
                     instructionAsms.add(new Push(AX));
@@ -763,6 +768,22 @@ public class Codegen {
                 }
             }
         }
+    }
+
+    /**
+     * When pushing operands onto the stack for a function call it messes up our
+     * local variables because they are offsets from SP - this function adjusts them
+     * so the correct values can be pushed
+     * */
+    private static Operand translate(Operand operand, int bytesToAdd) {
+        if (operand instanceof Memory(IntegerReg reg, long offset) && reg == SP) {
+            return new Memory(SP, offset+bytesToAdd);
+        } else if (operand instanceof PseudoMem(String identifier, long offset, int alignment)) {
+            return new PseudoMem(identifier, offset+bytesToAdd, alignment);
+        } else if (operand instanceof Pseudo p) {
+            return new PseudoMem(p.identifier, bytesToAdd, p.alignment);
+        }
+        return operand;
     }
 
     private static void copyBytesFromReg(List<Instruction> ins,
@@ -1456,6 +1477,7 @@ public class Codegen {
 
                     // reg_save_area The element points to the start of the
                     // register save area.
+                    ins.add(new Comment("Reg save area"));
                     ins.add(new Lea(new Memory(BP, -176),
                             new PseudoMem(vaList.identifier(), 16)));
                 }

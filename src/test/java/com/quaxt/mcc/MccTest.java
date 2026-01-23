@@ -273,7 +273,7 @@ class MccTest {
 
     @Test
     void varargs_struct()  throws Exception {
-        returns("varargs_struct", 163);
+        returns("varargs_struct", 163, false, false);
     }
 
     @Test
@@ -281,6 +281,16 @@ class MccTest {
         returns("varargs_struct2", 163);
     }
 
+    @Test
+    void big_struct_passed_on_stack()  throws Exception {
+        returns("big_struct_passed_on_stack", 55);
+    }
+
+    @Test void simple_struct() throws Exception{
+        outputs("simple_struct", "0\n" + "1\n" + "2\n" + "3\n" + "4\n" + "5\n" + "6\n" + "7\n" +
+                "8\n" + "9\n" + "10\n" + "11\n" + "12\n" + "13\n" + "14\n" +
+                "15\n", false, true);
+    }
     @Test
     void short_test()  throws Exception {
         returns("short", 5);
