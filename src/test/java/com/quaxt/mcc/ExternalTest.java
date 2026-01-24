@@ -19,21 +19,33 @@ public class ExternalTest {
     void gccTorture() throws Exception {
         Path tortureSrcFiles = Paths.get(System.getProperty("user.home"),"opt/gcc/gcc/testsuite/gcc.c-torture/execute");
         if (Files.exists(tortureSrcFiles)) {
-            ArrayList<Path> l =
-                    (ArrayList<Path>) Files.list(tortureSrcFiles).sorted((o1, o2) -> {
-                        try {
-                            return Long.compare(Files.size(o1), Files.size(o2));
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }).collect(Collectors.toList());
-            for (int i =0;i<l.size();i++) {
-                Path p=l.get(i);
-                if (p.toString().endsWith(".c")) {
-                    System.out.println(i+"/"+l.size()+":"+p);
-                    matchesGcc(p, false, false);
+            try (var filesStream = Files.list(tortureSrcFiles)) {
+                ArrayList<Path> l =
+                        (ArrayList<Path>) filesStream.sorted((o1, o2) -> {
+                            try {
+                                return Long.compare(Files.size(o1),
+                                        Files.size(o2));
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }).collect(Collectors.toList());
+                for (int i = 0; i < l.size(); i++) {
+                    Path p = l.get(i);
+                    if (p.toString().endsWith(".c")) {
+                        System.out.println(i + "/" + l.size() + ":" + p);
+                        matchesGcc(p, false, false);
+                    }
                 }
             }
         }
+    }
+
+    @Test
+    public void foo() throws Exception {
+        matchesGcc(torturePath("align-3"), false, false);
+    }
+
+    private Path torturePath(String s) {
+        return Paths.get(System.getProperty("user.home"), "opt/gcc/gcc/testsuite/gcc.c-torture/execute", s+".c");
     }
 }

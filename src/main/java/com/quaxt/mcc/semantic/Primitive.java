@@ -15,15 +15,15 @@ public enum Primitive implements Type {
     DOUBLE(new DoubleInit(0)), FLOAT(new DoubleInit(0)), VOID(new UIntInit(0)),
     BOOL(new BoolInit((byte)0));
 
-    private final StaticInit zero;
+    private final Constant<?> zero;
     public Initializer zeroInitializer;
 
-    Primitive(StaticInit zero) {
+    Primitive(Constant<?> zero) {
         this.zero = zero;
         this.zeroInitializer = new SingleInit((Constant) zero, this);
     }
 
-    public StaticInit zero() {
+    public Constant<?> zero() {
         return zero;
     }
 

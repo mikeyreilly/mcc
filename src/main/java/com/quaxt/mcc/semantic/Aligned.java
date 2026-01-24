@@ -1,5 +1,7 @@
 package com.quaxt.mcc.semantic;
 
+import com.quaxt.mcc.parser.Constant;
+
 public record Aligned(Type inner, int alignment) implements Type {
 
     @Override

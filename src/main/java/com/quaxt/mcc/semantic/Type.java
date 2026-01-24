@@ -2,6 +2,7 @@ package com.quaxt.mcc.semantic;
 
 import com.quaxt.mcc.Err;
 import com.quaxt.mcc.StaticInit;
+import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Typeof;
 import com.quaxt.mcc.parser.TypeofT;
 import com.quaxt.mcc.tacky.ValIr;
@@ -19,7 +20,7 @@ public sealed interface Type permits Typeof,
         Primitive,
         Structure,
         WidthRestricted {
-    default StaticInit zero() {
+    default Constant<?> zero() {
         throw new Err(this + " has no zero");
     }
 
