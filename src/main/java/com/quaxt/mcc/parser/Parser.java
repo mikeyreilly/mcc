@@ -40,7 +40,7 @@ public class Parser {
             DeclaratorWithAlignment,
             DirectDeclarator,
             PointerDeclarator {}
-    record DeclaratorWithAlignment(Declarator d, int alignment) implements Declarator{}
+    record DeclaratorWithAlignment(Declarator d, Exp alignment) implements Declarator{}
     record ArrayDeclarator(Declarator d, Exp arraySize) implements DirectDeclarator{};
     record FunctionDeclarator(DeclaratorOrAbstractDeclarator d, ParameterTypeList parameterTypeList) implements DirectDeclarator{};
     record ParameterTypeList(
@@ -298,7 +298,7 @@ public class Parser {
         tokens.removeFirst(); //struct-or-union
         Token first = tokens.getFirst();
         Map<String, ArrayList<Exp>> attributes ;
-        int alignment = 0;
+        Exp alignment = null;
         if (first == GCC_ATTRIBUTE) {
             attributes =
                     stripGccAttribute(tokens, typeAliases, labels,
@@ -360,17 +360,17 @@ public class Parser {
             anonymous = true;
             tag = generatePseudoIdentifier();
         }
-        return new StructOrUnionSpecifier(isUnion, tag, members, anonymous, alignment);
+        return new StructOrUnionSpecifier(isUnion, tag, members, anonymous,
+                alignment);
     }
 
-    private static int getAlignment(Map<String, ArrayList<Exp>> attributes) {
+    private static Exp getAlignment(Map<String, ArrayList<Exp>> attributes) {
+        if (attributes == null) return null;
         ArrayList<Exp> l = attributes.get("aligned");
         if (l == null || l.isEmpty()) {
-            return 0;
+            return null;
         }
-        Exp i = l.getFirst();
-        Constant c = (Constant) i;
-        return (int) c.toLong();
+        return l.getFirst();
     }
 
     /* So that things (e.g. structs, unions, enums) can have a name even when in the code they are not given one*/
@@ -833,7 +833,7 @@ public class Parser {
                         tokens);
                 return new NameDeclTypeParams(null, derivedType, new ArrayList<>());
             }
-            case DeclaratorWithAlignment(Declarator d, int alignment):
+            case DeclaratorWithAlignment(Declarator d, Exp alignment):
             {
                 NameDeclTypeParams inner = processDeclarator(d,
                          baseType,
@@ -912,12 +912,12 @@ public class Parser {
             } else break;
         }
 
-        int alignment = attributes != null ? getAlignment(attributes) : 0;
-        return alignment == 0 ? d : new DeclaratorWithAlignment(d, alignment);
+        var alignment = getAlignment(attributes);
+        return alignment == null ? d : new DeclaratorWithAlignment(d, alignment);
     }
 
-    private static Type withAlignment(Type d, int alignment) {
-        return alignment == 0 ? d : new Aligned(d, alignment);
+    private static Type withAlignment(Type d, Exp alignment) {
+        return alignment == null ? d : new Aligned(d, alignment);
     }
 
     private static ParameterTypeList parseParameterTypeList(TokenList tokens,
@@ -1292,8 +1292,8 @@ public class Parser {
                         fail("can't combine struct or union with other type " + "specifiers");
                     type = new Structure(sous.isUnion(),
                             sous.tag(), null);
-                    int alignment = sous.alignment();
-                    if (alignment != 0) type = new Aligned(type, alignment);
+                    var alignment = sous.alignment();
+                    if (alignment != null) type = new Aligned(type, alignment);
                     structOrUnionSpecifier = sous;
                 }
                 case TypedefName(String name) -> {

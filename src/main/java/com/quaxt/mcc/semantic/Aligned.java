@@ -1,8 +1,8 @@
 package com.quaxt.mcc.semantic;
 
-import com.quaxt.mcc.parser.Constant;
+import com.quaxt.mcc.parser.Exp;
 
-public record Aligned(Type inner, int alignment) implements Type {
+public record Aligned(Type inner, Exp alignment) implements Type {
 
     @Override
     public boolean looseEquals(Type other) {

@@ -6,7 +6,7 @@ public record StructOrUnionSpecifier(boolean isUnion,
                                      String tag,
                                      ArrayList<MemberDeclaration> members,
                                      boolean isAnonymous,
-                                     int alignment) implements Declaration, TypeSpecifier {
+                                     Exp alignment) implements Declaration, TypeSpecifier {
     public StructOrUnionSpecifier withTag(String tag) {
         return new StructOrUnionSpecifier(isUnion, tag, members, isAnonymous, alignment);
     }

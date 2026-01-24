@@ -123,7 +123,7 @@ public class Mcc {
                 var st = TYPE_TABLE.get(tag);
                 yield st == null ? 1 : st.alignment();
             }
-            case Aligned(Type t, int alignment) -> alignment;
+            case Aligned(Type t, Exp alignment) -> (int)SemanticAnalysis.evaluateExpAsConstant(alignment).toLong();
             default -> throw new IllegalStateException("Unexpected value: " + type);
         };
     }
@@ -148,7 +148,7 @@ public class Mcc {
             case DOUBLE -> 8;
             case VOID -> 1;
             case Structure(boolean isUnion, String tag, StructDef _) -> TYPE_TABLE.get(tag).alignment();
-            case Aligned(Type _, int alignment) -> alignment;
+            case Aligned(Type _, Exp alignment) -> (int)SemanticAnalysis.evaluateExpAsConstant(alignment).toLong();
             default -> throw new IllegalStateException("Unexpected value: " + type);
         };
     }
@@ -183,7 +183,7 @@ public class Mcc {
             case Typeof typeof -> 0L;
             case TypeofT typeofT -> 0L;
             case WidthRestricted(Type element, int _) -> size(element);
-            case Aligned(Type inner, int _) -> size(inner);
+            case Aligned(Type inner, Exp _) -> size(inner);
         };
     }
 

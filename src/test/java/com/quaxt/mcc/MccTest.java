@@ -707,7 +707,9 @@ void chars() throws Exception {
     @Test void alignment2() throws Exception{
         outputs("alignment2", "PASS\n", false, false);
     }
-
+    @Test void alignment2b() throws Exception{
+        outputs("alignment2b", "PASS\n", false, false);
+    }
     @Test void alignment3() throws Exception{
         outputs("alignment3", "alignof(foo)=1\n" + "alignof(bar)=256\n");
     }

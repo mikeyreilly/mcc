@@ -209,7 +209,10 @@ public class SemanticAnalysis {
         var existing = TYPE_TABLE.get(structDecl.tag());
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
         boolean isUnion = structDecl.isUnion();
-        StructDef sd = new StructDef(isUnion, structDecl.alignment(), 0, memberEntries);
+        var alignment=structDecl.alignment();
+        StructDef sd = new StructDef(isUnion, alignment ==
+                null ? 0 :
+                (int) SemanticAnalysis.evaluateExpAsConstant(alignment).toLong(), 0, memberEntries);
 
         for (MemberDeclaration member : structDecl.members()) {
             var innerSd =
@@ -2210,7 +2213,8 @@ resolveFileScopeVariableDeclaration(varDecl,
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,
-         processedMembers, decl.isAnonymous(), decl.alignment());
+                processedMembers, decl.isAnonymous(), resolveExp(decl.alignment(),
+          identifierMap, structureMap, enclosingFunction));
     }
 
     /*
@@ -2230,7 +2234,7 @@ resolveFileScopeVariableDeclaration(varDecl,
             resolveStructureDeclaration(new StructOrUnionSpecifier(isUnion,
              tag, null,
                     tag ==
-                            null, 0), identifierMap, structureMap,
+                            null, null), identifierMap, structureMap,
                              enclosingFunction);
         }
     }

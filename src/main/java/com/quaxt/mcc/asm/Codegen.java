@@ -453,7 +453,7 @@ public class Codegen {
                     new ByteArray((int) size(type),
                             variableAlignment(type));
             case WidthRestricted(Type element, int _) -> toTypeAsm(element);
-            case Aligned(Type inner, int _) -> toTypeAsm(inner);
+            case Aligned(Type inner, Exp _) -> toTypeAsm(inner);
             default ->
                     throw new IllegalStateException("Unexpected value: " + type);
         };
@@ -496,8 +496,9 @@ public class Codegen {
                 Type t = type(val);
                 var ste = SYMBOL_TABLE.get(identifier);
                 int alignment = 0;
-                if (t instanceof Aligned(Type inner, int a)) {
-                    alignment = a;
+                if (t instanceof Aligned(Type inner, Exp a)) {
+                    alignment =
+                            (int) SemanticAnalysis.evaluateExpAsConstant(a).toLong();
                     t = inner;
                 }
                 if (t instanceof Array) {
@@ -571,10 +572,10 @@ public class Codegen {
             if (alignment == 0)
                 alignment = type.alignment();
 
-            if (alignment > 16 && alignment > functionAsm.stackAlignment)
-                functionAsm.stackAlignment = alignment;
 
             if (isStatic) return new Data(identifier, offsetFromStartOfArray);
+            if (alignment > 16 && alignment > functionAsm.stackAlignment)
+                functionAsm.stackAlignment = alignment;
 
             Long varOffset = varTable.get(identifier);
             if (varOffset == null) {
