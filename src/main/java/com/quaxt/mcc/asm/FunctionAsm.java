@@ -14,6 +14,7 @@ public final class FunctionAsm implements AsmNode, TopLevelAsm {
     public Pair<Integer, Integer> returnRegisters;
     public long stackSize;
     public boolean callsVaStart;
+    public long stackAlignment;
 
     public FunctionAsm(String name, boolean global, boolean returnInMemory,
                        List<Instruction> instructions,

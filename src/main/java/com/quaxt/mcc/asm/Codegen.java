@@ -138,49 +138,49 @@ public class Codegen {
             Instruction oldInst = instructions.get(i);
             Instruction newInst = switch (oldInst) {
                 case Call(Operand p, FunType t) ->
-                        new Call(dePseudo(p, varTable, offset), t);
+                        new Call(dePseudo(p, varTable, offset, functionAsm), t);
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ->
                         oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
-                        new Mov(typeAsm, dePseudo(src, varTable, offset),
-                                dePseudo(dst, varTable, offset));
+                        new Mov(typeAsm, dePseudo(src, varTable, offset, functionAsm),
+                                dePseudo(dst, varTable, offset, functionAsm));
                 case Xchg(TypeAsm typeAsm, Operand src, Operand dst) ->
-                        new Xchg(typeAsm, dePseudo(src, varTable, offset),
-                                dePseudo(dst, varTable, offset));
+                        new Xchg(typeAsm, dePseudo(src, varTable, offset, functionAsm),
+                                dePseudo(dst, varTable, offset, functionAsm));
                 case Unary(UnaryOperator op, TypeAsm typeAsm,
                            Operand operand) ->
                         new Unary(op, typeAsm, dePseudo(operand, varTable,
-                                offset));
+                                offset, functionAsm));
                 case Binary(ArithmeticOperator op, TypeAsm typeAsm, Operand src,
                             Operand dst) ->
                         new Binary(op, typeAsm, dePseudo(src, varTable,
-                                offset), dePseudo(dst, varTable, offset));
+                                offset, functionAsm), dePseudo(dst, varTable, offset, functionAsm));
 
                 case Cmp(TypeAsm typeAsm, Operand subtrahend,
                          Operand minuend) ->
                         new Cmp(typeAsm, dePseudo(subtrahend, varTable,
-                                offset), dePseudo(minuend, varTable, offset));
+                                offset, functionAsm), dePseudo(minuend, varTable, offset, functionAsm));
                 case SetCC(CmpOperator cmpOperator, boolean signed,
                            Operand operand) ->
                         new SetCC(cmpOperator, signed, dePseudo(operand,
-                                varTable, offset));
+                                varTable, offset, functionAsm));
                 case Push(Operand operand) ->
-                        new Push(dePseudo(operand, varTable, offset));
+                        new Push(dePseudo(operand, varTable, offset, functionAsm));
                 case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                            Operand dst) ->
                         new Movsx(srcType, dstType, dePseudo(src, varTable,
-                                offset), dePseudo(dst, varTable, offset));
+                                offset, functionAsm), dePseudo(dst, varTable, offset, functionAsm));
                 case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
                                    Operand src, Operand dst) ->
                         new MovZeroExtend(srcType, dstType, dePseudo(src,
-                                varTable, offset), dePseudo(dst, varTable,
-                                offset));
+                                varTable, offset, functionAsm), dePseudo(dst, varTable,
+                                offset, functionAsm));
                 case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
                         new Cvt(srcType, dstType, dePseudo(src, varTable,
-                                offset), dePseudo(dst, varTable, offset));
+                                offset, functionAsm), dePseudo(dst, varTable, offset, functionAsm));
                 case Lea(Operand src, Operand dst) ->
-                        new Lea(dePseudo(src, varTable, offset), dePseudo(dst
-                                , varTable, offset));
+                        new Lea(dePseudo(src, varTable, offset, functionAsm), dePseudo(dst
+                                , varTable, offset, functionAsm));
                 case Comment comment -> comment;
                 case Literal l -> l;
                 default -> throw new IllegalStateException("Unexpected value: " + oldInst);
@@ -542,7 +542,7 @@ public class Codegen {
     * of an aggregate or if it is a pointer
     * */
     private static Operand dePseudo(Operand in, Map<String, Long> varTable,
-                                    AtomicLong offsetA) {
+                                    AtomicLong offsetA, FunctionAsm functionAsm) {
         long offsetFromStartOfArray;
         String identifier;
         int alignment = 0;
@@ -571,6 +571,8 @@ public class Codegen {
             if (alignment == 0)
                 alignment = type.alignment();
 
+            if (alignment > 16 && alignment > functionAsm.stackAlignment)
+                functionAsm.stackAlignment = alignment;
 
             if (isStatic) return new Data(identifier, offsetFromStartOfArray);
 

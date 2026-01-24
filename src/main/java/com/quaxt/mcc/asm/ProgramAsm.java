@@ -9,6 +9,7 @@ import java.io.StringWriter;
 import java.util.List;
 import java.util.Locale;
 
+import static com.quaxt.mcc.ArithmeticOperator.BITWISE_AND;
 import static com.quaxt.mcc.ArithmeticOperator.SUB;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
@@ -232,6 +233,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
 
         emitInstruction(out, new Binary(SUB, QUADWORD,
                 new Imm(calculateStackAdjustment(stackSize, calleeSavedCount)), SP));
+
+        var stackAlignment = functionAsm.stackAlignment;
+        if (stackAlignment != 0)
+            emitInstruction(out, new Binary(BITWISE_AND, QUADWORD,
+                    new Imm(-stackAlignment), SP));
+
         // push in reverse direction so we can pop in forward direction
         for (int i = calleeSavedRegs.length - 1; i >= 0; i--) {
             IntegerReg r = calleeSavedRegs[i];
