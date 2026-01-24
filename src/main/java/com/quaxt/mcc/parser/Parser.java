@@ -297,7 +297,7 @@ public class Parser {
 
         tokens.removeFirst(); //struct-or-union
         Token first = tokens.getFirst();
-        Map<String, ArrayList<Token>> attributes ;
+        Map<String, ArrayList<Exp>> attributes ;
         int alignment = 0;
         if (first == GCC_ATTRIBUTE) {
             attributes =
@@ -363,13 +363,13 @@ public class Parser {
         return new StructOrUnionSpecifier(isUnion, tag, members, anonymous, alignment);
     }
 
-    private static int getAlignment(Map<String, ArrayList<Token>> attributes) {
-        ArrayList<Token> l = attributes.get("aligned");
+    private static int getAlignment(Map<String, ArrayList<Exp>> attributes) {
+        ArrayList<Exp> l = attributes.get("aligned");
         if (l == null || l.isEmpty()) {
             return 0;
         }
-        Token i = l.getFirst();
-        Constant c = parseConstant(i);
+        Exp i = l.getFirst();
+        Constant c = (Constant) i;
         return (int) c.toLong();
     }
 
@@ -428,14 +428,14 @@ public class Parser {
 
     }
 
-    public static Map<String, ArrayList<Token>> stripGccAttribute(TokenList tokens,
+    public static Map<String, ArrayList<Exp>> stripGccAttribute(TokenList tokens,
                                                                   ArrayList<Map<String,
                                                                           Type>> typeAliases,
                                                                   List<String> labels,
                                                                   Switch enclosingSwitch) {
         int cursorAtStart = tokens.cursor;
         tokens.removeFirst();
-        Map<String,ArrayList<Token>> attributes = new HashMap<>();
+        Map<String,ArrayList<Exp>> attributes = new HashMap<>();
         if (tokens.removeFirst() == OPEN_PAREN && tokens.removeFirst() == OPEN_PAREN) {
             int openCount = 2;
             while (!tokens.isEmpty()) {
@@ -456,8 +456,6 @@ public class Parser {
                             typeAliases,
                             labels,
                             enclosingSwitch
-
-
                     ));
 
                 }
@@ -472,20 +470,16 @@ public class Parser {
         }
     }
 
-    private static ArrayList<Token> readAttributeArgs(TokenList tokens,
-                                                      ArrayList<Map<String,
+    private static ArrayList<Exp> readAttributeArgs(TokenList tokens,
+                                                    ArrayList<Map<String,
                                                               Type>> typeAliases,
-                                                      List<String> labels,
-                                                      Switch enclosingSwitch) {
-        ArrayList<Token> l = new ArrayList<>();
+                                                    List<String> labels,
+                                                    Switch enclosingSwitch) {
+        ArrayList<Exp> l = new ArrayList<>();
         Token t = tokens.getFirst();
         if (t == OPEN_PAREN) {
             tokens.removeFirst();
             while (true) {
-                var e = parseExp(tokens, 0,
-                false,
-                typeAliases, labels,
-                        enclosingSwitch);
                 t = tokens.getFirst();
                 if (t == CLOSE_PAREN) {
                     tokens.removeFirst();
@@ -493,8 +487,13 @@ public class Parser {
                 } else if (t==COMMA) {
                     tokens.removeFirst();
                 } else {
-                    l.add(t);
-                    tokens.removeFirst();
+                    var e = parseExp(tokens, 0,
+                            false,
+                            typeAliases, labels,
+                            enclosingSwitch);
+
+                    l.add(e);
+
                 }
             }
         }
@@ -892,7 +891,7 @@ public class Parser {
             }
             default -> null;
         };
-        Map<String, ArrayList<Token>> attributes = null;
+        Map<String, ArrayList<Exp>> attributes = null;
 
         while(true) {
             t = tokens.getFirst();
