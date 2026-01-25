@@ -1629,7 +1629,6 @@ public class Parser {
 
     public static Constant parseConstant(Token token) {
         if (token == TRUE) {
-
             return BoolInit.TRUE;
         } else if (token == FALSE) {
             return BoolInit.FALSE;
@@ -1672,7 +1671,7 @@ public class Parser {
                             isHex, isLongLong);
                 }
                 case CHAR_LITERAL: {
-                    return new IntInit(parseChar(value));
+                    return parseChar(value);
                 }
                 default:
                     break;
@@ -1682,35 +1681,51 @@ public class Parser {
         return null;
     }
 
-    private static int parseChar(String s) {
+    private static Constant<?> parseChar(String s) {
         int len = s.length();
-        if (len == 1) {
-            return s.charAt(0);
+        if (len == 3) { //fast path
+            return new CharInit((byte) s.charAt(1));
         }
-        assert (s.charAt(0) == '\\');
-        char c = s.charAt(1);
-        return switch (c) {
-        case '\'' -> '\'';
-        case '\"' -> '\"';
-        case '?' -> '?';
-        case '\\' -> '\\';
-        case 'a' -> 7;
-        case 'b' -> '\b';
-        case 'f' -> '\f';
-        case 'n' -> '\n';
-        case 'r' -> '\r';
-        case 't' -> '\t';
-        case 'v' -> 11;
-        default -> {
-            if (c>='0' && c<='7'){
-                yield (char) (0xff &
-                    Integer.parseInt(s.substring(1), 8));
-            } else if (c=='x'){
-                yield (char) (0xff &
-                        Integer.parseInt(s.substring(2), 16));
-            }else throw new AssertionError(c);
-        }
+        int end = len - 1;
+        return switch(s.charAt(0)){
+            case '\'' -> new CharInit((byte) (0xff & parseCharHelper(1, end, s)));
+            case 'u' -> new UShortInit((short) (0xffff & parseCharHelper(2, end, s)));
+            case 'U' -> new UIntInit(parseCharHelper(2, end, s));
+            case 'L' -> new IntInit(parseCharHelper(2, end, s));
+            default->throw new AssertionError();
         };
+    }
+
+    private static int parseCharHelper(int start, int end, String s) {
+        int r;
+        if (end - start == 1) { //fast path
+            r = s.charAt(start);
+        } else if (s.charAt(start) == '\\') {
+            int c = s.charAt(start + 1);
+            r =  switch (c) {
+                case '\'' -> '\'';
+                case '\"' -> '\"';
+                case '?' -> '?';
+                case '\\' -> '\\';
+                case 'a' -> 7;
+                case 'b' -> '\b';
+                case 'f' -> '\f';
+                case 'n' -> '\n';
+                case 'r' -> '\r';
+                case 't' -> '\t';
+                case 'v' -> 11;
+                default -> {
+                    if (c >= '0' && c <= '7') {
+                        yield Integer.parseInt(s.substring(start + 1, end), 8);
+                    } else if (c == 'x') {
+                        yield Integer.parseInt(s.substring(start + 2, end), 16);
+                    } else throw new AssertionError(c);
+                }
+            };
+        } else {
+            throw new AssertionError();
+        }
+        return r;
     }
 
 

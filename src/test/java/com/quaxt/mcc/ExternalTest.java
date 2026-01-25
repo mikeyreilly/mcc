@@ -42,7 +42,7 @@ public class ExternalTest {
 
     @Test
     public void foo() throws Exception {
-        matchesGcc(torturePath("align-3"), false, false);
+        matchesGcc(torturePath("20001017-1"), false, false);
     }
 
     private Path torturePath(String s) {

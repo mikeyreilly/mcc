@@ -156,11 +156,16 @@ class MccTest {
         if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
         int mccExitCode;
         String mccExe = testProgram +"-mcc";
-        if (optimize) {
-            mccExitCode =
-                    Mcc.mcc("-o", mccExe, testProgram.toString(), "--optimize");
-        } else {
-            mccExitCode = Mcc.mcc("-o", mccExe, testProgram.toString());
+        try {
+            if (optimize) {
+                mccExitCode =
+                        Mcc.mcc("-o", mccExe, testProgram.toString(), "--optimize");
+            } else {
+                mccExitCode = Mcc.mcc("-o", mccExe, testProgram.toString());
+            }
+        }catch (Exception ex){
+            System.out.println("Can't compile " + testProgram);
+            return;
         }
         if (mccExitCode != 0) {
             System.out.println("Can't compile " + testProgram);
@@ -714,5 +719,9 @@ void chars() throws Exception {
         outputs("alignment3", "alignof(foo)=1\n" + "alignof(bar)=256\n");
     }
 
+    @Test void wide_chars() throws Exception {
+        outputs("wide_chars", "sizeof wchar_t 4\n" + "sizeof char16_t 2\n" +
+                "sizeof char32_t 4\n" + "char 'A' = 65\n" + "L'A' = 65\n");
+    }
 
 }

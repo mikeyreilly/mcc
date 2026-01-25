@@ -4,9 +4,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public enum TokenType implements Token {
-    IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
-    OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"), CHAR_LITERAL("'([^'\\\\\n" +
+    CHAR_LITERAL("([LuU]?)'([^'\\\\\n" +
             "]|\\\\['\"\\\\?abfnrtv0-7x][0-9a-fA-F]*)'"),
+    IDENTIFIER("[a-zA-Z_]\\w*\\b"), OPEN_PAREN("\\("), CLOSE_PAREN("\\)"),
+    OPEN_BRACE("\\{"), CLOSE_BRACE("\\}"),
     STRING_LITERAL("\"([^\"\\\\\n]|\\\\['\"\\\\?abfnrtvox]|\\\\[0-7]{1,3})*\""),
     DOUBLE_LITERAL("((([0-9]*\\.[0-9]+|[0-9]+\\.?)[Ee][+-]?[0-9]+|[0-9]*\\.[0-9]+|[0-9]+\\.)[lL]?)[^\\w.]", 1),
     FLOAT_LITERAL(
