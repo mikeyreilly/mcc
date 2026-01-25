@@ -114,7 +114,8 @@ public class Lexer {
                             String value = src.substring(start, end);
                             Token token = switch (value) {
                                 case "_Atomic" -> ATOMIC;
-                                case "alignof", "_Alignof" -> ALIGNOF;
+                                case "alignof", "_Alignof", "__alignof__" ->
+                                        ALIGNOF;
                                 case "alignas", "_Alignas" -> ALIGNAS;
                                 case "_Bool" -> BOOL;
                                 case "_Float32" -> FLOAT;

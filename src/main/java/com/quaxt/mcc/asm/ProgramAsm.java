@@ -2,6 +2,7 @@ package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
 import com.quaxt.mcc.semantic.FunType;
+import com.quaxt.mcc.semantic.SemanticAnalysis;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
@@ -195,6 +196,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         if (functionAsm.global)
             out.println("                .globl	" + name);
         out.println("                .text");
+        FunType t= (FunType) Mcc.SYMBOL_TABLE.get(functionAsm.name).type();
+        var alignment = t.alignment();
+        if (alignment != null) {
+            long l = SemanticAnalysis.evaluateExpAsConstant(alignment).toLong();
+            out.println("                .balign " + l);
+        }
         out.println(name + ":");
         List<Instruction> instructions = functionAsm.instructions;
         printIndent(out, "pushq\t%rbp");

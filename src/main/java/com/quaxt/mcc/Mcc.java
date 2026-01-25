@@ -131,7 +131,9 @@ public class Mcc {
     public static int typeAlignment(Type type) {
         return switch (type) {
             case Array(Type element, Constant _) -> Mcc.typeAlignment(element);
-            case FunType _ -> 0;
+            case FunType(List<Type> params, Type ret, boolean varargs,
+                         Exp alignment) -> alignment ==
+                    null ? 1 : (int) SemanticAnalysis.evaluateExpAsConstant(alignment).toLong();
             case Pointer _, NullptrT _ -> 8;
             case CHAR -> 1;
             case UCHAR -> 1;

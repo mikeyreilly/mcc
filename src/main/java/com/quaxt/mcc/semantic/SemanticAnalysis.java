@@ -830,10 +830,11 @@ false);
         boolean global = decl.storageClass != STATIC;
         SymbolTableEntry oldEntry = SYMBOL_TABLE.get(decl.name);
         boolean alreadyDefined = false;
-        FunType funType = new FunType(adjustedParams, ret, varargs);
+        Exp alignment = decl.funType.alignment();
+        FunType funType = new FunType(adjustedParams, ret, varargs, alignment);
         if (oldEntry instanceof SymbolTableEntry ste) {
             var oldType = ste.type();
-            if (oldType instanceof FunType) {
+            if (oldType instanceof FunType ft) {
                 alreadyDefined = oldEntry.attrs().defined();
                 if (alreadyDefined && defined)
                     fail("already defined: " + decl.name);
@@ -841,8 +842,12 @@ false);
                 if (oldEntry.attrs().global() && decl.storageClass == STATIC)
                     fail("Static function declaration follows non-static");
                 global = oldEntry.attrs().global();
-                if (!funType.equals(oldType))
+                if (alignment == null && ft.alignment() != null) {
+                    funType = funType.withAlignment(ft.alignment());
+                }
+                if (!funType.equals(ft))
                     fail("Incompatible function declarations for " + decl.name);
+
             } else {
                 fail("Incompatible function declarations for " + decl.name);
             }
@@ -1038,7 +1043,7 @@ enclosingFunction), label);
                     throw new Err("Illegal array of incomplete type");
                 validateTypeSpecifier(element);
             }
-            case FunType(List<Type> params, Type ret, boolean varargs) -> {
+            case FunType(List<Type> params, Type ret, boolean _, Exp _) -> {
                 validateTypeSpecifier(ret);
                 for (Type p : params) {
                     validateTypeSpecifier(p);
@@ -1697,7 +1702,7 @@ commonType);
                 }
                 yield switch (fType) {
                     case FunType(List<Type> params, Type ret,
-                                 boolean varargs) -> {
+                                 boolean varargs, Exp alignment) -> {
                         if (varargs ?
                                 args.size() < params.size() :
                                 params.size() != args.size())
@@ -2094,9 +2099,12 @@ commonType);
                 yield new Array(resolveType(element, identifierMap,
                  structureMap, enclosingFunction), size);
             }
-            case FunType(List<Type> params, Type ret, boolean varargs) ->
+            case FunType(List<Type> params, Type ret, boolean varargs, Exp alignment) ->
                     new FunType(params.stream().map(p -> resolveType(p,
-                     identifierMap, structureMap, enclosingFunction)).toList(), resolveType(ret, identifierMap, structureMap, enclosingFunction), varargs);
+                     identifierMap, structureMap, enclosingFunction)).toList(), resolveType(ret, identifierMap, structureMap, enclosingFunction), varargs,
+                            resolveExp(alignment, identifierMap, structureMap,
+                                    enclosingFunction)
+                    );
             case Primitive primitive -> primitive;
             case NullptrT nullptrT -> nullptrT;
             case Typeof(Exp exp) ->
@@ -2325,9 +2333,11 @@ innerStructureMap, function);
                                           Map<String, TagEntry> structureMap,
                                           Function enclosingFunction) {
         return new FunType(funType.params().stream().map(p -> resolveType(p,
-         identifierMap, structureMap, enclosingFunction)).toList(),
-          resolveType(funType.ret(), identifierMap, structureMap,
-           enclosingFunction), funType.varargs());
+                identifierMap, structureMap, enclosingFunction)).toList(),
+                resolveType(funType.ret(), identifierMap, structureMap,
+                  enclosingFunction), funType.varargs(),
+            resolveExp(funType.alignment(), identifierMap, structureMap,
+             enclosingFunction));
     }
 
     private static List<Var> resolveParams(List<Var> parameters,

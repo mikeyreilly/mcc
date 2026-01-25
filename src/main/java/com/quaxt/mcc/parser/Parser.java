@@ -816,7 +816,7 @@ public class Parser {
                     paramTypes.add(type);
                 }
                 FunType derivedType =
-                        new FunType(paramTypes, baseType, varargs);
+                        new FunType(paramTypes, baseType, varargs, null);
                 if (d instanceof Ident(String name)) {
                     return new NameDeclTypeParams(name, derivedType, paramNames);
                 } else if (d instanceof PointerDeclarator(Declarator decl)) {
@@ -917,7 +917,11 @@ public class Parser {
     }
 
     private static Type withAlignment(Type d, Exp alignment) {
-        return alignment == null ? d : new Aligned(d, alignment);
+        if (alignment == null) return d;
+        if (d instanceof FunType f){
+            return f.withAlignment(alignment);
+        }
+        return new Aligned(d, alignment);
     }
 
     private static ParameterTypeList parseParameterTypeList(TokenList tokens,
