@@ -724,4 +724,11 @@ void chars() throws Exception {
                 "sizeof char32_t 4\n" + "char 'A' = 65\n" + "L'A' = 65\n");
     }
 
+    @Test void lea() throws Exception {
+        outputs("lea", "a[0]=11\n" + "b[0]=13\n", false, true);
+    }
+    @Test void lea_double() throws Exception {
+        outputs("lea-double", "a[0]=11.500000\n" + "b[0]=13.500000\n", false, true);
+    }
+
 }

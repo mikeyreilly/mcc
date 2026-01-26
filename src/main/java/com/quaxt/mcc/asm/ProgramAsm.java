@@ -9,6 +9,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.quaxt.mcc.ArithmeticOperator.BITWISE_AND;
 import static com.quaxt.mcc.ArithmeticOperator.SUB;
@@ -21,7 +22,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         out.println("\t" + s);
     }
 
-    private static String formatOperand(Instruction s, Operand o) {
+    private static String formatOperand(Instruction s, Operand o, AtomicInteger stackCorrection) {
         return switch (o) {
             case Imm(long i) -> "$" + i;
             case Pseudo p -> p.identifier;
@@ -31,6 +32,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                 default -> reg.d;
             };
             case Memory(IntegerReg reg, long offset) ->
+                    (reg == SP) ?
+                    (offset + stackCorrection.get()) + "(%" + reg.q + ")" :
                     offset + "(%" + reg.q + ")";
             case Data(String identifier, long offset) -> {
                 boolean isConstant =
@@ -55,7 +58,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
     }
 
 
-    private static String formatOperand(TypeAsm t, Instruction s, Operand o) {
+    private static String formatOperand(TypeAsm t, Instruction s, Operand o, AtomicInteger stackCorrection) {
         if (o instanceof IntegerReg reg) {
             return "%" + switch (t) {
                 case BYTE -> reg.b;
@@ -76,7 +79,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
             };
         }
-        return formatOperand(s, o);
+        return formatOperand(s, o, stackCorrection);
     }
 
     public void emitAsm(PrintWriter out) {
@@ -237,37 +240,38 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     """ + end.label() + ":");
         }
 
-
+        AtomicInteger stackCorrection = new AtomicInteger(0);
         emitInstruction(out, new Binary(SUB, QUADWORD,
-                new Imm(calculateStackAdjustment(stackSize, calleeSavedCount)), SP));
+                new Imm(calculateStackAdjustment(stackSize, calleeSavedCount)), SP), stackCorrection);
 
         var stackAlignment = functionAsm.stackAlignment;
         if (stackAlignment != 0)
             emitInstruction(out, new Binary(BITWISE_AND, QUADWORD,
-                    new Imm(-stackAlignment), SP));
+                    new Imm(-stackAlignment), SP), stackCorrection);
 
         // push in reverse direction so we can pop in forward direction
         for (int i = calleeSavedRegs.length - 1; i >= 0; i--) {
             IntegerReg r = calleeSavedRegs[i];
-            emitInstruction(out, new Push(r));
+            emitInstruction(out, new Push(r), stackCorrection);
         }
         for (Instruction instruction : instructions) {
-            emitInstruction(out, instruction);
+            emitInstruction(out, instruction, stackCorrection);
 
         }
 
     }
 
-    public static String formatInstruction(Instruction instruction) {
+    public static String formatInstruction(Instruction instruction, AtomicInteger stackCorrection) {
         StringWriter sw = new StringWriter();
         try (PrintWriter p = new PrintWriter(sw)) {
-            emitInstruction(p, instruction);
+            emitInstruction(p, instruction, stackCorrection);
         }
         return sw.toString();
     }
 
     private static void emitInstruction(PrintWriter out,
-                                        Instruction instruction) {
+                                        Instruction instruction,
+                                        AtomicInteger stackCorrection) {
         String s = switch (instruction) {
             case Mov(TypeAsm t, Operand src, Operand dst) -> {
 
@@ -289,17 +293,17 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
 
 
                 yield o +
-                        formatOperand(t, instruction, src) + ", " +
-                        formatOperand(t, instruction, dst);
+                        formatOperand(t, instruction, src, stackCorrection) + ", " +
+                        formatOperand(t, instruction, dst, stackCorrection);
             }
             case Xchg(TypeAsm t, Operand src, Operand dst) ->
                     instruction.format(t) + formatOperand(t, instruction,
-                            src) + ", " + formatOperand(t, instruction, dst);
+                            src, stackCorrection) + ", " + formatOperand(t, instruction, dst, stackCorrection);
             case Lea(Operand src, Operand dst) ->
-                    "leaq\t" + formatOperand(QUADWORD, instruction, src) + ","
-                            + " " + formatOperand(QUADWORD, instruction, dst);
+                    "leaq\t" + formatOperand(QUADWORD, instruction, src, stackCorrection) + ","
+                            + " " + formatOperand(QUADWORD, instruction, dst, stackCorrection);
             case Push(Operand arg) ->
-                    "pushq\t" + formatOperand(QUADWORD, instruction, arg);
+                    "pushq\t" + formatOperand(QUADWORD, instruction, arg, stackCorrection);
 
             case Nullary.RET -> {
                 printIndent(out, "movq\t%rbp, %rsp");
@@ -311,20 +315,20 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
                     op == UnaryOperator.BSWAP && t == WORD ?
                             "rolw\t" + "$8, " +
-                                    formatOperand(t, instruction, operand) :
+                                    formatOperand(t, instruction, operand, stackCorrection) :
                             instruction.format(t) +
-                                    formatOperand(t, instruction, operand);
+                                    formatOperand(t, instruction, operand, stackCorrection);
             case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
                     instruction.format(t) + formatOperand(t, instruction,
-                            subtrahend) + ", " + formatOperand(t, instruction
-                            , minuend);
+                            subtrahend, stackCorrection) + ", " + formatOperand(t, instruction
+                            , minuend, stackCorrection);
             case Binary(ArithmeticOperator op, TypeAsm t, Operand src,
                         Operand dst) -> {
                 String srcF = formatOperand(switch(op){
                     case SHL, SAR, SHR -> BYTE;
                     default -> t;
-                }, instruction, src);
-                String dstF = formatOperand(t, instruction, dst);
+                }, instruction, src, stackCorrection);
+                String dstF = formatOperand(t, instruction, dst, stackCorrection);
                 yield instruction.format(t) + srcF + ", " + dstF;
             }
             case Jump(String label) -> {
@@ -333,7 +337,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case LabelIr(String label) -> label + ":";
             case SetCC(CmpOperator cmpOperator, boolean unsigned, Operand o) ->
                     "set" + (unsigned ? cmpOperator.unsignedCode :
-                            cmpOperator.code) + "\t" + formatOperand(instruction, o);
+                            cmpOperator.code) + "\t" + formatOperand(instruction, o, stackCorrection);
             case JmpCC(CC cc,
                        String label) ->
                     "j" + cc.name().toLowerCase(Locale.ENGLISH) + "\t" +label;
@@ -343,25 +347,25 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                         yield "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
                                 functionName : functionName + "@PLT");
                     }
-                    else yield "call\t" + "*"+formatOperand(QUADWORD, instruction, address);
+                    else yield "call\t" + "*"+formatOperand(QUADWORD, instruction, address, stackCorrection);
                     }
             case Cdq(TypeAsm t) -> instruction.format(t);
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                        Operand dst) -> {
-                String srcF = formatOperand(srcType, instruction, src);
-                String dstF = formatOperand(dstType, instruction, dst);
+                String srcF = formatOperand(srcType, instruction, src, stackCorrection);
+                String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
                 yield "movs" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
             case MovZeroExtend(TypeAsm srcType, TypeAsm dstType, Operand src,
                                Operand dst) -> {
-                String srcF = formatOperand(srcType, instruction, src);
-                String dstF = formatOperand(dstType, instruction, dst);
+                String srcF = formatOperand(srcType, instruction, src, stackCorrection);
+                String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
                 yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
             case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                 if (srcType.isInteger()) {
-                    String srcF = formatOperand(srcType, instruction, src);
-                    String dstF = formatOperand(dstType, instruction, dst);
+                    String srcF = formatOperand(srcType, instruction, src, stackCorrection);
+                    String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
                     yield (srcType == QUADWORD
                             ? dstType == DOUBLE
                             ? "cvtsi2sdq\t"
@@ -373,8 +377,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                             ", " +
                             dstF;
                 } else {
-                    String srcF = formatOperand(srcType, instruction, src);
-                    String dstF = formatOperand(dstType, instruction, dst);
+                    String srcF = formatOperand(srcType, instruction, src, stackCorrection);
+                    String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
 
                     if (srcType == DOUBLE) {
                         yield dstType == FLOAT ?
@@ -397,15 +401,21 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Comment(String comment) -> "# " + comment;
             case Literal(String string) -> string;
             case Pop(IntegerReg arg) ->
-                    "popq\t" + formatOperand(instruction, arg);
+                    "popq\t" + formatOperand(instruction, arg, stackCorrection);
             case Test(TypeAsm t, Operand src1, Operand src2) ->
                     instruction.format(t) + formatOperand(t, instruction,
-                            src1) + formatOperand(t, instruction, src2);
+                            src1, stackCorrection) + formatOperand(t, instruction, src2, stackCorrection);
+            case SetStackOffset(int bytesToAdd) -> {
+                stackCorrection.set(bytesToAdd);
+                yield null;
+            }
         };
-        if (instruction instanceof LabelIr) {
-            out.println(s);
-        } else {
-            printIndent(out, s);
+        if (s != null) {
+            if (instruction instanceof LabelIr) {
+                out.println(s);
+            } else {
+                printIndent(out, s);
+            }
         }
     }
 

@@ -139,8 +139,8 @@ public class Codegen {
             Instruction newInst = switch (oldInst) {
                 case Call(Operand p, FunType t) ->
                         new Call(dePseudo(p, varTable, offset, functionAsm), t);
-                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ->
-                        oldInst;
+                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ,   Literal _,
+                     SetStackOffset _ -> oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
                         new Mov(typeAsm, dePseudo(src, varTable, offset, functionAsm),
                                 dePseudo(dst, varTable, offset, functionAsm));
@@ -182,7 +182,6 @@ public class Codegen {
                         new Lea(dePseudo(src, varTable, offset, functionAsm), dePseudo(dst
                                 , varTable, offset, functionAsm));
                 case Comment comment -> comment;
-                case Literal l -> l;
                 default -> throw new IllegalStateException("Unexpected value: " + oldInst);
             };
             instructions.set(i, newInst);
@@ -694,6 +693,9 @@ public class Codegen {
                 instructionAsms.add(new Binary(SUB, QUADWORD,
                         new Imm(stackPadding), SP));
             }
+            int correction = stackPadding;
+            if (correction != 0)
+                instructionAsms.add(new SetStackOffset(correction));
 
             //pass args in registers
             for (TypedOperand integerArg : integerArguments) {
@@ -714,7 +716,6 @@ public class Codegen {
                 DoubleReg r = DOUBLE_REGISTERS[i];
                 instructionAsms.add(new Mov(DOUBLE, doubleArg, r));
             }
-            int correction = stackPadding;
             for (int i = stackArguments.size() - 1; i >= 0; i--) {
                 TypedOperand to = stackArguments.get(i);
                 TypeAsm assemblyType = to.type();
@@ -727,9 +728,9 @@ public class Codegen {
                 } else if (operand instanceof Imm ||
                         operand instanceof IntegerReg ||
                         assemblyType == QUADWORD || assemblyType == DOUBLE) {
-                    instructionAsms.add(new Push(translate(operand,
-                            correction)));
+                    instructionAsms.add(new Push(operand));
                     correction += 8;
+                    instructionAsms.add(new SetStackOffset(correction));
                 } else {
                     instructionAsms.add(new Mov(assemblyType, operand, AX));
                     instructionAsms.add(new Push(AX));
@@ -745,6 +746,7 @@ public class Codegen {
                 instructionAsms.add(new Binary(ADD, QUADWORD,
                         new Imm(bytesToRemove), SP));
             }
+            instructionAsms.add(new SetStackOffset(0));
             //retrieve return value
             if (dst != null && !returnInMemory) {// dst is null for void
                 // functions
@@ -773,21 +775,21 @@ public class Codegen {
         }
     }
 
-    /**
-     * When pushing operands onto the stack for a function call it messes up our
-     * local variables because they are offsets from SP - this function adjusts them
-     * so the correct values can be pushed
-     * */
-    private static Operand translate(Operand operand, int bytesToAdd) {
-        if (operand instanceof Memory(IntegerReg reg, long offset) && reg == SP) {
-            return new Memory(SP, offset+bytesToAdd);
-        } else if (operand instanceof PseudoMem(String identifier, long offset, int alignment)) {
-            return new PseudoMem(identifier, offset+bytesToAdd, alignment);
-        } else if (operand instanceof Pseudo p) {
-            return new PseudoMem(p.identifier, bytesToAdd, p.alignment);
-        }
-        return operand;
-    }
+//    /**
+//     * When pushing operands onto the stack for a function call it messes up our
+//     * local variables because they are offsets from SP - this function adjusts them
+//     * so the correct values can be pushed
+//     * */
+//    private static Operand translate(Operand operand, int bytesToAdd) {
+//        if (operand instanceof Memory(IntegerReg reg, long offset) && reg == SP) {
+//            return new Memory(SP, offset+bytesToAdd);
+//        } else if (operand instanceof PseudoMem(String identifier, long offset, int alignment)) {
+//            return new PseudoMem(identifier, offset+bytesToAdd, alignment);
+//        } else if (operand instanceof Pseudo p) {
+//            return new PseudoMem(p.identifier, bytesToAdd, p.alignment);
+//        }
+//        return operand;
+//    }
 
     private static void copyBytesFromReg(List<Instruction> ins,
                                          IntegerReg srcReg, Operand dstOp,

@@ -46,12 +46,6 @@ public class RegisterAllocator {
         replacePseudoRegs(instructions, registerMaps.value());
     }
 
-    private static void debugInstructions(List<Instruction> instructions) {
-        for (var in : instructions) {
-            System.out.print(ProgramAsm.formatInstruction(in));
-        }
-    }
-
     private static void rewriteCoalesced(List<Instruction> instructions,
                                          Map<Operand, Operand> coalescedRegs) {
         int copyTo = 0;
@@ -72,7 +66,7 @@ public class RegisterAllocator {
                     }
                 }
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _,
-                     Comment _, Literal _ -> instructions.set(copyTo++, oldInst);
+                     Comment _, Literal _, SetStackOffset _ -> instructions.set(copyTo++, oldInst);
                 case Call(Operand operand, FunType t) -> {
                      instructions.set(copyTo++,
                              new Call(find(operand,
@@ -472,7 +466,7 @@ public class RegisterAllocator {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, src, dst);
                 }
-                case Cdq cdq -> {
+                case Cdq _, SetStackOffset _ -> {
                 }
                 case Cmp(TypeAsm type, Operand subtrahend, Operand minuend) -> {
                     incrementSpillCost(interferenceGraph,
@@ -574,26 +568,6 @@ public class RegisterAllocator {
         return new Pair<>(interferenceGraphGpr, interferenceGraphMmx);
     }
 
-    private static void debugAnnotations(FunctionAsm functionAsm,
-                                         List<CfgNode> cfg,
-                                         HashMap<Integer, Set<Operand>[]> instructionAnnotations) {
-        System.out.println("-----------------" + functionAsm.name);
-
-        for (int i = 0; i < cfg.size(); i++) {
-            var node = cfg.get(i);
-            if (node instanceof BasicBlock<?>) {
-                var block = (BasicBlock<Instruction>) node;
-                List<Instruction> instructions = block.instructions();
-                for (int j = 0; j < instructions.size(); j++) {
-                    Set<Operand> liveRegisters =
-                            instructionAnnotations.get(i)[j];
-                    System.out.println(liveRegisters.stream().map(x -> x instanceof Pseudo p ? p.identifier : String.valueOf(x)).sorted().collect(Collectors.joining(", ")));
-
-                    System.out.print(ProgramAsm.formatInstruction(instructions.get(j)));
-                }
-            }
-        }
-    }
 
     /* p. 636*/
     private static void addEdges(List<CfgNode> cfg,
@@ -618,7 +592,8 @@ public class RegisterAllocator {
                         }
                         for (Operand u : updated) {
                             var interferenceGraph =
-                                    u instanceof DoubleReg || (u instanceof Pseudo p && !(p.type.isInteger())) ? interferenceGraphMmx : interferenceGraphGpr;
+                                    isMmx(u)
+                                            ? interferenceGraphMmx : interferenceGraphGpr;
                             Node nodeForU =
                                     findNodeForOperand(interferenceGraph, u);
                             if (nodeForU != null && graphContains(interferenceGraph, l) && !Objects.equals(l, u)) {
@@ -629,6 +604,10 @@ public class RegisterAllocator {
                 }
             }
         }
+    }
+
+    private static boolean isMmx(Operand u) {
+        return u instanceof DoubleReg || (u instanceof Pseudo p && !(p.type.isInteger()));
     }
 
     private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
@@ -694,8 +673,7 @@ public class RegisterAllocator {
                     maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);
                     maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
                 }
-                case Cdq _ -> {
-                }
+                case Cdq _, SetStackOffset _ -> {}
                 case Cmp(TypeAsm _, Operand subtrahend, Operand minuend) -> {
                     maybeAddPseudo(subtrahend, interferenceGraph,
                             inteferenceGraphMmx);
@@ -761,7 +739,6 @@ public class RegisterAllocator {
                 add(op, p.type.isInteger() ? interferenceGraphGpr : interferenceGraphMmx);
             }
         }
-
     }
 
     private static Node add(Operand op, List<Node> interferenceGraph) {
