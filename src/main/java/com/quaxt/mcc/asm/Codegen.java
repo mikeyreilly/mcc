@@ -734,6 +734,8 @@ public class Codegen {
                 } else {
                     instructionAsms.add(new Mov(assemblyType, operand, AX));
                     instructionAsms.add(new Push(AX));
+                    correction += 8;
+                    instructionAsms.add(new SetStackOffset(correction));
                 }
             }
             if (varargs) {

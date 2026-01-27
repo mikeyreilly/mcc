@@ -378,6 +378,10 @@ public class Mcc {
                 };
 
                 typedef struct __builtin_va_list_item  __builtin_va_list[1];
+                void abort (void);
+                inline void __builtin_abort (void) {
+                    abort();
+                }
                 """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null,null);
         BUILTIN_VA_LIST =
                 (Array) Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
