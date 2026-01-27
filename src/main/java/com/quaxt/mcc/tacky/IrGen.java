@@ -1168,6 +1168,19 @@ public class IrGen {
                 instructions.add(new CopyToOffset(newVal, base, offset));
                 yield post ? new PlainOperand(old) : lval;
             }
+            case BitFieldSubObject(VarIr base, int byteOffset, int bitOffset,
+                                   int bitWidth) -> {
+                VarIr newVal = makeTemporary("newVal.", exp.type());
+                VarIr old = makeTemporary("old.", exp.type());
+
+                instructions.add(new CopyBitsFromOffset(base, byteOffset, bitOffset, bitWidth, newVal));
+                instructions.add(new Copy(newVal, old));
+                handleCompoundOperatorHelper(newOp, instructions, newVal,
+                        right, commonType, lvalueType);
+
+                instructions.add(new CopyBitsToOffset(newVal, base, byteOffset, bitOffset, bitWidth));
+                yield post ? new PlainOperand(old) : lval;
+            }
             default -> throw new Todo();
         };
     }

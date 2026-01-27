@@ -153,30 +153,22 @@ class MccTest {
     static void matchesGcc(Path testProgram,
                            boolean optimize,
                            boolean disableRegisterAllocator) throws Exception {
-        if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
-        int mccExitCode;
-        String mccExe = testProgram +"-mcc";
-        try {
-            if (optimize) {
-                mccExitCode =
-                        Mcc.mcc("-o", mccExe, testProgram.toString(), "--optimize");
-            } else {
-                mccExitCode = Mcc.mcc("-o", mccExe, testProgram.toString());
-            }
-        }catch (Exception ex){
-            System.out.println("Can't compile " + testProgram);
-            return;
-        }
-        if (mccExitCode != 0) {
-            System.out.println("Can't compile " + testProgram);
-            return;
-        }
 
         String trustedExe = testProgram + "-gcc";
         List<String>    gccOptions=extractGccOptions(testProgram);
         int gccExitCode = assembleAndLink(testProgram, false, gccOptions, trustedExe);
-        assertEquals(0, gccExitCode);
+        if (gccExitCode!=0) {return;}
         var expected = startProcessAndCaptureOutput(trustedExe);
+        if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
+        int mccExitCode;
+        String mccExe = testProgram +"-mcc";
+        if (optimize) {
+            mccExitCode =
+                    Mcc.mcc("-o", mccExe, testProgram.toString(), "--optimize");
+        } else {
+            mccExitCode = Mcc.mcc("-o", mccExe, testProgram.toString());
+        }
+        assert (mccExitCode == 0);
         Mcc.registerAllocatorDisabled = false;
         assertEquals(expected, startProcessAndCaptureOutput(
                  mccExe));
@@ -729,6 +721,10 @@ void chars() throws Exception {
     }
     @Test void lea_double() throws Exception {
         outputs("lea-double", "a[0]=11.500000\n" + "b[0]=13.500000\n", false, true);
+    }
+
+    @Test void bitfield_with_compound_assignment() throws Exception {
+        returns("bitfield_with_compound_assignment", 0);
     }
 
 }

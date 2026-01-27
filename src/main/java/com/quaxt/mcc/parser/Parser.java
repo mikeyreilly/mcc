@@ -79,15 +79,15 @@ public class Parser {
             } else if (tokens.getFirst() == INLINE){
                 tokens.removeFirst();
                 l.add(FunctionSpecifier.INLINE);
-            }else if (tokens.getFirst() instanceof
-                    TokenWithValue(Token type, String value) && type == IDENTIFIER &&
-                    value.equals("_NoReturn")) {
-                    tokens.removeFirst();
+            } else if (tokens.getFirst() instanceof TokenWithValue(Token type,
+                                                                   String value) &&
+                    type == IDENTIFIER && value.equals("_NoReturn")) {
+                tokens.removeFirst();
             } else if (tokens.getFirst() == GCC_ATTRIBUTE) {
-                stripGccAttribute(tokens,
-                        typeAliases,
-                        labels,
-                        enclosingSwitch);
+                Map<String, ArrayList<Exp>> attribute =
+                        stripGccAttribute(tokens, typeAliases, labels,
+                                enclosingSwitch);
+                l.add(new Attributes(attribute));
             }
             else break;
         }
@@ -1203,6 +1203,7 @@ public class Parser {
         StructOrUnionSpecifier structOrUnionSpecifier = null;
         Type type = null;
         boolean inline = false;
+        Exp alignment = null;
         EnumSet<TypeQualifier> typeQualifiers =
                 EnumSet.noneOf(TypeQualifier.class);
 
@@ -1296,8 +1297,7 @@ public class Parser {
                         fail("can't combine struct or union with other type " + "specifiers");
                     type = new Structure(sous.isUnion(),
                             sous.tag(), null);
-                    var alignment = sous.alignment();
-                    if (alignment != null) type = new Aligned(type, alignment);
+                    alignment = sous.alignment();
                     structOrUnionSpecifier = sous;
                 }
                 case TypedefName(String name) -> {
@@ -1314,6 +1314,9 @@ public class Parser {
                 case Typeof typeof -> type = typeof;
                 case TypeofT typeofT -> type = typeofT;
                 case FunctionSpecifier.INLINE -> inline = true;
+                case Attributes(Map<String, ArrayList<Exp>> attr) -> {
+                     alignment = getAlignment(attr);
+                }
                 default -> throw new IllegalStateException("Unexpected value: " + x);
             }
         }
@@ -1321,7 +1324,6 @@ public class Parser {
         if (type==null && signedness!=0){
             type=Primitive.INT;
         }
-
         if (signedness == -1) {
             if (type == Primitive.LONGLONG) type = Primitive.ULONGLONG;
             else if (type == Primitive.LONG) type = Primitive.ULONG;
@@ -1335,6 +1337,7 @@ public class Parser {
             throw makeErr("TODO", tokens);
         }
 
+        if (alignment != null) type = new Aligned(type, alignment);
 
         return new TypeAndStorageClass(type, storageClass, null,
                 typeQualifiers, structOrUnionSpecifier, inline);
@@ -2172,5 +2175,15 @@ public class Parser {
                                        boolean inline) {}
 
 
-    public sealed static interface DeclarationSpecifier permits StorageClass, TypeSpecifier, TypeQualifier, FunctionSpecifier {}
+    public sealed static interface DeclarationSpecifier permits Attributes,
+            FunctionSpecifier,
+            StorageClass,
+            TypeQualifier,
+            TypeSpecifier {}
+
+
+
+    public record Attributes(Map<String, ArrayList<Exp>> attribute) implements
+            DeclarationSpecifier {}
+
 }
