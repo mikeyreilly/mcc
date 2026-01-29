@@ -13,8 +13,12 @@ typedef struct Bitty {
 int fun(Bitty bitty) {
     unsigned int tmp;
     memcpy(&tmp, &bitty, sizeof(tmp));
-    return tmp;
+    // This bit mask removes bits that are not specified in this program
+    // 1111 00000 111 1
+    // c    anon  b   a
+    return tmp & 7695;
 }
+
 Bitty swap_parts(Bitty bitty) {
     unsigned int tempa = bitty.b;
     unsigned int tempb = bitty.c;

@@ -11,8 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.quaxt.mcc.ArithmeticOperator.BITWISE_AND;
-import static com.quaxt.mcc.ArithmeticOperator.SUB;
+import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
@@ -185,15 +184,6 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         return dividend + divisor - remainder;
     }
 
-    public static long calculateStackAdjustment(long bytesForLocals,
-                                                long calleeSavedCount) {
-        long calleeSavedBytes = 8 * calleeSavedCount;
-        long totalStackBytes = calleeSavedBytes + bytesForLocals;
-        long adjustedStackBytes = roundAwayFromZero(totalStackBytes, 16);
-
-        return adjustedStackBytes - calleeSavedBytes;
-    }
-
     private void emitFunctionAsm(PrintWriter out, FunctionAsm functionAsm) {
         String name = functionAsm.name;
         if (functionAsm.global)
@@ -209,11 +199,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         List<Instruction> instructions = functionAsm.instructions;
         printIndent(out, "pushq\t%rbp");
         printIndent(out, "movq\t%rsp, %rbp");
-        long stackSize = functionAsm.stackSize;
-        long remainder = stackSize % 16;
-        if (remainder != 0) {
-            stackSize += (16 - remainder);
-        }
+
         IntegerReg[] calleeSavedRegs = functionAsm.calleeSavedRegs;
         int calleeSavedCount = calleeSavedRegs.length;
         //prologue
@@ -240,16 +226,33 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     """ + end.label() + ":");
         }
 
-        AtomicInteger stackCorrection = new AtomicInteger(0);
-        emitInstruction(out, new Binary(SUB, QUADWORD,
-                new Imm(calculateStackAdjustment(stackSize, calleeSavedCount)), SP), stackCorrection);
+        // First reserve space for the callee saved regs
+        // + stack size
 
+        //MR-TODO there's a bug here - stack might not be sixteen byte aligned
+        // (also we might want the stack to be > 16 byte aligned)
+
+        long stackSize = functionAsm.stackSize;
+        long calleeSavedBytes = roundAwayFromZero(8 * (long) calleeSavedCount, 16);
+        long totalStackBytes =  calleeSavedBytes+stackSize;
+        long adjustedStackBytes = roundAwayFromZero(totalStackBytes, 16);
+
+
+        AtomicInteger stackCorrection = new AtomicInteger((int) - adjustedStackBytes);
+
+        emitInstruction(out, new Binary(SUB, QUADWORD,
+                new Imm(adjustedStackBytes), SP), stackCorrection);
+        emitInstruction(out, new Comment("Check alignment"), stackCorrection);
         var stackAlignment = functionAsm.stackAlignment;
         if (stackAlignment != 0)
             emitInstruction(out, new Binary(BITWISE_AND, QUADWORD,
                     new Imm(-stackAlignment), SP), stackCorrection);
 
         // push in reverse direction so we can pop in forward direction
+        if (calleeSavedRegs.length % 2 == 1) {
+            emitInstruction(out, new Binary(SUB, QUADWORD, new Imm(8), SP),
+                    stackCorrection);
+        }
         for (int i = calleeSavedRegs.length - 1; i >= 0; i--) {
             IntegerReg r = calleeSavedRegs[i];
             emitInstruction(out, new Push(r), stackCorrection);
@@ -302,8 +305,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Lea(Operand src, Operand dst) ->
                     "leaq\t" + formatOperand(QUADWORD, instruction, src, stackCorrection) + ","
                             + " " + formatOperand(QUADWORD, instruction, dst, stackCorrection);
-            case Push(Operand arg) ->
-                    "pushq\t" + formatOperand(QUADWORD, instruction, arg, stackCorrection);
+            case Push(Operand arg) ->{
+                    String r = "pushq\t" + formatOperand(QUADWORD, instruction, arg, stackCorrection);
+                    addTo(stackCorrection, 8, out);
+                    yield r;
+            }
 
             case Nullary.RET -> {
                 printIndent(out, "movq\t%rbp, %rsp");
@@ -329,6 +335,15 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
                     default -> t;
                 }, instruction, src, stackCorrection);
                 String dstF = formatOperand(t, instruction, dst, stackCorrection);
+                if (dst == SP){
+                    if (src instanceof Imm(long i)) {
+                        if (op == ArithmeticOperator.ADD) {
+                            addTo(stackCorrection, (int)-i, out);
+                        } else if (op == ArithmeticOperator.SUB) {
+                            addTo(stackCorrection, (int)i, out);
+                        }
+                    }
+                }
                 yield instruction.format(t) + srcF + ", " + dstF;
             }
             case Jump(String label) -> {
@@ -400,23 +415,28 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             }
             case Comment(String comment) -> "# " + comment;
             case Literal(String string) -> string;
-            case Pop(IntegerReg arg) ->
+            case Pop(IntegerReg arg) -> {
+                String r=
                     "popq\t" + formatOperand(instruction, arg, stackCorrection);
+                addTo(stackCorrection, -8, out);
+                yield r;
+            }
+
             case Test(TypeAsm t, Operand src1, Operand src2) ->
                     instruction.format(t) + formatOperand(t, instruction,
                             src1, stackCorrection) + formatOperand(t, instruction, src2, stackCorrection);
-            case SetStackOffset(int bytesToAdd) -> {
-                stackCorrection.set(bytesToAdd);
-                yield null;
-            }
         };
-        if (s != null) {
-            if (instruction instanceof LabelIr) {
-                out.println(s);
-            } else {
-                printIndent(out, s);
-            }
+        if (instruction instanceof LabelIr) {
+            out.println(s);
+        } else {
+            printIndent(out, s);
         }
+    }
+
+    private static void addTo(AtomicInteger stackCorrection, int i,
+                              PrintWriter out) {
+        stackCorrection.addAndGet(i);
+        printIndent(out, "# stackCorrection="+stackCorrection.get());
     }
 
 }

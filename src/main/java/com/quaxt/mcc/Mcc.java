@@ -278,6 +278,7 @@ public class Mcc {
         SYMBOL_TABLE.clear();
         TYPE_TABLE.clear();
         TEMP_COUNT.set(0L);
+        ENUM_MAP.clear();
         Codegen.clear();
         ArrayList<String> args =
                 Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));

@@ -133,14 +133,14 @@ public class Codegen {
         long reservedSpace = functionAsm.callsVaStart ? 176 : 0;
         if (returnInMemory) reservedSpace += 8;
         AtomicLong offset = new AtomicLong(0);
-        Map<String, Long> varTable = new HashMap<>();
+        Map<String, Long> varTable = new LinkedHashMap<>();
         for (int i = 0; i < instructions.size(); i++) {
             Instruction oldInst = instructions.get(i);
             Instruction newInst = switch (oldInst) {
                 case Call(Operand p, FunType t) ->
                         new Call(dePseudo(p, varTable, offset, functionAsm), t);
-                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ,   Literal _,
-                     SetStackOffset _ -> oldInst;
+                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ,   Literal _
+                      -> oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
                         new Mov(typeAsm, dePseudo(src, varTable, offset, functionAsm),
                                 dePseudo(dst, varTable, offset, functionAsm));
@@ -186,7 +186,7 @@ public class Codegen {
             };
             instructions.set(i, newInst);
         }
-        return offset.get()+reservedSpace;
+        return offset.get() + reservedSpace;
     }
 
     private static void fixUpInstructions(FunctionAsm function) {
@@ -694,8 +694,7 @@ public class Codegen {
                         new Imm(stackPadding), SP));
             }
             int correction = stackPadding;
-            if (correction != 0)
-                instructionAsms.add(new SetStackOffset(correction));
+
 
             //pass args in registers
             for (TypedOperand integerArg : integerArguments) {
@@ -730,12 +729,10 @@ public class Codegen {
                         assemblyType == QUADWORD || assemblyType == DOUBLE) {
                     instructionAsms.add(new Push(operand));
                     correction += 8;
-                    instructionAsms.add(new SetStackOffset(correction));
                 } else {
                     instructionAsms.add(new Mov(assemblyType, operand, AX));
                     instructionAsms.add(new Push(AX));
                     correction += 8;
-                    instructionAsms.add(new SetStackOffset(correction));
                 }
             }
             if (varargs) {
@@ -748,7 +745,6 @@ public class Codegen {
                 instructionAsms.add(new Binary(ADD, QUADWORD,
                         new Imm(bytesToRemove), SP));
             }
-            instructionAsms.add(new SetStackOffset(0));
             //retrieve return value
             if (dst != null && !returnInMemory) {// dst is null for void
                 // functions
