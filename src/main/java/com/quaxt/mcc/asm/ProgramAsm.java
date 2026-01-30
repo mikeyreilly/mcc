@@ -418,7 +418,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
             case Pop(IntegerReg arg) -> {
                 String r=
                     "popq\t" + formatOperand(instruction, arg, stackCorrection);
-                addTo(stackCorrection, -8, out);
+                // We don't do `addTo(stackCorrection, -8, out)` because pop is
+                // just used to restore registers prior to executing RET
+                // instructions. "Fixing" the stackCorrection would leave us
+                // with the wrong result in other basic blocks of the function
+                // following the RET
                 yield r;
             }
 
