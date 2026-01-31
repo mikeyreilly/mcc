@@ -1454,6 +1454,7 @@ public class Codegen {
                 }
                 case Ignore.IGNORE -> {}
                 case BuiltinC23VaStartIr(VarIr vaList) -> {
+                    ins.add(new Comment("VA START START"));
 //                    field   offset
 //                    gp_offset	0
 //                    fp_offset	4
@@ -1483,6 +1484,7 @@ public class Codegen {
                     ins.add(new Comment("Reg save area"));
                     ins.add(new Lea(new Memory(BP, -176),
                             new PseudoMem(vaList.identifier(), 16)));
+                    ins.add(new Comment("VA START END"));
                 }
                 case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) ->
                         emitBuiltInVarArg(vaList, dst, ins, type);
@@ -1577,7 +1579,7 @@ public class Codegen {
 // parameter is passed in different register classes or requires an alignment
 // greater
 // than 8 for general purpose registers and 16 for XMM registers.
-            for (int i = numFp + numGp - 1; i >= 0; i--) {
+            for (int i =0; i < numFp + numGp ; i++) {
                 boolean isFp = numGp == 0 || (numFp == 1 && (floatFirst ?
                         i == 0 : i == 1));
 
@@ -1590,18 +1592,23 @@ public class Codegen {
                 int offset = i*8;
 // 6. Return the fetched type.
                 Operand dstOperand = type.isScalar() ?toOperand(dst):toOperand(dst, offset);
-                ins.add(new Comment("write to dst"));
+                ins.add(new Comment("write to " + dstOperand));
                 ins.add(new Mov(toTypeAsm(type), new Memory(AX, 0),
                         dstOperand));
+                if (isFp) {
+                    ins.add(new Binary(ADD, LONGWORD, new Imm(16L), vaListField(vaList, 4, vaListIsPointer, ins)));
+                } else {
+                    ins.add(new Binary(ADD, LONGWORD, new Imm(8L), vaListField(vaList, 0, vaListIsPointer, ins)));
+                }
             }
 
 // 5. Set:
 // l->gp_offset = l->gp_offset + num_gp ∗ 8
 // l->fp_offset = l->fp_offset + num_fp ∗ 16.
-            if (numGp > 0)
-                ins.add(new Binary(ADD, LONGWORD, new Imm(8L * numGp), vaListField(vaList, 0, vaListIsPointer, ins)));
-            if (numFp > 0)
-                ins.add(new Binary(ADD, LONGWORD, new Imm(16L * numFp), vaListField(vaList, 4, vaListIsPointer, ins)));
+//            if (numGp > 0)
+//                ins.add(new Binary(ADD, LONGWORD, new Imm(8L * numGp), vaListField(vaList, 0, vaListIsPointer, ins)));
+//            if (numFp > 0)
+//                ins.add(new Binary(ADD, LONGWORD, new Imm(16L * numFp), vaListField(vaList, 4, vaListIsPointer, ins)));
             ins.add(new Jump(endLabel.label()));
 
 

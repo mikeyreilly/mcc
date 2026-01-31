@@ -176,6 +176,7 @@ class MccTest {
                 assertEquals(expected, startProcessAndCaptureOutput(mccExe));
             }
         }catch (Exception ex){
+            ex.printStackTrace();
             System.out.println("compile failed");
         }
 
@@ -735,6 +736,10 @@ void chars() throws Exception {
     }
     @Test void param_passing() throws Exception {
         returns("param_passing", 0);
+    }
+
+    @Test void va_struct_two_fp_registers() throws Exception {
+        returns("va_struct_two_fp_registers", 0);
     }
 
 }
