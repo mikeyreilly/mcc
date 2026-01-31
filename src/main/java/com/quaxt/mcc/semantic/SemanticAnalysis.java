@@ -448,19 +448,26 @@ bitFieldWidth);
                                 acc.add(new ZeroInit(zerosNeeded));
                             }
                             convertCompoundInitializerToStaticInitList(initElement, member.type(), acc);
-                            if (i > 0 && byteOffset == previousByteOffset) {
-                                BitFieldMember bfm = (BitFieldMember) member;
-                                // smoosh last two members of acc together
-                                int accSize = acc.size();
-                                assert (accSize > 1);
+                            if (member instanceof BitFieldMember bfm){
                                 Constant z = (Constant) acc.getLast();
-                                Constant y = (Constant) acc.get(accSize - 2);
-                                var previousMemberEntry =
-                                        structDef.members().get(i - 1);
-                                Constant merged = z.apply(SHL, bfm.bitOffset());
-                                merged = merged.apply(BITWISE_OR, y);
-                                acc.removeLast();
-                                acc.set(accSize - 2, (StaticInit) merged);
+                                // keep just bitWidth bits
+                                if (bfm.bitWidth() < 8 * Mcc.size(z.type())) {
+                                    z = z.apply(BITWISE_AND,
+                                            (1L << bfm.bitWidth()) - 1);
+                                }
+                                z = z.apply(SHL, bfm.bitOffset());
+                                int accSize = acc.size();
+
+                                acc.set(accSize - 1, (StaticInit) z);
+                                if (i > 0 && byteOffset == previousByteOffset) {
+                                    // smoosh last two members of acc together
+                                    assert (accSize > 1);
+                                    Constant<?> y =
+                                            (Constant<?>) acc.get(accSize - 2);
+                                    Constant<?> merged = z.apply(BITWISE_OR, y);
+                                    acc.removeLast();
+                                    acc.set(accSize - 2, (StaticInit) merged);
+                                }
                             }
                             currentOffset = (int) (byteOffset +
                                     size(member.type()));

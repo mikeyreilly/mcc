@@ -158,24 +158,25 @@ class MccTest {
         if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
         int mccExitCode;
         String mccExe = testProgram +"-mcc";
-        if (optimize) {
-            mccExitCode =
-                    Mcc.mcc("-o", mccExe, testProgram.toString(), "--optimize");
-        } else {
-            try {
-                List<String>    gccOptions=extractGccOptions(testProgram);
-                int gccExitCode = assembleAndLink(testProgram, false, gccOptions, trustedExe);
-                if (gccExitCode!=0) {return;}
-                var expected = startProcessAndCaptureOutput(trustedExe);
 
+        try {
+            List<String>    gccOptions=extractGccOptions(testProgram);
+            int gccExitCode = assembleAndLink(testProgram, false, gccOptions, trustedExe);
+            if (gccExitCode!=0) {return;}
+            var expected = startProcessAndCaptureOutput(trustedExe);
+            if (optimize) {
+                mccExitCode =
+                        Mcc.mcc("-o", mccExe, testProgram.toString(), "--optimize");
+            } else {
                 mccExitCode = Mcc.mcc("-o", mccExe, testProgram.toString());
-                if (mccExitCode == 0) {
-                    Mcc.registerAllocatorDisabled = false;
-                    assertEquals(expected, startProcessAndCaptureOutput(mccExe));
-                }
-            }catch (Exception ex){
-                System.out.println("compile failed");
             }
+
+            if (mccExitCode == 0) {
+                Mcc.registerAllocatorDisabled = false;
+                assertEquals(expected, startProcessAndCaptureOutput(mccExe));
+            }
+        }catch (Exception ex){
+            System.out.println("compile failed");
         }
 
     }
