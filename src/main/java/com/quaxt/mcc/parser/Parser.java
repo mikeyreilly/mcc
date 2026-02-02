@@ -94,22 +94,23 @@ public class Parser {
         return l;
     }
 
-    public static void skipRestrictAndConst(TokenList tokens) {
+    public static Token skipRestrictAndConst(TokenList tokens) {
         while (true) {
-            if (tokens.isEmpty()) return;
+          //  if (tokens.isEmpty()) return;
+            var t = tokens.getFirst();
             switch (tokens.getFirst()) {
                 case RESTRICT, CONST, VOLATILE -> tokens.removeFirst();
                 default -> {
-                    return;
+                    return t;
                 }
             }
         }
     }
 
     private static TypeQualifier parseTypeQualifier(TokenList tokens) {
-        skipRestrictAndConst(tokens);
+
         TypeQualifier tq;
-        switch (tokens.getFirst()) {
+        switch (skipRestrictAndConst(tokens)) {
             case CONST -> tq = TypeQualifier.CONST;
             case VOLATILE -> tq = TypeQualifier.VOLATILE;
             case RESTRICT -> tq = TypeQualifier.RESTRICT;
@@ -127,9 +128,8 @@ public class Parser {
                                                     ArrayList<Map<String, Type>> typeAliases,
                                                     List<String> labels,
                                                     Switch enclosingSwitch) {
-        skipRestrictAndConst(tokens);
         TypeSpecifier ts;
-        switch (tokens.getFirst()) {
+        switch (skipRestrictAndConst(tokens)) {
             case VOID -> ts = PrimitiveTypeSpecifier.VOID;
             case FLOAT -> ts = PrimitiveTypeSpecifier.FLOAT;
             case BOOL -> ts = PrimitiveTypeSpecifier.BOOL;
@@ -379,9 +379,9 @@ public class Parser {
     }
 
     private static StorageClass parseStorageClassSpecifier(TokenList tokens) {
-        skipRestrictAndConst(tokens);
+
         StorageClass sc;
-        switch (tokens.getFirst()) {
+        switch (skipRestrictAndConst(tokens)) {
             case TYPEDEF -> sc = StorageClass.TYPEDEF;
             case EXTERN -> sc = StorageClass.EXTERN;
             case STATIC -> sc = StorageClass.STATIC;
@@ -850,8 +850,7 @@ public class Parser {
                                              ArrayList<Map<String, Type>> typeAliases,
                                              List<String> labels,
                                              Switch enclosingSwitch) {
-        Parser.skipRestrictAndConst(tokens);
-        Token t = tokens.getFirst();
+        Token t = Parser.skipRestrictAndConst(tokens);
         if (t == IMUL){
             tokens.removeFirst();
             return new PointerDeclarator(parseDeclarator(tokens, typeAliases, labels, enclosingSwitch));
