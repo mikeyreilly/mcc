@@ -21,11 +21,16 @@ public class TokenList  {
         return tokens.get(cursor);
     }
 
+    public void discardFirst() {
+        cursor++;
+    }
+
     public Token removeFirst() {
         var r= getFirst();
         cursor++;
         return r;
     }
+
 
     public Token get(int i) {
         return tokens.get(i + cursor);

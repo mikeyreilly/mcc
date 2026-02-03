@@ -33,7 +33,8 @@ public final class Pseudo implements Reg {
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Pseudo pseudo)) return false;
-        return isStatic == pseudo.isStatic && Objects.equals(identifier, pseudo.identifier) && Objects.equals(type, pseudo.type);
+        //return isStatic == pseudo.isStatic && Objects.equals(identifier, pseudo.identifier) && Objects.equals(type, pseudo.type);
+        return identifier == pseudo.identifier;
     }
 
     @Override
