@@ -8,7 +8,7 @@ import java.util.stream.Stream;
 public class TokenList  {
     String currentFilename;
     int currentLineNumber;
-    ArrayList<String> filenames = new ArrayList<>();
+    public ArrayList<String> fileNames = new ArrayList<>();
     ArrayList<Position> positions = new ArrayList<>();
     private ArrayList<Token> tokens = new ArrayList<Token>();
     int file = -1;
@@ -31,6 +31,33 @@ public class TokenList  {
         return r;
     }
 
+    int positionsIndex=0;
+
+
+    /**
+     * @return the highest index into positions that is on or before cursor
+     */
+    public int getCurrentPosition() {
+        for(; positionsIndex < positions.size()-1; positionsIndex++) {
+            int index = positions.get(positionsIndex).tokenIndex();
+            if (index == cursor) break;
+            if (index > cursor) {
+                positionsIndex--;
+                break;
+            }
+        }
+        return positionsIndex;
+    }
+
+
+    public TokenList back() {
+        cursor--;
+        for(; positionsIndex > 0; positionsIndex--) {
+            int index = positions.get(positionsIndex).tokenIndex();
+            if (index <= cursor) break;
+        }
+        return this;
+    }
 
     public Token get(int i) {
         return tokens.get(i + cursor);
@@ -39,8 +66,8 @@ public class TokenList  {
     public String positionString() {
         int positionsIndex = 0;
         for(positionsIndex = 1;positionsIndex<positions.size();positionsIndex++) {
-            if (positions.get(positionsIndex).tokenIndex==cursor) break;
-            if (positions.get(positionsIndex).tokenIndex>cursor) {
+            if (positions.get(positionsIndex).tokenIndex() == cursor) break;
+            if (positions.get(positionsIndex).tokenIndex() > cursor) {
                 positionsIndex--;
                 break;
             }
@@ -50,28 +77,21 @@ public class TokenList  {
         }
         var pos = positions.get(positionsIndex);
 
-        return " at " + filenames.get(pos.file) + ":" + (pos.lineNumber + 1);
+        return " at " + fileNames.get(pos.file()) + ":" + (pos.lineNumber() + 1);
     }
 
     public Stream<Token> stream() {
         return tokens.subList(cursor, tokens.size()).stream();
     }
 
-    public TokenList back() {
-        cursor--;
-        return this;
-    }
-
-    record Position(int file, int lineNumber, int tokenIndex) {}
-
     public void add(Token token, String filename, int lineNumber) {
         int currentIndex = tokens.size();
         if (!filename.equals(currentFilename)) {
             currentFilename = filename;
-            file = filenames.indexOf(currentFilename);
+            file = fileNames.indexOf(currentFilename);
             if (file == -1) {
-                file = filenames.size();
-                filenames.add(currentFilename);
+                file = fileNames.size();
+                fileNames.add(currentFilename);
             }
             positions.add(new Position(file, lineNumber, currentIndex));
             currentLineNumber = lineNumber;

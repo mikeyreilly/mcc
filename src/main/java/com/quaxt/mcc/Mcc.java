@@ -272,6 +272,8 @@ public class Mcc {
         }
     }
 
+    public static boolean addDebugInfo = false;
+
     public static int mcc(String... args0) throws Exception {
         LOGGER.info("started with args " + String.join(" ", args0));
 
@@ -282,7 +284,6 @@ public class Mcc {
         Codegen.clear();
         ArrayList<String> args =
                 Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
-
         Mode mode = Mode.ASSEMBLE;
         boolean doNotCompile = false;
         List<String> libs = new ArrayList<>();
@@ -319,6 +320,10 @@ public class Mcc {
                     yield Mode.DUMMY;
                 }
                 case "-S", "-s" -> Mode.COMPILE;
+                case "-g" -> {
+                    addDebugInfo = true;
+                    yield Mode.DUMMY;
+                }
                 case "-c" -> {
                     doNotCompile = true;
                     yield Mode.DUMMY;
@@ -421,13 +426,13 @@ public class Mcc {
                                  ArrayList<Declaration> declarations,
                                  ArrayList<Declaration> builtinDeclarations,
     String outputFileName) throws IOException, InterruptedException {
-        TokenList l = Lexer.lex(cSource);
+        TokenList tokenList = Lexer.lex(cSource);
         if (mode == Mode.LEX) {
             return 0;
         }
-        Program program = Parser.parseProgram(l, declarations);
-        if (!l.isEmpty()) {
-            throw makeErr("Unexpected token " + l.getFirst(), l);
+        Program program = Parser.parseProgram(tokenList, declarations);
+        if (!tokenList.isEmpty()) {
+            throw makeErr("Unexpected token " + tokenList.getFirst(), tokenList);
         }
         if (mode == Mode.PARSE) {
             return 0;
@@ -466,6 +471,13 @@ public class Mcc {
         Path asmFile = mode == Mode.COMPILE ? Paths.get(outputFileName) : Paths.get(outputFileName+".s");
         try (PrintWriter pw =
                      new PrintWriter(Files.newBufferedWriter(asmFile))) {
+            if (addDebugInfo){
+                var filesNames = tokenList.fileNames;
+                for (int i = 0; i < filesNames.size(); i++) {
+                    String fileName = filesNames.get(i);
+                    pw.println("\t.file " + (i+1) + " \"" + fileName + "\"");
+                }
+            }
             programAsm.emitAsm(pw);
             pw.flush();
         }

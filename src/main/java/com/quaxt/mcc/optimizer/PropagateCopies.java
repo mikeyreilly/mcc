@@ -76,10 +76,6 @@ public class PropagateCopies {
 
                         // Not safe to replace operands on AtomicStore
 
-                        case AtomicStore(ValIr v, VarIr dst, MemoryOrder memOrder) -> instr;
-
-                        case GetAddress _, LabelIr _, Jump _, BuiltinC23VaStartIr _ -> instr;
-                        case Ignore.IGNORE -> instr;
 
                         case AddPtr(VarIr ptr, ValIr index, int scale,
                                     VarIr dst) ->
@@ -121,6 +117,9 @@ public class PropagateCopies {
                                 new ZeroExtendIr(replaceOperand(v1, reachingCopies), dst);
                         case BuiltinVaArgIr(VarIr v1, VarIr dst, Type type) ->
                                 new BuiltinVaArgIr((VarIr) replaceOperand(v1, reachingCopies), dst, type);
+                        case GetAddress _, LabelIr _, Jump _, BuiltinC23VaStartIr _, Pos _,
+                             AtomicStore _ -> instr;
+                        case Ignore.IGNORE -> instr;
 
                         default ->
                                 throw new IllegalStateException("Unexpected value: " + instr);
@@ -219,7 +218,7 @@ public class PropagateCopies {
                 case BuiltinVaArgIr(VarIr _, VarIr dst, Type _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
-                     ReturnIr _, Ignore _, Compare _ -> {}
+                     ReturnIr _, Ignore _, Compare _, Pos _ -> {}
 
 
                 default ->

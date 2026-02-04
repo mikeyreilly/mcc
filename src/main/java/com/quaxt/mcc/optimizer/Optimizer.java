@@ -238,6 +238,7 @@ public class Optimizer {
                 case BuiltinVaArgIr _ -> {
                     // NOOP because already taken care of by va_start
                 }
+                case Pos _ ->{}
                 default ->
                         throw new IllegalStateException("Unexpected value: " + instr);
             }

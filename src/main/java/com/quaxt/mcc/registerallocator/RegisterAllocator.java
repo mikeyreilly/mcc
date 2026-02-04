@@ -66,7 +66,7 @@ public class RegisterAllocator {
                     }
                 }
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _,
-                     Comment _, Literal  _ -> instructions.set(copyTo++, oldInst);
+                     Comment _, Literal  _, Pos _ -> instructions.set(copyTo++, oldInst);
                 case Call(Operand operand, FunType t) -> {
                      instructions.set(copyTo++,
                              new Call(find(operand,
@@ -466,7 +466,7 @@ public class RegisterAllocator {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, src, dst);
                 }
-                case Cdq _ -> {
+                case Cdq _, Pos _ -> {
                 }
                 case Cmp(TypeAsm type, Operand subtrahend, Operand minuend) -> {
                     incrementSpillCost(interferenceGraph,
@@ -673,7 +673,7 @@ public class RegisterAllocator {
                     maybeAddPseudo(src, interferenceGraph, inteferenceGraphMmx);
                     maybeAddPseudo(dst, interferenceGraph, inteferenceGraphMmx);
                 }
-                case Cdq _ -> {}
+                case Cdq _, Pos _ -> {}
                 case Cmp(TypeAsm _, Operand subtrahend, Operand minuend) -> {
                     maybeAddPseudo(subtrahend, interferenceGraph,
                             inteferenceGraphMmx);

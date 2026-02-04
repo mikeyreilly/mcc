@@ -1,12 +1,14 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.parser.Position;
 import com.quaxt.mcc.semantic.FunType;
 import com.quaxt.mcc.semantic.SemanticAnalysis;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,7 +18,7 @@ import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
-public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
+public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> positions) {
     private static void printIndent(PrintWriter out, String s) {
         out.println("\t" + s);
     }
@@ -264,7 +266,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
 
     }
 
-    public static String formatInstruction(Instruction instruction, AtomicInteger stackCorrection) {
+    public String formatInstruction(Instruction instruction, AtomicInteger stackCorrection) {
         StringWriter sw = new StringWriter();
         try (PrintWriter p = new PrintWriter(sw)) {
             emitInstruction(p, instruction, stackCorrection);
@@ -272,10 +274,18 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms) {
         return sw.toString();
     }
 
-    private static void emitInstruction(PrintWriter out,
+    private void emitInstruction(PrintWriter out,
                                         Instruction instruction,
                                         AtomicInteger stackCorrection) {
         String s = switch (instruction) {
+            case Pos(int pos) -> {
+                Position p = positions.get(pos);
+                int file = p.file()+1;
+                int lineNumber = p.lineNumber();
+                int tokenIndex = p.tokenIndex();
+                yield "\t.loc "+file+" "+lineNumber;
+
+            }
             case Mov(TypeAsm t, Operand src, Operand dst) -> {
 
                 String o;

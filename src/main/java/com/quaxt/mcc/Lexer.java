@@ -172,7 +172,7 @@ public class Lexer {
                                 case "void" -> VOID;
                                 case "volatile" -> VOLATILE;
                                 case "while" -> WHILE;
-                                default -> new TokenWithValue(tokenType, value);
+                                default -> new TokenWithValue(tokenType, value.intern());
                             };
                             if (token != null)
                                 tokens.add(token, filename, lineNumber);

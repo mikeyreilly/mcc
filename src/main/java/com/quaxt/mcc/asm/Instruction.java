@@ -3,6 +3,7 @@ package com.quaxt.mcc.asm;
 import com.quaxt.mcc.AbstractInstruction;
 import com.quaxt.mcc.tacky.Jump;
 import com.quaxt.mcc.tacky.LabelIr;
+import com.quaxt.mcc.tacky.Pos;
 
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
@@ -26,7 +27,8 @@ public sealed interface Instruction extends AbstractInstruction permits Binary,
         Unary,
         Xchg,
         Jump,
-        LabelIr {
+        LabelIr,
+        Pos {
     default String format(TypeAsm t) {
         return format(this.getClass().getSimpleName().toLowerCase(), t);
     }

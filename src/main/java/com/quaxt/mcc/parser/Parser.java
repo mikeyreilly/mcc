@@ -1062,7 +1062,7 @@ public class Parser {
                 break;
             }
         }
-        return new Program(declarations);
+        return new Program(declarations, tokens.positions);
     }
 
     private static DeclarationList parseDeclarationList(TokenList tokens,
@@ -1575,7 +1575,7 @@ public class Parser {
         //                    postfix-expression ++
         //                    postfix-expression --
         //                    compound-literal
-
+        int pos = tokens.getCurrentPosition();;
         Exp exp = parsePrimaryExp(tokens, typeAliases, labels, enclosingSwitch);
         outer:
         while (true) {
@@ -1587,7 +1587,7 @@ public class Parser {
                     exp = new Subscript(exp, subscript, null);
                     break;
                 case OPEN_PAREN:
-                    exp = parseFunctionCallArgs(exp, tokens, typeAliases, labels, enclosingSwitch);
+                    exp = parseFunctionCallArgs(exp, tokens, typeAliases, labels, enclosingSwitch, pos);
                     break;
                 case DOT:
                     tokens.discardFirst();
@@ -1746,6 +1746,7 @@ public class Parser {
             stripGccAttribute(tokens, typeAliases, labels,
                     enclosingSwitch);
         }
+        int pos = tokens.getCurrentPosition();
         return switch (tokens.getFirst()) {
             case BUILTIN_VA_ARG -> {
                 tokens.discardFirst();
@@ -1788,8 +1789,10 @@ public class Parser {
 
                     Var id = new Var(value, null);
                     Exp id1 =
-                            parseFunctionCallArgs(id, tokens, typeAliases, labels, enclosingSwitch);
-                    if (id1 != null) yield id1;
+                            parseFunctionCallArgs(id, tokens, typeAliases, labels, enclosingSwitch, pos);
+                    if (id1 != null) {
+                        yield id1;
+                    }
                     yield id;
 
                 }
@@ -1854,13 +1857,14 @@ public class Parser {
     private static Exp parseFunctionCallArgs(Exp id, TokenList tokens,
                                                 ArrayList<Map<String, Type>> typeAliases,
                                              List<String> labels,
-                                             Switch enclosingSwitch) {
+                                             Switch enclosingSwitch,
+                                             int pos) {
         if (!tokens.isEmpty() && tokens.getFirst() == OPEN_PAREN) {
             tokens.discardFirst();
             Token current = tokens.getFirst();
             if (current == CLOSE_PAREN) {
                 tokens.discardFirst();
-                return newFunctionCall(id, Collections.emptyList(), false, null);
+                return newFunctionCall(id, Collections.emptyList(), false, null, pos);
             }
             List<Exp> args = new ArrayList<>();
 
@@ -1880,23 +1884,23 @@ public class Parser {
                             "unexpected token while parsing " + "function call: " + current);
 
             }
-            return newFunctionCall(id, args, false, null);
+            return newFunctionCall(id, args, false, null, pos);
 
         }
         return null;
     }
 
     private static Exp newFunctionCall(Exp name,
-                                    List<Exp> args,
-                                    boolean varargs,
-                                    Type type) {
+                                       List<Exp> args,
+                                       boolean varargs,
+                                       Type type, int pos) {
         if (name instanceof Var v) {
             BuiltInFunction b = BuiltInFunction.fromIdentifier(v.name());
             if (b!=null){
                 return new BuiltInFunctionCall(b, args, type);
             }
         }
-        return new FunctionCall(name, args, varargs, type);
+        return new FunctionCall(name, args, varargs, type, pos);
     }
 
     private static String parseStr(TokenList tokens) {
@@ -2074,8 +2078,9 @@ public class Parser {
                             typeAliases, labels, enclosingSwitch);
                     left = new BinaryOp(binop, left, right, null);
                 } else if (token == OPEN_PAREN) {
-                    tokens.back();
-                    left = parseFunctionCallArgs(left, tokens, typeAliases, labels, enclosingSwitch);
+                    throw new Todo("I don't think this happens anymore");
+//                    tokens.back();
+//                    left = parseFunctionCallArgs(left, tokens, typeAliases, labels, enclosingSwitch);
                 }else { // QUESTION_MARK
                     Exp middle = parseExp(tokens, 0, true, typeAliases, labels, enclosingSwitch);
                     expect(COLON, tokens);

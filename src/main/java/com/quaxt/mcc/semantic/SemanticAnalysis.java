@@ -1701,7 +1701,8 @@ commonType);
             case Constant constant -> constant;
             case Str(String s, Type type) ->
                     new Str(s, new Array(CHAR, new IntInit(s.length() + 1)));
-            case FunctionCall(Exp name, List<Exp> args, boolean _, Type _) -> {
+            case FunctionCall(Exp name, List<Exp> args, boolean _, Type _,
+                              int pos) -> {
                 Exp typedName = typeCheckExpression(name);
                 Type fType = typedName.type();
                 if (fType instanceof Pointer(Type referenced)) {
@@ -1726,7 +1727,7 @@ commonType);
                                 args.set(i,
                                  typeCheckAndConvertWithDefaultArgumentPromotion(arg));
                         }
-                        yield new FunctionCall(typedName, args, varargs, ret);
+                        yield new FunctionCall(typedName, args, varargs, ret, pos);
                     }
                     default -> fail("variable " + typedName + " used as " +
                             "function");
@@ -2646,11 +2647,11 @@ enclosingFunction), type);
                        resolveExp(ifFalse, identifierMap, structureMap,
                         enclosingFunction), type);
             case FunctionCall(Exp name, List<Exp> args, boolean varargs,
-                              Type type) ->
+                              Type type, int pos) ->
                     new FunctionCall(resolveExp(name, identifierMap,
                      structureMap, enclosingFunction),
                       resolveArgs(identifierMap, structureMap, args,
-                            enclosingFunction), varargs, type);
+                            enclosingFunction), varargs, type, pos);
             case BuiltInFunctionCall(BuiltInFunction name, List<Exp> args,
                                      Type type) ->
                     new BuiltInFunctionCall(name, resolveArgs(identifierMap,

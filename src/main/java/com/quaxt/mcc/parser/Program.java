@@ -4,7 +4,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-public record Program(ArrayList<Declaration> declarations) {
+public record Program(ArrayList<Declaration> declarations,
+                      ArrayList<Position> positions) {
     public Iterable<Function> functions() {
         return new FunctionIterable();
     }

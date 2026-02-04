@@ -298,7 +298,7 @@ See p. 606 */
                 case BuiltinC23VaStartIr(VarIr dst) -> {
                     currentLiveVars.remove(dst);
                 }
-                case LabelIr _, Jump _, Ignore _ -> {}
+                case LabelIr _, Jump _, Ignore _, Pos _ -> {}
 
                 default ->
                         throw new IllegalStateException("Unexpected value: " + instruction);
@@ -532,7 +532,7 @@ See p. 606 */
                 addMemoryAndIndexedRegsToUsed(op, used);
                 return new Pair<>(used, Set.of());
             }
-            case LabelIr _, Jump _, Comment _, Nullary _, Literal _ -> {}
+            case LabelIr _, Jump _, Comment _, Nullary _, Literal _, Pos _ -> {}
             case Test test -> throw new Todo();
         }
         return EMPTY_PAIR;

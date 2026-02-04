@@ -1,8 +1,6 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
-import com.quaxt.mcc.asm.Imm;
-import com.quaxt.mcc.asm.Lea;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.atomics.MemoryOrder;
@@ -33,7 +31,7 @@ public class IrGen {
                 tackyDefs.add(compileFunction(function, inlineFunctions));
         }
         convertSymbolsToTacky(tackyDefs);
-        return new ProgramIr(tackyDefs);
+        return new ProgramIr(tackyDefs, program.positions());
     }
 
     private static void convertSymbolsToTacky(List<TopLevel> tackyDefs) {
@@ -656,7 +654,11 @@ public class IrGen {
                 return assign(left, right, instructions, inlineFunctions);
             case Var(String name, Type _):
                 return new PlainOperand(new VarIr(name));
-            case FunctionCall(Exp name, List<Exp> args, boolean varargs, Type type): {
+            case FunctionCall(Exp name, List<Exp> args, boolean varargs, Type type,
+                              int pos): {
+                if (Mcc.addDebugInfo) {
+                    instructions.add(new Pos(pos));
+                }
                 VarIr func = (VarIr) emitTackyAndConvert(name, instructions, inlineFunctions);
                 VarIr result = type == VOID ? null : makeTemporary("tmp.",
                         type);

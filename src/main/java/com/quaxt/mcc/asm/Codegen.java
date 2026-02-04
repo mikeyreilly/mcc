@@ -85,7 +85,7 @@ public class Codegen {
             }
         }
 
-        return new ProgramAsm(topLevels);
+        return new ProgramAsm(topLevels, programIr.positions());
     }
 
     private static void generateBackendSymbolTable() {
@@ -181,7 +181,7 @@ public class Codegen {
                 case Lea(Operand src, Operand dst) ->
                         new Lea(dePseudo(src, varTable, offset, functionAsm), dePseudo(dst
                                 , varTable, offset, functionAsm));
-                case Comment comment -> comment;
+                case Comment _, Pos _ -> oldInst;
                 default -> throw new IllegalStateException("Unexpected value: " + oldInst);
             };
             instructions.set(i, newInst);
@@ -1489,6 +1489,7 @@ public class Codegen {
                 case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) ->
                         emitBuiltInVarArg(vaList, dst, ins, type);
                 case MFENCE -> ins.add(MFENCE);
+                case Pos pos -> ins.add(pos);
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
             }
