@@ -324,7 +324,7 @@ public class Parser {
                                          Initializer init, Type t,
                                          StorageClass storageClass,
                                          StructOrUnionSpecifier structOrUnionSpecifier,
-                                         Constant bitFieldWidth) -> {
+                                         Constant bitFieldWidth, int pos) -> {
                                                         if (t instanceof FunType)
                             fail("error: member declaration can't be function");
                                 members.add(new MemberDeclaration(t, name.name(), structOrUnionSpecifier, bitFieldWidth));
@@ -1121,6 +1121,7 @@ public class Parser {
             } else if (token.equals(OPEN_PAREN) || token.equals(IMUL) ||
                     token instanceof TokenWithValue(Token type, String _) &&
                             type == IDENTIFIER) {
+                int pos = tokens.getCurrentPosition();;
                 Declaration decl;
                 Declarator declarator =
                         parseDeclarator(tokens, typeAliases, labels, enclosingSwitch);
@@ -1161,7 +1162,9 @@ public class Parser {
                     }
 
                     decl =
-                            new VarDecl(new Var(name, type), init, type, typeAndStorageClass.storageClass(), typeAndStorageClass.structOrUnionSpecifier(),bitFieldWidth);
+                            new VarDecl(new Var(name, type), init, type,
+                                    typeAndStorageClass.storageClass(),
+                                    typeAndStorageClass.structOrUnionSpecifier(), bitFieldWidth, pos);
                 }
                 if (typeAndStorageClass.storageClass() ==
                         StorageClass.TYPEDEF) {
@@ -1171,12 +1174,14 @@ public class Parser {
                 l.add(decl);
                 if (decl instanceof Function) break out;
             } else if (token == COLON && isMemberDeclarationList) {
-                    tokens.discardFirst();
-                    bitFieldWidth =
-                            parseConst(tokens, true);
-
+                tokens.discardFirst();
+                bitFieldWidth = parseConst(tokens, true);
                 VarDecl decl =
-                        new VarDecl(new Var(null, null), null, typeAndStorageClass.type(), typeAndStorageClass.storageClass(), typeAndStorageClass.structOrUnionSpecifier(), bitFieldWidth);
+                        new VarDecl(new Var(null, null), null,
+                                typeAndStorageClass.type(),
+                                typeAndStorageClass.storageClass(),
+                                typeAndStorageClass.structOrUnionSpecifier(),
+                                bitFieldWidth, -1);
                 l.add(decl);
             }
             else {

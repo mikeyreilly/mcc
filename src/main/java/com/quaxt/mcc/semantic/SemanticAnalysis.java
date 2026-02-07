@@ -162,7 +162,9 @@ public class SemanticAnalysis {
                                             String currentNonSwitchLabel) {
         Initializer init = declaration.init();
         return new VarDecl(declaration.name(), loopLabelInitializer(init,
-                 currentLabel, currentNonSwitchLabel), declaration.varType(), declaration.storageClass(), declaration.structOrUnionSpecifier(), null);
+                currentLabel, currentNonSwitchLabel), declaration.varType(),
+                declaration.storageClass(), declaration.structOrUnionSpecifier(),
+           declaration.bitFieldWidth(), declaration.pos());
     }
 
     private static Initializer loopLabelInitializer(Initializer init,
@@ -1128,8 +1130,10 @@ enclosingFunction), label);
 //            } else
 
             SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType
- , new StaticAttributes(initialValue, false, decl.storageClass())));
-            return new VarDecl(new Var(decl.name().name(), varType), init, varType, decl.storageClass(), decl.structOrUnionSpecifier(), null);
+                    , new StaticAttributes(initialValue, false, decl.storageClass())));
+            return new VarDecl(new Var(decl.name().name(), varType), init,
+                    varType, decl.storageClass(), decl.structOrUnionSpecifier(),
+                    decl.bitFieldWidth(), decl.pos());
         } else {
 
             Type type = varType;
@@ -1144,7 +1148,9 @@ enclosingFunction), label);
             } else init = null;
 
 
-            return new VarDecl(new Var(decl.name().name(), type), init, type, decl.storageClass(), decl.structOrUnionSpecifier(), null);
+            return new VarDecl(new Var(decl.name().name(), type), init, type,
+                    decl.storageClass(), decl.structOrUnionSpecifier(),
+                    decl.bitFieldWidth(), decl.pos());
         }
     }
 
@@ -2262,7 +2268,7 @@ resolveFileScopeVariableDeclaration(varDecl,
             case VarDecl(Var name, Initializer init, Type type,
                          StorageClass storageClass,
                          StructOrUnionSpecifier structOrUnionSpecifier,
-                         Constant _) -> {
+                         Constant bitFieldWidth, int pos) -> {
                 if (structOrUnionSpecifier != null) {
                     structOrUnionSpecifier =
                             resolveStructureDeclaration(structOrUnionSpecifier, identifierMap, structureMap, null);
@@ -2270,7 +2276,7 @@ resolveFileScopeVariableDeclaration(varDecl,
                 identifierMap.put(name.name(), new Entry(name.name(), true,
                  true));
                 Type t = resolveType(type, identifierMap, structureMap, null);
-                yield new VarDecl(new Var(name.name(), t), init, t, storageClass, structOrUnionSpecifier, null);
+                yield new VarDecl(new Var(name.name(), t), init, t, storageClass, structOrUnionSpecifier, bitFieldWidth, pos);
             }
         };
     }
@@ -2311,7 +2317,7 @@ innerStructureMap, function);
             var newBlockItems = new ArrayList<BlockItem>();
             var t = new Array(CHAR, null);
             VarDecl func =
-                    new VarDecl(new Var("__func__", t), new SingleInit(new Str(function.name, t), t), t, StorageClass.STATIC, null, null);
+                    new VarDecl(new Var("__func__", t), new SingleInit(new Str(function.name, t), t), t, StorageClass.STATIC, null, null, -1);
 
             newBlockItems.add(resolveIdentifiersBlockItem(func, innerMap,
             structureMap, function));
@@ -2534,8 +2540,10 @@ structureMap, enclosingFunction);
         if (decl.storageClass() == EXTERN) {
             identifierMap.put(decl.name().name(),
              new Entry(decl.name().name(), true, true));
-            return new VarDecl(decl.name(), decl.init(), resolveType(decl.varType(), identifierMap, structureMap,
-                          enclosingFunction), decl.storageClass(), decl.structOrUnionSpecifier(), null);
+            return new VarDecl(decl.name(), decl.init(),
+                    resolveType(decl.varType(), identifierMap, structureMap,
+                     enclosingFunction), decl.storageClass(),
+                    decl.structOrUnionSpecifier(), decl.bitFieldWidth(), decl.pos());
         }
         String uniqueName = makeTemporary(decl.name().name() + ".");
         identifierMap.put(decl.name().name(), new Entry(uniqueName, true,
@@ -2550,8 +2558,10 @@ structureMap, enclosingFunction);
         }
 
         return new VarDecl(new Var(uniqueName, null), resolveInitializer(init
-                        , identifierMap, structureMap, enclosingFunction), resolveType(decl.varType(), identifierMap, structureMap,
-                  enclosingFunction), decl.storageClass(), sous, null);
+                , identifierMap, structureMap, enclosingFunction),
+                resolveType(decl.varType(), identifierMap, structureMap,
+                 enclosingFunction), decl.storageClass(), sous, decl.bitFieldWidth()
+          , decl.pos());
     }
 
     private static Initializer resolveInitializer(Initializer init,

@@ -100,12 +100,14 @@ public class IrGen {
             case VarDecl(Var name, Initializer init, Type _,
                          StorageClass storageClass,
                          StructOrUnionSpecifier structOrUnionSpecifier,
-                         Constant _) -> {
+                         Constant _, int pos) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
+                    instructions.add(new Pos(pos));
                     assign(new VarIr(name.name()), init, instructions, 0, inlineFunctions);
                     return;
                 }
+                //MR-TODO I don't think this is needed
                 emitTacky(null, instructions, inlineFunctions);
             }
             case StructOrUnionSpecifier _ -> {} // nothing to do: StructDecls are not in IR
