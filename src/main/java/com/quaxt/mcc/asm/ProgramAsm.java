@@ -198,6 +198,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             out.println("                .balign " + l);
         }
         out.println(name + ":");
+        printIndent(out,".cfi_startproc");
         List<Instruction> instructions = functionAsm.instructions;
         printIndent(out, "pushq\t%rbp");
         printIndent(out, "movq\t%rsp, %rbp");
@@ -242,14 +243,17 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
         AtomicInteger stackCorrection = new AtomicInteger((int) - adjustedStackBytes);
 
-        emitInstruction(out, new Binary(SUB, QUADWORD,
-                new Imm(adjustedStackBytes), SP), stackCorrection);
+        if (adjustedStackBytes != 0) {
+            emitInstruction(out, new Binary(SUB, QUADWORD,
+                    new Imm(adjustedStackBytes), SP), stackCorrection);
+        }
+        printIndent(out, ".cfi_def_cfa_offset " + (adjustedStackBytes + 8));
+
         emitInstruction(out, new Comment("Check alignment"), stackCorrection);
         var stackAlignment = functionAsm.stackAlignment;
-        if (stackAlignment != 0)
-            emitInstruction(out, new Binary(BITWISE_AND, QUADWORD,
-                    new Imm(-stackAlignment), SP), stackCorrection);
-
+        if (stackAlignment != 0) {
+            emitInstruction(out, new Binary(BITWISE_AND, QUADWORD, new Imm(-stackAlignment), SP), stackCorrection);
+        }
         // push in reverse direction so we can pop in forward direction
         if (calleeSavedRegs.length % 2 == 1) {
             emitInstruction(out, new Binary(SUB, QUADWORD, new Imm(8), SP),
@@ -261,9 +265,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         }
         for (Instruction instruction : instructions) {
             emitInstruction(out, instruction, stackCorrection);
-
         }
-
+        printIndent(out,".cfi_endproc");
     }
 
     public String formatInstruction(Instruction instruction, AtomicInteger stackCorrection) {
