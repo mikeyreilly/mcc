@@ -283,11 +283,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         String s = switch (instruction) {
             case Pos(int pos) -> {
                 Position p = positions.get(pos);
-                int file = p.file()+1;
+                int file = p.file() + 1;
                 int lineNumber = p.lineNumber();
-                int tokenIndex = p.tokenIndex();
-                yield "\t.loc "+file+" "+lineNumber;
-
+                yield "\t.loc " + file + " " + lineNumber;
             }
             case Mov(TypeAsm t, Operand src, Operand dst) -> {
 
@@ -359,9 +357,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 }
                 yield instruction.format(t) + srcF + ", " + dstF;
             }
-            case Jump(String label) -> {
-                yield "jmp\t" + label;
-            }
+            case Jump(String label) -> "jmp\t" + label;
             case LabelIr(String label) -> label + ":";
             case SetCC(CmpOperator cmpOperator, boolean unsigned, Operand o) ->
                     "set" + (unsigned ? cmpOperator.unsignedCode :
@@ -369,14 +365,16 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             case JmpCC(CC cc,
                        String label) ->
                     "j" + cc.name().toLowerCase(Locale.ENGLISH) + "\t" +label;
-            case Call(Operand address, FunType _) ->
-                    {
-                    if (address instanceof LabelAddress(String functionName)){
-                        yield "call\t" + (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
-                                functionName : functionName + "@PLT");
-                    }
-                    else yield "call\t" + "*"+formatOperand(QUADWORD, instruction, address, stackCorrection);
-                    }
+            case Call(Operand address, FunType _) -> {
+                if (address instanceof LabelAddress(String functionName)) {
+                    yield "call\t" +
+                            (Mcc.SYMBOL_TABLE.containsKey(functionName) ?
+                                    functionName :
+                                    functionName + "@PLT");
+                } else yield "call\t" + "*" +
+                        formatOperand(QUADWORD, instruction, address,
+                                stackCorrection);
+            }
             case Cdq(TypeAsm t) -> instruction.format(t);
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                        Operand dst) -> {
