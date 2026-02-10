@@ -5,10 +5,7 @@ import com.quaxt.mcc.asm.ProgramAsm;
 import com.quaxt.mcc.optimizer.Optimizer;
 import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.*;
-import com.quaxt.mcc.tacky.IrGen;
-import com.quaxt.mcc.tacky.ProgramIr;
-import com.quaxt.mcc.tacky.ValIr;
-import com.quaxt.mcc.tacky.VarIr;
+import com.quaxt.mcc.tacky.*;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -506,6 +503,12 @@ public class Mcc {
             return new Err(s + " " + tokens.positionString());
         }
         return new Err(s);
+    }
+
+    public static void addDebugPos(List<InstructionIr> instructions, int pos) {
+        if (addDebugInfo){
+            instructions.add(new Pos(pos));
+        }
     }
 
 }

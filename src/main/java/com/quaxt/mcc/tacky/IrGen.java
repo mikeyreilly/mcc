@@ -103,7 +103,7 @@ public class IrGen {
                          Constant _, int pos) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
                 if (init != null) {
-                    instructions.add(new Pos(pos));
+                    Mcc.addDebugPos(instructions, pos);
                     assign(new VarIr(name.name()), init, instructions, 0, inlineFunctions);
                     return;
                 }
@@ -658,9 +658,7 @@ public class IrGen {
                 return new PlainOperand(new VarIr(name));
             case FunctionCall(Exp name, List<Exp> args, boolean varargs, Type type,
                               int pos): {
-                if (Mcc.addDebugInfo) {
-                    instructions.add(new Pos(pos));
-                }
+                Mcc.addDebugPos(instructions, pos);
                 VarIr func = (VarIr) emitTackyAndConvert(name, instructions, inlineFunctions);
                 VarIr result = type == VOID ? null : makeTemporary("tmp.",
                         type);
