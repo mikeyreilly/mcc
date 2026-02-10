@@ -191,21 +191,10 @@ public class Codegen {
 
     private static void fixUpInstructions(FunctionAsm function) {
         var instructions = function.instructions;
-        IntegerReg[] calleeSavedRegs = function.calleeSavedRegs;
-        int calleeSavedCount = calleeSavedRegs.length;
-
         // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
         for (int i = instructions.size() - 1; i >= 0; i--) {
             Instruction oldInst = instructions.get(i);
             switch (oldInst) {
-                case RET -> {
-                    if (calleeSavedCount > 0) {
-                        for (int j = calleeSavedCount - 1; j >= 0; j--) {
-                            IntegerReg r = calleeSavedRegs[j];
-                            instructions.add(i, new Pop(r));
-                        }
-                    }
-                }
                 case MovZeroExtend(TypeAsm srcType, TypeAsm dstType,
                                    Operand src, Operand dst) -> {
                     // if srcType is not byte or word we rewrite as Mov

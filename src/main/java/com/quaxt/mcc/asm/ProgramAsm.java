@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
+import static com.quaxt.mcc.asm.IntegerReg.BP;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
@@ -245,41 +246,34 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
         if (adjustedStackBytes != 0) {
             emitInstruction(out, new Binary(SUB, QUADWORD,
-                    new Imm(adjustedStackBytes), SP), stackCorrection);
+                    new Imm(adjustedStackBytes), SP), stackCorrection, functionAsm);
         }
         printIndent(out, ".cfi_def_cfa_offset " + (adjustedStackBytes + 8));
 
-        emitInstruction(out, new Comment("Check alignment"), stackCorrection);
+        emitInstruction(out, new Comment("Check alignment"), stackCorrection, functionAsm);
         var stackAlignment = functionAsm.stackAlignment;
         if (stackAlignment != 0) {
-            emitInstruction(out, new Binary(BITWISE_AND, QUADWORD, new Imm(-stackAlignment), SP), stackCorrection);
+            emitInstruction(out, new Binary(BITWISE_AND, QUADWORD, new Imm(-stackAlignment), SP), stackCorrection, functionAsm);
         }
         // push in reverse direction so we can pop in forward direction
         if (calleeSavedRegs.length % 2 == 1) {
             emitInstruction(out, new Binary(SUB, QUADWORD, new Imm(8), SP),
-                    stackCorrection);
+                    stackCorrection, functionAsm);
         }
         for (int i = calleeSavedRegs.length - 1; i >= 0; i--) {
             IntegerReg r = calleeSavedRegs[i];
-            emitInstruction(out, new Push(r), stackCorrection);
+            emitInstruction(out, new Push(r), stackCorrection, functionAsm);
         }
         for (Instruction instruction : instructions) {
-            emitInstruction(out, instruction, stackCorrection);
+            emitInstruction(out, instruction, stackCorrection, functionAsm);
         }
         printIndent(out,".cfi_endproc");
     }
 
-    public String formatInstruction(Instruction instruction, AtomicInteger stackCorrection) {
-        StringWriter sw = new StringWriter();
-        try (PrintWriter p = new PrintWriter(sw)) {
-            emitInstruction(p, instruction, stackCorrection);
-        }
-        return sw.toString();
-    }
 
     private void emitInstruction(PrintWriter out,
                                         Instruction instruction,
-                                        AtomicInteger stackCorrection) {
+                                        AtomicInteger stackCorrection, FunctionAsm functionAsm) {
         String s = switch (instruction) {
             case Pos(int pos) -> {
                 Position p = positions.get(pos);
@@ -323,6 +317,14 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             }
 
             case Nullary.RET -> {
+                // epilogue
+                int calleeSavedCount=functionAsm.calleeSavedRegs.length;
+                if (calleeSavedCount > 0) {
+                    for (int j =  0; j < calleeSavedCount; j++) {
+                        IntegerReg r = functionAsm.calleeSavedRegs[j];
+                        printIndent(out, "popq\t%"+r.q);
+                    }
+                }
                 printIndent(out, "movq\t%rbp, %rsp");
                 printIndent(out, "popq\t%rbp");
                 yield "ret";
