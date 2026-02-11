@@ -202,7 +202,21 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         printIndent(out,".cfi_startproc");
         List<Instruction> instructions = functionAsm.instructions;
         printIndent(out, "pushq\t%rbp");
+        if (Mcc.addDebugInfo) {
+            // The canonical frame address is RSP+16
+            // The register numbers are in Figure 3.36: DWARF Register Number Mapping of System V AMD64 ABI
+            // https://gitlab.com/x86-psABIs/x86-64-ABI/-/jobs/artifacts/master/raw/x86-64-ABI/abi.pdf?job=build
+            printIndent(out, ".cfi_def_cfa_offset 16\n");
+            // We store register 6 (RBP) at CFA - 16
+            printIndent(out, ".cfi_offset 6, -16\n");
+        }
         printIndent(out, "movq\t%rsp, %rbp");
+        if (Mcc.addDebugInfo) {
+            // From now on CFA is at an offset of RBP so it is RBP+16
+            printIndent(out, ".cfi_def_cfa_register 6");
+        }
+
+
 
         IntegerReg[] calleeSavedRegs = functionAsm.calleeSavedRegs;
         int calleeSavedCount = calleeSavedRegs.length;
@@ -248,8 +262,6 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             emitInstruction(out, new Binary(SUB, QUADWORD,
                     new Imm(adjustedStackBytes), SP), stackCorrection, functionAsm);
         }
-        printIndent(out, ".cfi_def_cfa_offset " + (adjustedStackBytes + 8));
-
         emitInstruction(out, new Comment("Check alignment"), stackCorrection, functionAsm);
         var stackAlignment = functionAsm.stackAlignment;
         if (stackAlignment != 0) {
@@ -327,6 +339,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 }
                 printIndent(out, "movq\t%rbp, %rsp");
                 printIndent(out, "popq\t%rbp");
+                if (Mcc.addDebugInfo) {
+                    printIndent(out,".cfi_def_cfa 7, 8");
+                }
+
                 yield "ret";
             }
             case Nullary.MFENCE -> "mfence";
