@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
+import static com.quaxt.mcc.Mcc.makeTemporary;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.IntegerReg.BP;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
@@ -98,11 +99,31 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 }
             }
         }
-
-
+        if (Mcc.addDebugInfo) {
+            emitDebugInfo(out, topLevelAsms);
+        }
         out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22" + ".04) 11.4.0\"");
         out.println("                .section	.note.GNU-stack,\"\"," +
                 "@progbits");
+    }
+
+    private void emitDebugInfo(PrintWriter out,
+                               List<TopLevelAsm> topLevelAsms) {
+        printIndent(out, ".section\t.debug_info,\"\",@progbits\n");
+        String startLabel = makeTemporary(".Lstart.");
+        String endLabel = makeTemporary(".Lend.");
+        String abbrevLabel = makeTemporary(".LabbrevLabel.");
+        printIndent(out, ".long\t" + endLabel + "-" + startLabel); //length
+        printIndent(out, ".value\t5"); // version
+        printIndent(out,".byte\t0x1");// Unit Type:     DW_UT_compile
+        printIndent(out,".byte\t0x8");// Pointer Size
+        // ---- Compile Unit DIE ----
+        printIndent(out, ".long\t" + abbrevLabel);// Abbrev Offset: 0x0
+        printIndent(out, ".uleb128 0x2");
+
+
+
+
     }
 
     private void emitStaticConstantAsm(PrintWriter out, StaticConstant v) {
