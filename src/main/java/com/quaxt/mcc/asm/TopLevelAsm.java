@@ -1,4 +1,4 @@
 package com.quaxt.mcc.asm;
 
-public sealed interface TopLevelAsm permits FunctionAsm, StaticVariableAsm, StaticConstant {
+public sealed interface TopLevelAsm permits FunctionAsm, StaticVariableAsm, StaticConstant, DebugString {
 }

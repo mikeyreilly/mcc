@@ -1,6 +1,7 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.debug.Dwarf;
 import com.quaxt.mcc.parser.Position;
 import com.quaxt.mcc.semantic.FunType;
 import com.quaxt.mcc.semantic.SemanticAnalysis;
@@ -15,15 +16,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.Mcc.makeTemporary;
+import static com.quaxt.mcc.Mcc.printIndent;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.IntegerReg.BP;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> positions) {
-    private static void printIndent(PrintWriter out, String s) {
-        out.println("\t" + s);
-    }
 
     private static String formatOperand(Instruction s, Operand o, AtomicInteger stackCorrection) {
         return switch (o) {
@@ -86,6 +85,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     }
 
     public void emitAsm(PrintWriter out) {
+
+        if (Mcc.addDebugInfo) {
+            // We do this first because it can add new StaticConstantAsms (strings) to toplevel
+            Dwarf.emitDebugInfo(out, topLevelAsms);
+        }
         for (TopLevelAsm t : topLevelAsms) {
             switch (t) {
                 case FunctionAsm functionAsm -> {
@@ -97,33 +101,16 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 case StaticConstant sc -> {
                     emitStaticConstantAsm(out, sc);
                 }
+                case DebugString(String name, String string)  -> {
+                    out.println("                .section .debug_str");
+                    out.println(name + ":");
+                    out.println("                " + stringDirective(string, true));
+                }
             }
-        }
-        if (Mcc.addDebugInfo) {
-            emitDebugInfo(out, topLevelAsms);
         }
         out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22" + ".04) 11.4.0\"");
         out.println("                .section	.note.GNU-stack,\"\"," +
                 "@progbits");
-    }
-
-    private void emitDebugInfo(PrintWriter out,
-                               List<TopLevelAsm> topLevelAsms) {
-        printIndent(out, ".section\t.debug_info,\"\",@progbits\n");
-        String startLabel = makeTemporary(".Lstart.");
-        String endLabel = makeTemporary(".Lend.");
-        String abbrevLabel = makeTemporary(".LabbrevLabel.");
-        printIndent(out, ".long\t" + endLabel + "-" + startLabel); //length
-        printIndent(out, ".value\t5"); // version
-        printIndent(out,".byte\t0x1");// Unit Type:     DW_UT_compile
-        printIndent(out,".byte\t0x8");// Pointer Size
-        // ---- Compile Unit DIE ----
-        printIndent(out, ".long\t" + abbrevLabel);// Abbrev Offset: 0x0
-        printIndent(out, ".uleb128 0x2");
-
-
-
-
     }
 
     private void emitStaticConstantAsm(PrintWriter out, StaticConstant v) {
@@ -154,26 +141,29 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                     : offset > 0
                     ? ".quad " + label + " + " + offset
                     : ".quad " + label + " - " + -offset;
-            case StringInit(String s, boolean nullTerminated) -> {
-                StringBuilder sb = new StringBuilder();
-                sb.append(nullTerminated ? ".asciz \"" : ".ascii \"");
-                for (int i = 0; i < s.length(); i++) {
-                    char c = s.charAt(i);
-                    if (c == '\\') sb.append("\\\\");
-                    else if (c == '\"') sb.append("\\\"");
-                    else if (c == '\n') sb.append("\\n");
-                    else if (c < 32 || c > 126) {
-                        String octal = Integer.toString(c & 0xff, 8);
-                        sb.append("\\000", 0, 4 - octal.length());
-                        sb.append(octal);
-                    } else sb.append(c);
-                }
-                sb.append('\"');
-                yield sb;
-            }
+            case StringInit(String s, boolean nullTerminated) ->
+                    stringDirective(s, nullTerminated);
             case UCharInit(byte i) -> ".byte " + (i & 0xff);
             case BoolInit(byte i) -> ".byte " + (i & 0xff);
         });
+    }
+
+    private static StringBuilder stringDirective(String s, boolean nullTerminated) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(nullTerminated ? ".asciz \"" : ".ascii \"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\') sb.append("\\\\");
+            else if (c == '\"') sb.append("\\\"");
+            else if (c == '\n') sb.append("\\n");
+            else if (c < 32 || c > 126) {
+                String octal = Integer.toString(c & 0xff, 8);
+                sb.append("\\000", 0, 4 - octal.length());
+                sb.append(octal);
+            } else sb.append(c);
+        }
+        sb.append('\"');
+        return sb;
     }
 
     private void emitStaticVariableAsm(PrintWriter out, StaticVariableAsm v) {

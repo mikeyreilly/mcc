@@ -511,4 +511,9 @@ public class Mcc {
         }
     }
 
+    public static void printIndent(PrintWriter out, String s) {
+        out.println("\t" + s);
+    }
+
+
 }
