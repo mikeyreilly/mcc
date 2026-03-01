@@ -9,6 +9,7 @@ import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -84,16 +85,34 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         return formatOperand(s, o, stackCorrection);
     }
 
-    public void emitAsm(PrintWriter out) {
+    public void emitAsm(PrintWriter out, Path srcFile) {
+        String textStart = null;
+        String textEnd = null;
 
         if (Mcc.addDebugInfo) {
+            textStart = makeTemporary(".Ltext.");
+            textEnd = makeTemporary(".LtextEnd.");
             // We do this first because it can add new StaticConstantAsms (strings) to toplevel
-            Dwarf.emitDebugInfo(out, topLevelAsms);
+            Dwarf.emitDebugInfo(out, topLevelAsms, srcFile, textStart, textEnd);
+        }
+        out.println("                .text");
+        if (Mcc.addDebugInfo) {
+            out.println(textStart + ":");
         }
         for (TopLevelAsm t : topLevelAsms) {
             switch (t) {
                 case FunctionAsm functionAsm -> {
                     emitFunctionAsm(out, functionAsm);
+                }
+                default -> {}
+            }
+        }
+        if (Mcc.addDebugInfo) {
+            out.println(textEnd + ":");
+        }
+        for (TopLevelAsm t : topLevelAsms) {
+            switch (t) {
+                case FunctionAsm _ -> {
                 }
                 case StaticVariableAsm staticVariableAsm -> {
                     emitStaticVariableAsm(out, staticVariableAsm);
@@ -103,6 +122,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 }
                 case DebugString(String name, String string)  -> {
                     out.println("                .section .debug_str");
+                    out.println(name + ":");
+                    out.println("                " + stringDirective(string, true));
+                }
+                case DebugLineString(String name, String string)  -> {
+                    out.println("                .section .debug_line_str");
                     out.println(name + ":");
                     out.println("                " + stringDirective(string, true));
                 }
@@ -202,7 +226,6 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         String name = functionAsm.name;
         if (functionAsm.global)
             out.println("                .globl	" + name);
-        out.println("                .text");
         FunType t= (FunType) Mcc.SYMBOL_TABLE.get(functionAsm.name).type();
         var alignment = t.alignment();
         if (alignment != null) {

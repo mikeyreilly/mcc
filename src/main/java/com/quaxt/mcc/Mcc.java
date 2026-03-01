@@ -475,7 +475,7 @@ public class Mcc {
                     pw.println("\t.file " + (i+1) + " \"" + fileName + "\"");
                 }
             }
-            programAsm.emitAsm(pw);
+            programAsm.emitAsm(pw, srcFile.toAbsolutePath());
             pw.flush();
         }
 
