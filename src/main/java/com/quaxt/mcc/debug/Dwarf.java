@@ -9,6 +9,7 @@ import com.quaxt.mcc.parser.Position;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 import static com.quaxt.mcc.Mcc.makeTemporary;
@@ -272,6 +273,7 @@ public class Dwarf {
     static final int DW_FORM_addrx3 = 0x2b;
     static final int DW_FORM_addrx4 = 0x2c;
 
+    record Die(int tag, boolean hasChildren, int[] attribFormPairs){};
 
 
     // https://dwarfstd.org/languages.html
@@ -297,9 +299,16 @@ public class Dwarf {
         printByte(out, DW_UT_compile);// Unit Type:     DW_UT_compile
         printByte(out, (byte) 8);// address_size
         printIndent(out, ".long\t" + abbrevLabel);// debug_abbrev_offset
-
+        LinkedHashMap<Die, Integer> dieMap = new LinkedHashMap<>();
+        Die compilationUnitDie = new Die(DW_TAG_compile_unit, true, new int[]{DW_AT_producer, DW_FORM_strp, DW_AT_language,
+                DW_FORM_data1, DW_AT_language_name, DW_FORM_data1,
+                DW_AT_language_version, DW_FORM_data4, DW_AT_name,
+                DW_FORM_line_strp, DW_AT_comp_dir, DW_FORM_line_strp,
+                DW_AT_low_pc, DW_FORM_addr, DW_AT_high_pc, DW_FORM_data8,
+                DW_AT_stmt_list, DW_FORM_sec_offset});
+        int compileUnitAbbrevCode = startDie(dieMap, compilationUnitDie);
         // ---- Compile Unit DIE ----
-        uleb128(out, 1); // abbreviation code DW_TAG_compile_unit
+        uleb128(out, compileUnitAbbrevCode); // abbreviation code DW_TAG_compile_unit
 
         // DW_AT_producer
         String producer = makeTemporary(".Lproducer.");
@@ -340,8 +349,21 @@ public class Dwarf {
             }
         }
 
+        int subProgramCode = startDie(dieMap, new Die(DW_TAG_subprogram, false,new int[]{
+                DW_AT_external, DW_FORM_flag_present,
+                DW_AT_name, DW_FORM_strp,
+
+                DW_AT_decl_file, DW_FORM_data1,
+                DW_AT_decl_line, DW_FORM_data2,
+//                DW_AT_decl_column,
+//                DW_FORM_data1, DW_AT_prototyped, DW_FORM_flag_present,
+//                DW_AT_type, DW_FORM_ref4, DW_AT_declaration,
+//                DW_FORM_flag_present, DW_AT_sibling, DW_FORM_ref4
+        }));
+
+
         for (FunctionAsm fun : functions) {
-            uleb128(out, 2); // abbreviation code DW_TAG_subprogram
+            uleb128(out, subProgramCode); // abbreviation code DW_TAG_subprogram
             String funName = makeTemporary(".LfunName.");
             topLevelAsms.add(new DebugString(funName, fun.name));
             printIndent(out, ".long\t" + funName);
@@ -363,43 +385,30 @@ public class Dwarf {
         // See 7.5.3 Abbreviations Table
         printIndent(out, ".section\t.debug_abbrev,\"\",@progbits");
         out.println(abbrevLabel+":");
-        uleb128(out, 1); // abbreviation code
-        uleb128(out, DW_TAG_compile_unit);
-        printByte(out, DW_CHILDREN_yes);
+        for (var e : dieMap.entrySet()) {
+            Die k = e.getKey();
+            int abbrevCode = e.getValue();
+            uleb128(out, abbrevCode); // abbreviation code
+            uleb128(out, k.tag);
+            uleb128(out, k.hasChildren ? DW_CHILDREN_yes:DW_CHILDREN_no);
+            uleb128s(out, k.attribFormPairs);
+            // end of die abbrev
+            printByte(out, (byte) 0);
+            printByte(out, (byte) 0);
 
-        uleb128s(out, new int[]{DW_AT_producer, DW_FORM_strp, DW_AT_language,
-                DW_FORM_data1, DW_AT_language_name, DW_FORM_data1,
-                DW_AT_language_version, DW_FORM_data4, DW_AT_name,
-                DW_FORM_line_strp, DW_AT_comp_dir, DW_FORM_line_strp,
-                DW_AT_low_pc, DW_FORM_addr, DW_AT_high_pc, DW_FORM_data8,
-                DW_AT_stmt_list, DW_FORM_sec_offset});
-
-        // end of DW_TAG_compile_unit
-        printByte(out, (byte) 0);
-        printByte(out, (byte) 0);
-
-        uleb128(out, 2); // abbreviation code
-        uleb128(out, DW_TAG_subprogram);
-        printByte(out, DW_CHILDREN_no); // MR-TODO change to yes
-
-        uleb128s(out, new int[]{
-                DW_AT_external, DW_FORM_flag_present,
-                DW_AT_name, DW_FORM_strp,
-
-                DW_AT_decl_file, DW_FORM_data1,
-                DW_AT_decl_line, DW_FORM_data2,
-//                DW_AT_decl_column,
-//                DW_FORM_data1, DW_AT_prototyped, DW_FORM_flag_present,
-//                DW_AT_type, DW_FORM_ref4, DW_AT_declaration,
-//                DW_FORM_flag_present, DW_AT_sibling, DW_FORM_ref4
-        });
-        // end of D,W_TAG_subprogram;
-        printByte(out, (byte) 0);
-        printByte(out, (byte) 0);
-
+        }
+        
         //end of debug abbrev
         printByte(out, (byte) 0);
 
+    }
+
+
+    private static int startDie(LinkedHashMap<Die, Integer> dieMap,
+                                Die d) {
+
+        final int s = dieMap.size();
+        return dieMap.computeIfAbsent(d, k -> s + 1);
     }
 
     private static void printInt(PrintWriter out, String s) {
