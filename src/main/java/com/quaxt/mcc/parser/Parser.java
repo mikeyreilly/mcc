@@ -1371,6 +1371,7 @@ public class Parser {
                                                 ArrayList<Map<String, Type>> typeAliases,
                                                 FunType funType,
                                                 boolean inline) {
+        int pos = tokens.getCurrentPosition();;
 
         List<Type> paramTypes = funType.params();
 
@@ -1393,7 +1394,7 @@ public class Parser {
             block = null;
         }
         return new Function(functionName, params, block, funType,
-                storageClass, false, false, inline);
+                storageClass, false, false, inline, pos);
     }
 
     private static String expectIdentifier(TokenList tokens) {

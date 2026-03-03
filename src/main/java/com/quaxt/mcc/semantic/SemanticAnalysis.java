@@ -55,7 +55,9 @@ public class SemanticAnalysis {
         return new Function(function.name, function.parameters,
                 loopLabelStatement(function.body, null, null), function.funType,
           function.storageClass, function.callsVaStart, function.usesFunc,
-                function.inline);
+                function.inline,
+                function.pos
+        );
 
     }
 
@@ -881,7 +883,7 @@ false);
         }
         return new Function(decl.name, decl.parameters, typeCheckedBody,
          funType, decl.storageClass, decl.callsVaStart, decl.usesFunc,
-          decl.inline);
+          decl.inline, decl.pos);
     }
 
     private static Type arrayToPointer(Type p) {
@@ -2333,7 +2335,7 @@ innerStructureMap, function);
         return new Function(function.name, newArgs, newBody,
                 resolveFunType(function.funType, identifierMap, innerStructureMap,
           function), function.storageClass, function.callsVaStart,
- function.usesFunc, function.inline);
+ function.usesFunc, function.inline, function.pos);
     }
 
     private static FunType resolveFunType(FunType funType,

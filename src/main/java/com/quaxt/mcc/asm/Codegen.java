@@ -1485,7 +1485,7 @@ public class Codegen {
         }
         return new FunctionAsm(functionIr.name(), functionIr.global(),
                 returnInMemory, ins, toRegisters(returnValueClassification),
-                functionIr.callsVaStart());
+                functionIr.callsVaStart(), functionIr.pos());
     }
 
 

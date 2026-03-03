@@ -15,16 +15,18 @@ public final class FunctionAsm implements AsmNode, TopLevelAsm {
     public long stackSize;
     public boolean callsVaStart;
     public long stackAlignment;
-
+    public int pos;
     public FunctionAsm(String name, boolean global, boolean returnInMemory,
                        List<Instruction> instructions,
-                       Pair<Integer, Integer> returnRegisters, boolean callsVaStart) {
+                       Pair<Integer, Integer> returnRegisters, boolean callsVaStart,
+                       int pos) {
         this.name = name;
         this.global = global;
         this.returnInMemory = returnInMemory;
         this.instructions = instructions;
         this.returnRegisters = returnRegisters;
         this.callsVaStart = callsVaStart;
+        this.pos = pos;
     }
 
 

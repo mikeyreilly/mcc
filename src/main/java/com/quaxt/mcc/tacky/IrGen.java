@@ -70,7 +70,7 @@ public class IrGen {
                 new FunctionIr(function.name,
                         SYMBOL_TABLE.get(function.name).attrs().global(),
                         function.parameters, instructions, function.funType,
-                        function.callsVaStart, function.inline && !function.callsVaStart);
+                        function.callsVaStart, function.inline && !function.callsVaStart, function.pos);
         ReturnIr ret = new ReturnIr(IntInit.ZERO);
         instructions.add(ret);
         if (f.inline()) {

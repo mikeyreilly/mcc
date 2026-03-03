@@ -10,7 +10,8 @@ public record FunctionIr(String name, boolean global, List<Var> type,
                          List<InstructionIr> instructions,
                          FunType funType,
                          boolean callsVaStart,
-                         boolean inline) implements TopLevel {
+                         boolean inline,
+                         int pos) implements TopLevel {
 
     public Type returnType() {
         return funType.ret();

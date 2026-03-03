@@ -4,6 +4,7 @@ import com.quaxt.mcc.asm.DebugLineString;
 import com.quaxt.mcc.asm.DebugString;
 import com.quaxt.mcc.asm.FunctionAsm;
 import com.quaxt.mcc.asm.TopLevelAsm;
+import com.quaxt.mcc.parser.Position;
 
 import java.io.PrintWriter;
 import java.nio.file.Path;
@@ -281,7 +282,8 @@ public class Dwarf {
                                      List<TopLevelAsm> topLevelAsms,
                                      Path srcFile,
                                      String textStart,
-                                     String textEnd) {
+                                     String textEnd,
+                                     List<Position> positions) {
         printIndent(out, ".section\t.debug_info,\"\",@progbits\n");
         String startLabel = makeTemporary(".Lstart.");
         String endLabel = makeTemporary(".Lend.");
@@ -339,12 +341,13 @@ public class Dwarf {
         }
 
         for (FunctionAsm fun : functions) {
-                uleb128(out, 2); // abbreviation code DW_TAG_subprogram
-
-                String funName = makeTemporary(".LfunName.");
-                topLevelAsms.add(new DebugString(funName, fun.name));
-                printIndent(out, ".long\t" + funName);
-
+            uleb128(out, 2); // abbreviation code DW_TAG_subprogram
+            String funName = makeTemporary(".LfunName.");
+            topLevelAsms.add(new DebugString(funName, fun.name));
+            printIndent(out, ".long\t" + funName);
+            Position pos = positions.get(fun.pos);
+            printByte(out, (byte) pos.file());
+            printShort(out, (short) pos.lineNumber());
         }
         // no more children of DW_TAG_compile_unit
         printByte(out, (byte)0);
@@ -383,8 +386,9 @@ public class Dwarf {
                 DW_AT_external, DW_FORM_flag_present,
                 DW_AT_name, DW_FORM_strp,
 
-//                DW_AT_decl_file, DW_FORM_data1,
-//                DW_AT_decl_line, DW_FORM_data2, DW_AT_decl_column,
+                DW_AT_decl_file, DW_FORM_data1,
+                DW_AT_decl_line, DW_FORM_data2,
+//                DW_AT_decl_column,
 //                DW_FORM_data1, DW_AT_prototyped, DW_FORM_flag_present,
 //                DW_AT_type, DW_FORM_ref4, DW_AT_declaration,
 //                DW_FORM_flag_present, DW_AT_sibling, DW_FORM_ref4

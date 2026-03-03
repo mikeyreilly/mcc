@@ -93,7 +93,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             textStart = makeTemporary(".Ltext.");
             textEnd = makeTemporary(".LtextEnd.");
             // We do this first because it can add new StaticConstantAsms (strings) to toplevel
-            Dwarf.emitDebugInfo(out, topLevelAsms, srcFile, textStart, textEnd);
+            Dwarf.emitDebugInfo(out, topLevelAsms, srcFile, textStart, textEnd, positions);
         }
         out.println("                .text");
         if (Mcc.addDebugInfo) {
