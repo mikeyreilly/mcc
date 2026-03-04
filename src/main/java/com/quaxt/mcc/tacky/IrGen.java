@@ -1,6 +1,7 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.FunctionIr;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
 import com.quaxt.mcc.atomics.MemoryOrder;
@@ -69,14 +70,21 @@ public class IrGen {
         FunctionIr f =
                 new FunctionIr(function.name,
                         SYMBOL_TABLE.get(function.name).attrs().global(),
-                        function.parameters, instructions, function.funType,
-                        function.callsVaStart, function.inline && !function.callsVaStart, function.pos);
+                        false,
+                        null,
+                        null,
+                        function.callsVaStart,
+                        function.pos,
+                        function.parameters,
+                        instructions,
+                        function.funType,
+                        function.inline && !function.callsVaStart);
         ReturnIr ret = new ReturnIr(IntInit.ZERO);
         instructions.add(ret);
-        if (f.inline()) {
+        if (f.inline) {
             EnumSet<Optimization> optimizations = EnumSet.allOf(Optimization.class);
             f = optimizeFunction(f, optimizations);
-            inlineFunctions.put(f.name(), f);
+            inlineFunctions.put(f.name, f);
         }
         return f;
     }
@@ -974,8 +982,8 @@ public class IrGen {
                                           VarIr result,
                                           List<InstructionIr> instructions) {
         Map<VarIr, ValIr> substitutionTable = new HashMap<>();
-        List<Var> params = functionToInlineIr.type();
-        for(int i = 0; i < functionToInlineIr.type().size();i++){
+        List<Var> params = functionToInlineIr.type;
+        for(int i = 0; i < functionToInlineIr.type.size();i++){
             Var p = params.get(i);
             substitutionTable.put(new VarIr(p.name()), argVals.get(i));
         }
@@ -988,9 +996,9 @@ public class IrGen {
 
         java.util.function.Function<String, String> fixLabel = l ->
                 labelTable.computeIfAbsent(l, k-> k + labelSuffix.incrementAndGet());
-        int varArgIndex=functionToInlineIr.type().size();
+        int varArgIndex= functionToInlineIr.type.size();
         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
-        for (var instr : functionToInlineIr.instructions()) {
+        for (var instr : functionToInlineIr.instructionIrs) {
             InstructionIr i = switch(instr){
                 case Copy(ValIr src, VarIr dst) -> new Copy(s.apply(src), dst);
                 case BinaryIr(BinaryOperator op, ValIr v1, ValIr v2,

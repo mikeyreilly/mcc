@@ -22,7 +22,7 @@ public class RegisterAllocator {
     /**
      * p. 630
      */
-    public static void allocateRegisters(FunctionAsm functionAsm) {
+    public static void allocateRegisters(FunctionIr functionAsm) {
         List<Instruction> instructions = functionAsm.instructions;
         List<Node> interferenceGraphGpr;
         List<Node> interferenceGraphMmx;
@@ -281,9 +281,9 @@ public class RegisterAllocator {
 
 
     /**
-     * Does an in-place transformation of instructions so that each
+     * Does an in-place transformation of instructionIrs so that each
      * instruction has its operands replaced by the operand mapped in
-     * registerMap. Mov instructions from X to X are removed.
+     * registerMap. Mov instructionIrs from X to X are removed.
      * p. 647
      */
     private static void replacePseudoRegs(List<Instruction> instructions,
@@ -355,7 +355,7 @@ public class RegisterAllocator {
 
     private static Pair<Map<String, Reg>, Map<String, Reg>> createRegisterMap(
             List<Node> coloredGraph, List<Node> coloredGraphMmx,
-            FunctionAsm function) {
+            FunctionIr function) {
         Map<Integer, IntegerReg> colorMap = new HashMap<>();
         Map<Integer, DoubleReg> colorMapMmx = new HashMap<>();
         for (Node node : coloredGraph) {
@@ -553,7 +553,7 @@ public class RegisterAllocator {
     */
 
     private static Pair<List<Node>, List<Node>> buildGraph(
-            FunctionAsm functionAsm) {
+            FunctionIr functionAsm) {
         List<Instruction> instructions = functionAsm.instructions;
         Pair<Integer, Integer> returnRegisters = functionAsm.returnRegisters;
         var interferenceGraphGpr = baseGraph(BASE_GRAPH_GPRS);

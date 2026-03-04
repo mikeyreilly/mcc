@@ -2,7 +2,7 @@ package com.quaxt.mcc.debug;
 
 import com.quaxt.mcc.asm.DebugLineString;
 import com.quaxt.mcc.asm.DebugString;
-import com.quaxt.mcc.asm.FunctionAsm;
+import com.quaxt.mcc.asm.FunctionIr;
 import com.quaxt.mcc.asm.TopLevelAsm;
 import com.quaxt.mcc.parser.Position;
 
@@ -297,10 +297,11 @@ public class Dwarf {
         out.println(startLabel + ":");
         printIndent(out, ".value\t5"); // DWARF version
         printByte(out, DW_UT_compile);// Unit Type:     DW_UT_compile
-        printByte(out, (byte) 8);// address_size
+        printByte(out, (byte) 8); // address_size
         printIndent(out, ".long\t" + abbrevLabel);// debug_abbrev_offset
         LinkedHashMap<Die, Integer> dieMap = new LinkedHashMap<>();
-        Die compilationUnitDie = new Die(DW_TAG_compile_unit, true, new int[]{DW_AT_producer, DW_FORM_strp, DW_AT_language,
+        Die compilationUnitDie = new Die(DW_TAG_compile_unit, true, new int[]{
+                DW_AT_producer, DW_FORM_strp, DW_AT_language,
                 DW_FORM_data1, DW_AT_language_name, DW_FORM_data1,
                 DW_AT_language_version, DW_FORM_data4, DW_AT_name,
                 DW_FORM_line_strp, DW_AT_comp_dir, DW_FORM_line_strp,
@@ -342,27 +343,27 @@ public class Dwarf {
         printInt(out, debugLineLabel);
         // now types
         // now subprograms
-        List<FunctionAsm> functions = new ArrayList<>();
+        List<FunctionIr> functions = new ArrayList<>();
         for (TopLevelAsm topLevelAsm : topLevelAsms) {
-            if (topLevelAsm instanceof FunctionAsm fun) {
+            if (topLevelAsm instanceof FunctionIr fun) {
                 functions.add(fun);
             }
         }
 
-        int subProgramCode = startDie(dieMap, new Die(DW_TAG_subprogram, false,new int[]{
-                DW_AT_external, DW_FORM_flag_present,
-                DW_AT_name, DW_FORM_strp,
 
-                DW_AT_decl_file, DW_FORM_data1,
-                DW_AT_decl_line, DW_FORM_data2,
-//                DW_AT_decl_column,
-//                DW_FORM_data1, DW_AT_prototyped, DW_FORM_flag_present,
+
+        for (FunctionIr fun : functions) {
+            int subProgramCode =  startDie(dieMap, new Die(DW_TAG_subprogram, false,new int[]{
+                    DW_AT_external, DW_FORM_flag_present,
+                    DW_AT_name, DW_FORM_strp,
+
+                    DW_AT_decl_file, DW_FORM_data1,
+                    DW_AT_decl_line, DW_FORM_data2,
+                    DW_AT_prototyped, DW_FORM_flag_present,
 //                DW_AT_type, DW_FORM_ref4, DW_AT_declaration,
 //                DW_FORM_flag_present, DW_AT_sibling, DW_FORM_ref4
-        }));
+            }));
 
-
-        for (FunctionAsm fun : functions) {
             uleb128(out, subProgramCode); // abbreviation code DW_TAG_subprogram
             String funName = makeTemporary(".LfunName.");
             topLevelAsms.add(new DebugString(funName, fun.name));

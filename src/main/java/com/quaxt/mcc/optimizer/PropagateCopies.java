@@ -146,8 +146,8 @@ public class PropagateCopies {
 
 
     /*
-    Takes all the copy instructions that reach the beginning of a block and
-    calculates which copies reach individual instructions within the block.
+    Takes all the copy instructionIrs that reach the beginning of a block and
+    calculates which copies reach individual instructionIrs within the block.
     See p. 591*/
     private static void transfer(BasicBlock block, Set<Copy> initialReachingCopies, HashMap<Integer, HashSet<Copy>[]>  INSTRUCTION_ANNOTATIONS, HashMap<Integer, HashSet<Copy>> BLOCK_ANNOTATIONS, Set<VarIr> aliasedVars) {
         var currentReachingCopies = new HashSet<>(initialReachingCopies);

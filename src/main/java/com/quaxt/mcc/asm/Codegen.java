@@ -58,7 +58,7 @@ public class Codegen {
         for (TopLevel topLevel : programIr.topLevels()) {
             switch (topLevel) {
                 case FunctionIr f -> {
-                    FunctionAsm functionAsm = convertFunction(f);
+                    FunctionIr functionAsm = convertFunction(f);
                     topLevels.add(functionAsm);
 
                 }
@@ -76,7 +76,7 @@ public class Codegen {
         generateBackendSymbolTable();
         for (TopLevelAsm topLevelAsm : topLevels) {
 
-            if (topLevelAsm instanceof FunctionAsm functionAsm) {
+            if (topLevelAsm instanceof FunctionIr functionAsm) {
                 if(!registerAllocatorDisabled){
                     RegisterAllocator.allocateRegisters(functionAsm);
                 }
@@ -123,7 +123,7 @@ public class Codegen {
         } : op1;
     }
 
-    private static long replacePseudoRegisters(FunctionAsm functionAsm) {
+    private static long replacePseudoRegisters(FunctionIr functionAsm) {
 
         List<Instruction> instructions = functionAsm.instructions;
 
@@ -189,9 +189,9 @@ public class Codegen {
         return offset.get() + reservedSpace;
     }
 
-    private static void fixUpInstructions(FunctionAsm function) {
+    private static void fixUpInstructions(FunctionIr function) {
         var instructions = function.instructions;
-        // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructions
+        // Fix illegal MOV, iDiV, ADD, SUB, IMUL instructionIrs
         for (int i = instructions.size() - 1; i >= 0; i--) {
             Instruction oldInst = instructions.get(i);
             switch (oldInst) {
@@ -531,7 +531,7 @@ public class Codegen {
     * of an aggregate or if it is a pointer
     * */
     private static Operand dePseudo(Operand in, Map<String, Long> varTable,
-                                    AtomicLong offsetA, FunctionAsm functionAsm) {
+                                    AtomicLong offsetA, FunctionIr functionAsm) {
         long offsetFromStartOfArray;
         String identifier;
         int alignment = 0;
@@ -806,15 +806,15 @@ public class Codegen {
 
     }
 
-    public static FunctionAsm convertFunction(FunctionIr functionIr) {
+    public static FunctionIr convertFunction(FunctionIr functionIr) {
         ReturnValueClassification returnValueClassification = null;
         // here we can convert arguments to pseudos (which are operands)
-        List<InstructionIr> instructionIrs = functionIr.instructions();
+        List<InstructionIr> instructionIrs = functionIr.instructionIrs;
         Set<VarIr> aliasedVars = Optimizer.addressTakenAnalysis(instructionIrs);
         for (var v : aliasedVars) {
             setAliased(v.identifier());
         }
-        List<Var> functionType = functionIr.type();
+        List<Var> functionType = functionIr.type;
         List<TypedOperand> operands = new ArrayList<>();
         for (Var param : functionType) {
             var t = toTypeAsm(param.type());
@@ -835,7 +835,7 @@ public class Codegen {
 
         ParameterClassification classifiedParameters =
                 classifyParameters(operands, returnInMemory);
-        PARAMETER_CLASSIFICATION_MAP.put(functionIr.funType(),
+        PARAMETER_CLASSIFICATION_MAP.put(functionIr.funType,
                 classifiedParameters);
 
         ArrayList<TypedOperand> integerArguments =
@@ -1483,9 +1483,10 @@ public class Codegen {
                         throw new IllegalStateException("Unexpected value: " + inst);
             }
         }
-        return new FunctionAsm(functionIr.name(), functionIr.global(),
-                returnInMemory, ins, toRegisters(returnValueClassification),
-                functionIr.callsVaStart(), functionIr.pos());
+        functionIr.returnInMemory = returnInMemory;
+        functionIr.instructions = ins;
+        functionIr.returnRegisters = toRegisters(returnValueClassification);
+        return functionIr;
     }
 
 

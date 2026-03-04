@@ -8,7 +8,6 @@ import com.quaxt.mcc.semantic.SemanticAnalysis;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +18,6 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.Mcc.makeTemporary;
 import static com.quaxt.mcc.Mcc.printIndent;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
-import static com.quaxt.mcc.asm.IntegerReg.BP;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
@@ -101,7 +99,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         }
         for (TopLevelAsm t : topLevelAsms) {
             switch (t) {
-                case FunctionAsm functionAsm -> {
+                case FunctionIr functionAsm -> {
                     emitFunctionAsm(out, functionAsm);
                 }
                 default -> {}
@@ -112,7 +110,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         }
         for (TopLevelAsm t : topLevelAsms) {
             switch (t) {
-                case FunctionAsm _ -> {
+                case FunctionIr _ -> {
                 }
                 case StaticVariableAsm staticVariableAsm -> {
                     emitStaticVariableAsm(out, staticVariableAsm);
@@ -222,7 +220,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         return dividend + divisor - remainder;
     }
 
-    private void emitFunctionAsm(PrintWriter out, FunctionAsm functionAsm) {
+    private void emitFunctionAsm(PrintWriter out, FunctionIr functionAsm) {
         String name = functionAsm.name;
         if (functionAsm.global)
             out.println("                .globl	" + name);
@@ -319,7 +317,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
     private void emitInstruction(PrintWriter out,
                                         Instruction instruction,
-                                        AtomicInteger stackCorrection, FunctionAsm functionAsm) {
+                                        AtomicInteger stackCorrection, FunctionIr functionAsm) {
         String s = switch (instruction) {
             case Pos(int pos) -> {
                 Position p = positions.get(pos);
@@ -483,7 +481,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                     "popq\t" + formatOperand(instruction, arg, stackCorrection);
                 // We don't do `addTo(stackCorrection, -8, out)` because pop is
                 // just used to restore registers prior to executing RET
-                // instructions. "Fixing" the stackCorrection would leave us
+                // instructionIrs. "Fixing" the stackCorrection would leave us
                 // with the wrong result in other basic blocks of the function
                 // following the RET
                 yield r;

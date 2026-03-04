@@ -17,7 +17,7 @@ public record BasicBlock<T extends AbstractInstruction>(int nodeId, List<T> inst
 
     @Override
     public String toString() {
-        return "BasicBlock{" + "nodeId=" + nodeId + ", instructions=" + instructions + ", predecessors=" + stringifyNodes(predecessors) + ", successors=" + stringifyNodes(successors) + '}';
+        return "BasicBlock{" + "nodeId=" + nodeId + ", instructionIrs=" + instructions + ", predecessors=" + stringifyNodes(predecessors) + ", successors=" + stringifyNodes(successors) + '}';
     }
 
     public boolean equals(Object o) {

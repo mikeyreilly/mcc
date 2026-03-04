@@ -33,11 +33,11 @@ public class Optimizer {
 
     public static FunctionIr optimizeFunction(FunctionIr f,
                                             EnumSet<Optimization> optimizations) {
-        CURRENT_FUNCTION_NAME = f.name();
-        List<InstructionIr> instructions = f.instructions();
+        CURRENT_FUNCTION_NAME = f.name;
+        List<InstructionIr> instructions = f.instructionIrs;
         instructions = optimizeInstructions(optimizations, instructions);
-        return new FunctionIr(f.name(), f.global(), f.type(), instructions,
-                f.funType(), f.callsVaStart(), f.inline(), f.pos());
+        f.instructionIrs = instructions;
+        return f;
     }
 
     public static List<InstructionIr> optimizeInstructions(
