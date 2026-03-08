@@ -196,7 +196,7 @@ public class Mcc {
 
     public static boolean isSigned(Type srcT) {
         return switch (srcT) {
-            case CHAR, SCHAR, INT, LONG, DOUBLE -> true;
+            case CHAR, SCHAR, INT, LONG, DOUBLE, FLOAT -> true;
             default -> false;
         };
     }

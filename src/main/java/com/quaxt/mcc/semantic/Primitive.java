@@ -7,20 +7,30 @@ import com.quaxt.mcc.UCharInit;
 import com.quaxt.mcc.tacky.ValIr;
 
 public enum Primitive implements Type {
-    CHAR(new CharInit((byte) 0)), UCHAR(new UCharInit((byte) 0)),
-    SCHAR(new CharInit((byte) 0)), INT(IntInit.ZERO), UINT(new UIntInit(0)),
-    SHORT(new ShortInit((short)0)), USHORT(new UShortInit((short)0)),
-    LONG(new LongInit(0)), ULONG(new ULongInit(0)),
-    LONGLONG(new LongLongInit(0)), ULONGLONG(new ULongLongInit(0)),
-    DOUBLE(new DoubleInit(0)), FLOAT(new DoubleInit(0)), VOID(new UIntInit(0)),
-    BOOL(new BoolInit((byte)0));
+    CHAR(new CharInit((byte) 0), "char"),
+    UCHAR(new UCharInit((byte) 0), "unsigned char"),
+    SCHAR(new CharInit((byte) 0), "signed char"),
+    INT(IntInit.ZERO, "int"),
+    UINT(new UIntInit(0), "unsigned int"),
+    SHORT(new ShortInit((short)0), "short"),
+    USHORT(new UShortInit((short)0), "unsigned short"),
+    LONG(new LongInit(0), "long"),
+    ULONG(new ULongInit(0), "unsigned long"),
+    LONGLONG(new LongLongInit(0), "long long"),
+    ULONGLONG(new ULongLongInit(0), "unsigned long long"),
+    DOUBLE(new DoubleInit(0), "double"),
+    FLOAT(new DoubleInit(0), "float"),
+    VOID(new UIntInit(0), "unsigned int"),
+    BOOL(new BoolInit((byte)0), "bool");
 
     private final Constant<?> zero;
     public Initializer zeroInitializer;
+    public final String name;
 
-    Primitive(Constant<?> zero) {
+    Primitive(Constant<?> zero, String name) {
         this.zero = zero;
         this.zeroInitializer = new SingleInit((Constant) zero, this);
+        this.name = name;
     }
 
     public Constant<?> zero() {

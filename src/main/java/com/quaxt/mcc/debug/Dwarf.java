@@ -1,16 +1,16 @@
 package com.quaxt.mcc.debug;
 
-import com.quaxt.mcc.asm.DebugLineString;
-import com.quaxt.mcc.asm.DebugString;
-import com.quaxt.mcc.asm.FunctionIr;
-import com.quaxt.mcc.asm.TopLevelAsm;
+import com.quaxt.mcc.Mcc;
+import com.quaxt.mcc.SymbolTableEntry;
+import com.quaxt.mcc.asm.*;
 import com.quaxt.mcc.parser.Position;
+import com.quaxt.mcc.parser.Typeof;
+import com.quaxt.mcc.parser.TypeofT;
+import com.quaxt.mcc.semantic.*;
 
 import java.io.PrintWriter;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
+import java.util.*;
 
 import static com.quaxt.mcc.Mcc.makeTemporary;
 import static com.quaxt.mcc.Mcc.printIndent;
@@ -18,7 +18,8 @@ import static com.quaxt.mcc.Mcc.printIndent;
 public class Dwarf {
     /* Throughout the comments in this class section numbers and table numbers
      * refer to DWARF Version 5 Debugging Format Standard
-     * https://dwarfstd.org/doc/DWARF5.pdf*/
+     * https://dwarfstd.org/doc/DWARF5.pdf
+     * */
 
     // 7.5.1 Unit Headers
     static final byte DW_UT_compile = 0x01;
@@ -273,12 +274,45 @@ public class Dwarf {
     static final int DW_FORM_addrx3 = 0x2b;
     static final int DW_FORM_addrx4 = 0x2c;
 
-    record Die(int tag, boolean hasChildren, int[] attribFormPairs){};
+    record Die(int tag, boolean hasChildren, int[] attribFormPairs){
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Die die)) return false;
+            return tag == die.tag && hasChildren == die.hasChildren && Objects.deepEquals(attribFormPairs, die.attribFormPairs);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(tag, hasChildren, Arrays.hashCode(attribFormPairs));
+        }
+    };
 
 
     // https://dwarfstd.org/languages.html
     static final byte DW_LANG_C11 = 0x1d;
     static final byte DW_LNAME_C = 0x03;	;
+
+// DWARF 5 7.8 Base type atribute encodings
+    static final byte DW_ATE_address = 0x01;
+    static final byte DW_ATE_boolean = 0x02;
+    static final byte DW_ATE_complex_float = 0x03;
+    static final byte DW_ATE_float = 0x04;
+    static final byte DW_ATE_signed = 0x05;
+    static final byte DW_ATE_signed_char = 0x06;
+    static final byte DW_ATE_unsigned = 0x07;
+    static final byte DW_ATE_unsigned_char = 0x08;
+    static final byte DW_ATE_imaginary_float = 0x09;
+    static final byte DW_ATE_packed_decimal = 0x0a;
+    static final byte DW_ATE_numeric_string = 0x0b;
+    static final byte DW_ATE_edited = 0x0c;
+    static final byte DW_ATE_signed_fixed = 0x0d;
+    static final byte DW_ATE_unsigned_fixed = 0x0e;
+    static final byte DW_ATE_decimal_float = 0x0f;
+    static final byte DW_ATE_UTF = 0x10;
+    static final byte DW_ATE_UCS = 0x11;
+    static final byte DW_ATE_ASCII = 0x12;
+    static final byte DW_ATE_lo_user = (byte)0x80;
+    static final byte DW_ATE_hi_user = (byte)0xff;
 
     public static void emitDebugInfo(PrintWriter out,
                                      List<TopLevelAsm> topLevelAsms,
@@ -307,7 +341,7 @@ public class Dwarf {
                 DW_FORM_line_strp, DW_AT_comp_dir, DW_FORM_line_strp,
                 DW_AT_low_pc, DW_FORM_addr, DW_AT_high_pc, DW_FORM_data8,
                 DW_AT_stmt_list, DW_FORM_sec_offset});
-        int compileUnitAbbrevCode = startDie(dieMap, compilationUnitDie);
+        int compileUnitAbbrevCode = abbrevNumber(dieMap, compilationUnitDie);
         // ---- Compile Unit DIE ----
         uleb128(out, compileUnitAbbrevCode); // abbreviation code DW_TAG_compile_unit
 
@@ -351,19 +385,30 @@ public class Dwarf {
         }
 
 
-
+        LinkedHashMap<Type, Integer> typeMap = makeTypeTable(out, topLevelAsms, dieMap);
+        int[] voidAttribs = new int[]{
+                DW_AT_external, DW_FORM_flag_present,
+                DW_AT_name, DW_FORM_strp,
+                DW_AT_decl_file, DW_FORM_data1,
+                DW_AT_decl_line, DW_FORM_data2,
+                DW_AT_prototyped, DW_FORM_flag_present,
+//                DW_AT_type, DW_FORM_ref4,
+//                DW_AT_declaration, DW_FORM_flag_present,
+//                DW_AT_sibling, DW_FORM_ref4
+        };
+        int[] nonvoidAttribs = new int[]{
+                DW_AT_external, DW_FORM_flag_present,
+                DW_AT_name, DW_FORM_strp,
+                DW_AT_decl_file, DW_FORM_data1,
+                DW_AT_decl_line, DW_FORM_data2,
+                DW_AT_prototyped, DW_FORM_flag_present,
+                DW_AT_type, DW_FORM_ref4,
+//                DW_AT_declaration, DW_FORM_flag_present,
+//                DW_AT_sibling, DW_FORM_ref4
+        };
         for (FunctionIr fun : functions) {
-            int subProgramCode =  startDie(dieMap, new Die(DW_TAG_subprogram, false,new int[]{
-                    DW_AT_external, DW_FORM_flag_present,
-                    DW_AT_name, DW_FORM_strp,
-
-                    DW_AT_decl_file, DW_FORM_data1,
-                    DW_AT_decl_line, DW_FORM_data2,
-                    DW_AT_prototyped, DW_FORM_flag_present,
-//                DW_AT_type, DW_FORM_ref4, DW_AT_declaration,
-//                DW_FORM_flag_present, DW_AT_sibling, DW_FORM_ref4
-            }));
-
+            Type returnType = fun.returnType();
+            int subProgramCode =  abbrevNumber(dieMap, new Die(DW_TAG_subprogram, false,returnType == Primitive.VOID?voidAttribs: nonvoidAttribs));
             uleb128(out, subProgramCode); // abbreviation code DW_TAG_subprogram
             String funName = makeTemporary(".LfunName.");
             topLevelAsms.add(new DebugString(funName, fun.name));
@@ -371,6 +416,9 @@ public class Dwarf {
             Position pos = positions.get(fun.pos);
             printByte(out, (byte) pos.file());
             printShort(out, (short) pos.lineNumber());
+            if (returnType != Primitive.VOID) {
+                printInt(out, typeMap.get(returnType));
+            }
         }
         // no more children of DW_TAG_compile_unit
         printByte(out, (byte)0);
@@ -391,7 +439,7 @@ public class Dwarf {
             int abbrevCode = e.getValue();
             uleb128(out, abbrevCode); // abbreviation code
             uleb128(out, k.tag);
-            uleb128(out, k.hasChildren ? DW_CHILDREN_yes:DW_CHILDREN_no);
+            uleb128(out, k.hasChildren ? DW_CHILDREN_yes : DW_CHILDREN_no);
             uleb128s(out, k.attribFormPairs);
             // end of die abbrev
             printByte(out, (byte) 0);
@@ -404,9 +452,91 @@ public class Dwarf {
 
     }
 
+    private static LinkedHashMap<Type, Integer> makeTypeTable(PrintWriter out,
+                                                              List<TopLevelAsm> topLevelAsms, LinkedHashMap<Die, Integer> dieMap) {
+        LinkedHashMap<Type, Integer> typeMap = new LinkedHashMap<>();
+        int nextTypeLocation = 0x33;
+        for (SymbolTableEntry e: Mcc.SYMBOL_TABLE.values()) {
+            Type t = e.type();
+            if (t!=Primitive.VOID && !typeMap.containsKey(t)) {
+                nextTypeLocation = addType(out, topLevelAsms, dieMap, t, typeMap, nextTypeLocation);
+            }
+        }
+        return typeMap;
+    }
 
-    private static int startDie(LinkedHashMap<Die, Integer> dieMap,
-                                Die d) {
+    /** @param nextTypeRef is the offset in bytes from the start of the
+     *                      debug_info section where the next type will be written to*/
+    private static int addType(PrintWriter out,
+                               List<TopLevelAsm> topLevelAsms,
+                               LinkedHashMap<Die, Integer> dieMap,
+                               Type t,
+                               LinkedHashMap<Type, Integer> typeMap, int nextTypeRef) {
+        switch(t) {
+            case Typeof typeof -> {}
+            case TypeofT typeofT -> {}
+            case Aligned aligned -> {}
+            case Array array -> {}
+            case FunType funType -> {}
+            case NullptrT nullptrT -> {}
+            case Pointer pointer -> {}
+            case Primitive primitive -> {
+                Die d = new Die(DW_TAG_base_type, false,
+                                new int[]{DW_AT_byte_size, DW_FORM_data1,
+                                        DW_AT_encoding, DW_FORM_data1,
+                                        DW_AT_name, DW_FORM_strp});
+                int typeAbbrevNumber = abbrevNumber(dieMap, d);
+                typeMap.put(t, nextTypeRef);
+                System.out.println(t+"->"+Integer.toHexString(nextTypeRef));
+                nextTypeRef += 6 + uleb128ByteCount(typeAbbrevNumber); // size of data1*2+strp
+
+                uleb128(out, typeAbbrevNumber); // abbreviation code DW_TAG_subprogram
+
+                printByte(out, (byte) Mcc.size(t));
+                byte encoding= switch(primitive){
+                    case CHAR -> DW_ATE_signed_char;
+                    case UCHAR -> DW_ATE_unsigned_char;
+                    case SCHAR -> DW_ATE_signed_char;
+                    case INT -> DW_ATE_signed;
+                    case UINT -> DW_ATE_unsigned;
+                    case SHORT -> DW_ATE_signed;
+                    case USHORT -> DW_ATE_unsigned;
+                    case LONG -> DW_ATE_signed;
+                    case ULONG -> DW_ATE_unsigned;
+                    case LONGLONG -> DW_ATE_signed;
+                    case ULONGLONG -> DW_ATE_unsigned;
+                    case DOUBLE -> DW_ATE_float;
+                    case FLOAT -> DW_ATE_float;
+                    case VOID -> throw new AssertionError();
+                    case BOOL -> DW_ATE_boolean;
+                };
+                printByte(out, encoding);
+                addAndPrintString(out, topLevelAsms, primitive.name);
+            }
+            case Structure structure -> {}
+            case WidthRestricted widthRestricted -> {}
+        }
+        return nextTypeRef;
+    }
+
+    /** return how many bytes it takes to represent l in uleb128 */
+    private static int uleb128ByteCount(long l) {
+        if (l < 0) return 10; // the highest one bit of the unsigned long is set so this takes 10 7-bit units to represent -> 10 bytes
+        if (l == 0) return 1;
+        int bitsNeeded = 64 - Long.numberOfLeadingZeros(l);
+        if  (bitsNeeded % 7 == 0) return bitsNeeded / 7;
+        return bitsNeeded / 7 + 1;
+    }
+
+    private static void addAndPrintString(PrintWriter out, List<TopLevelAsm> topLevelAsms, String s) {
+        String label = makeTemporary(".L");
+        topLevelAsms.add(new DebugString(label, s));
+        printIndent(out, ".long\t" + label);
+    }
+
+
+    private static int abbrevNumber(LinkedHashMap<Die, Integer> dieMap,
+                                    Die d) {
 
         final int s = dieMap.size();
         return dieMap.computeIfAbsent(d, k -> s + 1);
