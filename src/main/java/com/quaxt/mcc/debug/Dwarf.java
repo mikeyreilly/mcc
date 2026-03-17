@@ -1,19 +1,20 @@
 package com.quaxt.mcc.debug;
 
 import com.quaxt.mcc.Mcc;
+import com.quaxt.mcc.StructDef;
 import com.quaxt.mcc.SymbolTableEntry;
 import com.quaxt.mcc.asm.*;
-import com.quaxt.mcc.parser.Position;
-import com.quaxt.mcc.parser.Typeof;
-import com.quaxt.mcc.parser.TypeofT;
+import com.quaxt.mcc.parser.*;
 import com.quaxt.mcc.semantic.*;
 
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.*;
 
 import static com.quaxt.mcc.Mcc.makeTemporary;
 import static com.quaxt.mcc.Mcc.printIndent;
+import static com.quaxt.mcc.semantic.SemanticAnalysis.isComplete;
 
 public class Dwarf {
     /* Throughout the comments in this class section numbers and table numbers
@@ -446,7 +447,7 @@ public class Dwarf {
             printByte(out, (byte) 0);
 
         }
-        
+
         //end of debug abbrev
         printByte(out, (byte) 0);
 
@@ -456,30 +457,157 @@ public class Dwarf {
                                                               List<TopLevelAsm> topLevelAsms, LinkedHashMap<Die, Integer> dieMap) {
         LinkedHashMap<Type, Integer> typeMap = new LinkedHashMap<>();
         int nextTypeLocation = 0x33;
+        // It will be useful when building the type table to know up front for each array type what are all the array sizes
+        // So we do a first pass to gather all of them
+            HashMap<Type,HashSet<Constant>> arrayTypes = new HashMap<>();
+        Set<Type> alreadySeen = new HashSet<>();
+        for (SymbolTableEntry e : Mcc.SYMBOL_TABLE.values()) {
+            Type t = e.type();
+            gatherArrayTypes(alreadySeen, t, arrayTypes);
+        }
+
+
+        // we build the type table twice because in the first run with might have a struct with a member that is a
+        // pointer to the struct and at the point of saying what the type of the member is we don't know the ref of the
+        // pointer to struct type
         for (SymbolTableEntry e: Mcc.SYMBOL_TABLE.values()) {
             Type t = e.type();
-            if (t!=Primitive.VOID && !typeMap.containsKey(t)) {
-                nextTypeLocation = addType(out, topLevelAsms, dieMap, t, typeMap, nextTypeLocation);
-            }
+            nextTypeLocation = addType(new PrintWriter(OutputStream.nullOutputStream()), topLevelAsms, dieMap, t, typeMap, nextTypeLocation, arrayTypes, null);
+        }
+
+        nextTypeLocation = 0x33;
+
+        // addType uses this param to know what it has already seen
+        LinkedHashMap<Type, Integer> temp = new LinkedHashMap<>();
+        for (SymbolTableEntry e: Mcc.SYMBOL_TABLE.values()) {
+            Type t = e.type();
+            nextTypeLocation = addType(out, topLevelAsms, dieMap, t, temp, nextTypeLocation, arrayTypes, typeMap);
         }
         return typeMap;
     }
 
-    /** @param nextTypeRef is the offset in bytes from the start of the
-     *                      debug_info section where the next type will be written to*/
+        private static void gatherArrayTypes(Set<Type> alreadySeen, Type t, HashMap<Type, HashSet<Constant>> arrayTypes) {
+            if (alreadySeen.contains(t)) {
+                return;
+            }
+            alreadySeen.add(t);
+            switch (t) {
+                case Array(Type element, Constant arraySize) -> {
+                    arrayTypes.computeIfAbsent(element, k -> new HashSet<>()).add(arraySize);
+                    gatherArrayTypes(alreadySeen, element, arrayTypes);
+                }
+                case Structure(boolean isUnion, String tag, StructDef _) ->{
+                    var structDef = Mcc.TYPE_TABLE.get(tag);
+                    if (structDef != null) {
+                        for (var m : structDef.members()) {
+                            Type mt = m.type();
+                            gatherArrayTypes(alreadySeen, mt, arrayTypes);
+                        }
+
+                    }
+                }
+                case Pointer(Type referenced) -> {
+                    gatherArrayTypes(alreadySeen, referenced, arrayTypes);
+                }
+                case Primitive _ ->{}
+                case FunType(List<Type> params, Type ret, boolean varargs, Exp alignment) ->{
+                    gatherArrayTypes(alreadySeen, ret, arrayTypes);
+                    for (Type p: params) {
+                        gatherArrayTypes(alreadySeen, p, arrayTypes);
+                    }
+                }
+
+                default -> throw new Todo();
+            }
+
+        }
+
+    /**
+     * @param nextTypeRef is the offset in bytes from the start of the
+     *                    debug_info section where the next type will be written to
+     * @param arrayTypes
+     * @param finalTypeMap
+     */
     private static int addType(PrintWriter out,
                                List<TopLevelAsm> topLevelAsms,
                                LinkedHashMap<Die, Integer> dieMap,
                                Type t,
-                               LinkedHashMap<Type, Integer> typeMap, int nextTypeRef) {
+                               LinkedHashMap<Type, Integer> typeMap, int nextTypeRef, HashMap<Type, HashSet<Constant>> arrayTypes, LinkedHashMap<Type, Integer> finalTypeMap) {
+        if (t == Primitive.VOID || typeMap.containsKey(t)) {
+            return nextTypeRef;
+        }
+        // We put a dummy value to prevent stack overflow for case of a recursively defined types (e.g. struct with a member that is a pointer to the same struct)
+        typeMap.put(t, 0);
         switch(t) {
-            case Typeof typeof -> {}
-            case TypeofT typeofT -> {}
-            case Aligned aligned -> {}
-            case Array array -> {}
-            case FunType funType -> {}
-            case NullptrT nullptrT -> {}
-            case Pointer pointer -> {}
+
+            case Array(Type element, Constant arraySize) -> {
+                // DWARF forces us to specify the type of the upper bound of arrays
+                // It's always unsigned long because that is what size_t is
+                nextTypeRef = addType(out, topLevelAsms,
+                        dieMap, Primitive.ULONG,
+                        typeMap, nextTypeRef, arrayTypes, finalTypeMap);
+                int unsignedLongRef = typeMap.get(Primitive.ULONG);
+
+                boolean first=true;
+                long max=0;
+                for(Constant x:arrayTypes.get(element)) {
+                    long v = x.toLong();
+                    if (first){
+                        max = v;
+                    } else {
+                        if (v>max) {
+                            max=v;
+                        }
+                        first =false;
+                    }
+                }
+                var dwForm = dataForm(max);
+                int dwFormSize = formSize(dwForm);
+
+                nextTypeRef = addType(out, topLevelAsms,
+                        dieMap, element,
+                        typeMap, nextTypeRef, arrayTypes, finalTypeMap);
+                Die arrayTypeDie = new Die(DW_TAG_array_type, true, new int[]{
+                        DW_AT_type,         DW_FORM_ref4});
+
+                int typeAbbrevNumber = abbrevNumber(dieMap, arrayTypeDie);
+
+                Die subRangeTypeDie = new Die(DW_TAG_subrange_type, false, new int[]{
+                        DW_AT_type,         DW_FORM_ref4,
+                        DW_AT_upper_bound,  dwForm
+                });
+
+                int subRangeAbbrevNumber = abbrevNumber(dieMap, subRangeTypeDie);
+                uleb128(out, typeAbbrevNumber);
+                printInt(out, typeMap.get(element));
+                nextTypeRef += uleb128ByteCount(typeAbbrevNumber) + 4;
+                for (Constant x : arrayTypes.get(element)) {
+                    typeMap.put(new Array(element, x), nextTypeRef);
+                    uleb128(out, subRangeAbbrevNumber); // abbreviation code
+                    printInt(out, unsignedLongRef);
+                    printWhatever(out, x.toLong(), dwForm);
+                    nextTypeRef += 4 + dwFormSize + uleb128ByteCount(subRangeAbbrevNumber);
+                }
+                // no more array sizes
+                printByte(out, (byte) 0);
+                nextTypeRef++;
+            }
+            case Pointer(Type referenced) -> {
+                Die d = referenced==Primitive.VOID?
+                        new Die(DW_TAG_pointer_type, false, new int[]{
+                        DW_AT_byte_size, DW_FORM_implicit_const, 8}):
+                        new Die(DW_TAG_pointer_type, false, new int[]{
+                        DW_AT_byte_size, DW_FORM_implicit_const, 8,
+                        DW_AT_type, DW_FORM_ref4});
+                nextTypeRef = addType(out, topLevelAsms,
+                        dieMap, referenced,
+                        typeMap, nextTypeRef, arrayTypes, finalTypeMap);
+                int typeAbbrevNumber = abbrevNumber(dieMap, d);
+                typeMap.put(t, nextTypeRef);
+                uleb128(out, typeAbbrevNumber);
+                if (referenced != Primitive.VOID) printInt(out, typeMap.get(referenced));
+                nextTypeRef += uleb128ByteCount(typeAbbrevNumber) + (referenced == Primitive.VOID ? 0 : 4); // size of ref4
+            }
             case Primitive primitive -> {
                 Die d = new Die(DW_TAG_base_type, false,
                                 new int[]{DW_AT_byte_size, DW_FORM_data1,
@@ -487,10 +615,8 @@ public class Dwarf {
                                         DW_AT_name, DW_FORM_strp});
                 int typeAbbrevNumber = abbrevNumber(dieMap, d);
                 typeMap.put(t, nextTypeRef);
-                System.out.println(t+"->"+Integer.toHexString(nextTypeRef));
                 nextTypeRef += 6 + uleb128ByteCount(typeAbbrevNumber); // size of data1*2+strp
-
-                uleb128(out, typeAbbrevNumber); // abbreviation code DW_TAG_subprogram
+                uleb128(out, typeAbbrevNumber); // abbreviation code
 
                 printByte(out, (byte) Mcc.size(t));
                 byte encoding= switch(primitive){
@@ -513,10 +639,99 @@ public class Dwarf {
                 printByte(out, encoding);
                 addAndPrintString(out, topLevelAsms, primitive.name);
             }
-            case Structure structure -> {}
-            case WidthRestricted widthRestricted -> {}
+            case Structure(boolean isUnion, String tag, StructDef _) -> {
+                var structDef = Mcc.TYPE_TABLE.get(tag);
+                if (structDef != null) {
+                    for (var m : structDef.members()) {
+                        Type mt = m.type();
+                        nextTypeRef = addType(out, topLevelAsms,
+                                dieMap, mt,
+                                typeMap, nextTypeRef, arrayTypes, finalTypeMap);
+                    }
+
+                }
+                if (isComplete(t)) {
+                    long size = Mcc.size(t);
+                    var dwForm = dataForm(size);
+                    int dwFormSize = formSize(dwForm);
+                    Die structDie = new Die(isUnion ? DW_TAG_union_type : DW_TAG_structure_type, true,
+                            new int[]{
+                                    DW_AT_name, DW_FORM_strp,
+                                    DW_AT_byte_size, dwForm
+                            });
+                    int structDieAbbrevNumber = abbrevNumber(dieMap, structDie);
+
+                    Die memberDie = new Die(DW_TAG_member, false,
+                            new int[]{
+                                    DW_AT_name,         DW_FORM_strp,
+                                    DW_AT_type,         DW_FORM_ref4,
+                                    DW_AT_data_member_location, dwForm});
+                    int memberDieAbbrevNumber = abbrevNumber(dieMap, memberDie);
+
+
+                    typeMap.put(t, nextTypeRef);
+
+                    uleb128(out, structDieAbbrevNumber); // abbreviation code DW_TAG_subprogram
+                    addAndPrintString(out, topLevelAsms, tag);
+                    printWhatever(out, size, dwForm);
+
+                    nextTypeRef += uleb128ByteCount(structDieAbbrevNumber) + 4 + dwFormSize; // size strp
+
+                    for (var m : structDef.members()) {
+                        uleb128(out, memberDieAbbrevNumber); // abbreviation code DW_TAG_subprogram
+                        Type mt = m.type();
+                        addAndPrintString(out, topLevelAsms, m.name());
+                        if (finalTypeMap != null) {
+                            printInt(out, finalTypeMap.get(mt));
+                        }
+
+                        printWhatever(out, m.byteOffset(), dwForm);
+                        nextTypeRef += uleb128ByteCount(memberDieAbbrevNumber) + 8 + dwFormSize;
+                    }
+                    // no more members
+                    printByte(out, (byte)0);
+                    nextTypeRef++;
+
+                } else {
+                    Die structDie = new Die(isUnion ? DW_TAG_union_type : DW_TAG_structure_type, false,
+                            new int[]{
+                                    DW_AT_name, DW_FORM_strp,
+                                    DW_AT_declaration, DW_FORM_flag_present
+                            });
+                    int structDieAbbrevNumber = abbrevNumber(dieMap, structDie);
+                    uleb128(out, structDieAbbrevNumber); // abbreviation code DW_TAG_subprogram
+                    addAndPrintString(out, topLevelAsms, tag);
+                    typeMap.put(t, nextTypeRef);
+                    nextTypeRef += uleb128ByteCount(structDieAbbrevNumber) + 4; // size strp
+
+                }
+
+            }
+
+
+            default -> {}
+                //throw new IllegalStateException("Unexpected value: " + t);
+
         }
         return nextTypeRef;
+    }
+
+    private static int formSize(int dwForm) {
+        if (dwForm == DW_FORM_data1) return 1;
+        if (dwForm == DW_FORM_data2) return 2;
+        if (dwForm == DW_FORM_data4) return 4;
+        if (dwForm == DW_FORM_data8) return 8;
+        if (dwForm == DW_FORM_data16) return 16;
+        throw new AssertionError();
+    }
+
+    /** {@return DW_FORM_dataN big enough for n} */
+    private static int dataForm(long n) {
+        int bitsRequired = 64-Long.numberOfLeadingZeros(n);
+        if (bitsRequired <= 8) return DW_FORM_data1;
+        if (bitsRequired <= 16) return DW_FORM_data2;
+        if (bitsRequired <= 32) return DW_FORM_data4;
+        return DW_FORM_data8;
     }
 
     /** return how many bytes it takes to represent l in uleb128 */
@@ -551,11 +766,31 @@ public class Dwarf {
     }
 
     private static void printByte(PrintWriter out, byte b) {
-        printIndent(out, ".byte\t0x" + Integer.toHexString(b));
+        printIndent(out, ".byte\t0x" + Integer.toHexString(0xff & b));
     }
     private static void printQuad(PrintWriter out, long q) {
         printIndent(out, ".quad\t0x" + Long.toHexString(q));
     }
+
+    private static void printWhatever(PrintWriter out, long n) {
+        int bitsRequired = 64 - Long.numberOfLeadingZeros(n);
+        if (bitsRequired <= 8) printByte(out, (byte) n);
+        else if (bitsRequired <= 16) printShort(out, (short) n);
+        else if (bitsRequired <= 32) printInt(out, (int) n);
+        else printQuad(out, n);
+    }
+
+    private static void printWhatever(PrintWriter out, long n, int dw_form) {
+        if (dw_form == DW_FORM_data1) printByte(out, (byte) n);
+        else if (dw_form == DW_FORM_data2) printShort(out, (short) n);
+        else if (dw_form == DW_FORM_data4) printInt(out, (int) n);
+        else {
+            assert dw_form == DW_FORM_data8;
+            printQuad(out, n);
+        }
+    }
+
+
     private static void printQuad(PrintWriter out, String s) {
         printIndent(out, ".quad\t" + s);
     }
