@@ -1981,7 +1981,7 @@ commonType);
     }
 
 
-    private static boolean isComplete(Type t) {
+    public static boolean isComplete(Type t) {
         return switch (t) {
             case VOID -> false;
             case Structure(boolean isUnion, String tag, StructDef _) ->

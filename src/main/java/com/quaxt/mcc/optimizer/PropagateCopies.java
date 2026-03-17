@@ -187,7 +187,7 @@ public class PropagateCopies {
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyFromOffset(ValIr _, long _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
-                case CopyBitsFromOffset(ValIr _, long _, int _, int _, ValIr dst) ->
+                case CopyBitsFromOffset(ValIr _, int _, int _, int _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyToOffset(ValIr _, VarIr dst, long _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));

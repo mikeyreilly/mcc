@@ -66,7 +66,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 case WORD -> reg.w;
                 case LONGWORD -> reg.d;
                 case QUADWORD -> reg.q;
-                case ByteArray(long size, long alignment) ->
+                case ByteArray(long size, int alignment) ->
                         size < 2 ? reg.b :
                                 size < 3 ? reg.w : size < 5 ? reg.d : reg.q;
                 default ->
@@ -332,7 +332,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                     o="movabs\t";
                 }
                 o="mov" + switch (t) {
-                    case ByteArray(long size, long alignment) ->
+                    case ByteArray(long size, int alignment) ->
                             size < 2 ? "b" :
                                     size < 3 ? "w" : size < 5 ? "l" : "q";
                     case BYTE -> "b";

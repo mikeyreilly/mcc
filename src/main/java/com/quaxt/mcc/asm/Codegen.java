@@ -1339,7 +1339,7 @@ public class Codegen {
                         copyBytes(ins, src, dst, size);
                     } else ins.add(new Mov(typeAsm, src, toOperand(dstV)));
                 }
-                case CopyBitsFromOffset(ValIr srcV, long offset1,int bitOffset,
+                case CopyBitsFromOffset(ValIr srcV, int offset1,int bitOffset,
                                         int bitWidth, VarIr dstV) -> {
                     Operand src = toOperand(srcV, (int) offset1);
                     Type destType = type(dstV);
@@ -1356,7 +1356,7 @@ public class Codegen {
                         ins.add(new Binary(SAR,typeAsm , new Imm(typeAsm.size()*8-bitWidth), dst));
                     }
                 }
-                case CopyBitsFromOffsetViaPointer(ValIr srcV, long offset1,int bitOffset,
+                case CopyBitsFromOffsetViaPointer(ValIr srcV, int offset1,int bitOffset,
                                         int bitWidth, VarIr dstV) -> {
                     // srcV is a pointer, load the address srcV into DX
                     ins.add(new Mov(QUADWORD, toOperand(srcV), DX));
@@ -1405,7 +1405,7 @@ public class Codegen {
                     ins.add(new Mov(typeAsm, DX, dst));
                 }
 
-                case CopyBitsToOffsetViaPointer(ValIr srcV, VarIr dstV, long offset1, int bitOffset,
+                case CopyBitsToOffsetViaPointer(ValIr srcV, VarIr dstV, int offset1, int bitOffset,
                                       int bitWidth) -> {
                     Operand src = toOperand(srcV);
                    // Operand dst = toOperand(dstV, (int) offset1);

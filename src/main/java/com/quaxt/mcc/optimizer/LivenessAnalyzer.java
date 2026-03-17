@@ -199,7 +199,7 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
-                case CopyBitsFromOffset(ValIr src, long _, int _, int _, ValIr dst) -> {
+                case CopyBitsFromOffset(ValIr src, int _, int _, int _, ValIr dst) -> {
                     currentLiveVars.remove(dst);
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
