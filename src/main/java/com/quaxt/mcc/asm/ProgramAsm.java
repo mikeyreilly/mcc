@@ -23,6 +23,9 @@ import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> positions) {
 
+    /**
+     * When formatting a Memory(SP, offset) we add stackCorrection to offset to output the true memory location
+     * */
     private static String formatOperand(Instruction s, Operand o, AtomicInteger stackCorrection) {
         return switch (o) {
             case Imm(long i) -> "$" + i;
