@@ -236,46 +236,46 @@ main:
 	.section	.debug_abbrev,"",@progbits
 .Ldebug_abbrev0:
 	.uleb128 0x1     #   1      DW_TAG_formal_parameter    [no children]
-	.uleb128 0x5	 #    DW_AT_type         DW_FORM_ref4
-	.byte	0	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x49
-	.uleb128 0x13
+	.uleb128 0x5
+	.byte	0
+	.uleb128 0x49    #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x13	 #    DW_AT value: 0     DW_FORM value: 0
 	.byte	0
 	.byte	0
 	.uleb128 0x2	 #   2      DW_TAG_pointer_type    [no children]
-	.uleb128 0xf	 #    DW_AT_byte_size    DW_FORM_implicit_const: 8
-	.byte	0	 #    DW_AT_type         DW_FORM_ref4
-	.uleb128 0xb	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x21
-	.sleb128 8
+	.uleb128 0xf
+	.byte	0
+	.uleb128 0xb	 #    DW_AT_byte_size    DW_FORM_implicit_const: 8
+	.uleb128 0x21	 #    DW_AT_type         DW_FORM_ref4
+	.sleb128 8	 #    DW_AT value: 0     DW_FORM value: 0
 	.uleb128 0x49
 	.uleb128 0x13
 	.byte	0
 	.byte	0
 	.uleb128 0x3	 #   3      DW_TAG_base_type    [no children]
-	.uleb128 0x24	 #    DW_AT_byte_size    DW_FORM_data1
-	.byte	0	 #    DW_AT_encoding     DW_FORM_data1
-	.uleb128 0xb	 #    DW_AT_name         DW_FORM_strp
+	.uleb128 0x24
+	.byte	0
+	.uleb128 0xb	 #    DW_AT_byte_size    DW_FORM_data1
+	.uleb128 0xb	 #    DW_AT_encoding     DW_FORM_data1
+	.uleb128 0x3e	 #    DW_AT_name         DW_FORM_strp
 	.uleb128 0xb	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x3e
-	.uleb128 0xb
 	.uleb128 0x3
 	.uleb128 0xe
 	.byte	0
 	.byte	0
 	.uleb128 0x4	 #   4      DW_TAG_subprogram    [has children]
-	.uleb128 0x2e	 #    DW_AT_external     DW_FORM_flag_present
-	.byte	0x1	 #    DW_AT_name         DW_FORM_strp
-	.uleb128 0x3f	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
-	.uleb128 0x19	 #    DW_AT_decl_line    DW_FORM_data1
-	.uleb128 0x3	 #    DW_AT_decl_column  DW_FORM_data1
-	.uleb128 0xe	 #    DW_AT_prototyped   DW_FORM_flag_present
-	.uleb128 0x3a	 #    DW_AT_type         DW_FORM_ref4
-	.uleb128 0x21	 #    DW_AT_declaration  DW_FORM_flag_present
-	.sleb128 1	 #    DW_AT_sibling      DW_FORM_ref4
-	.uleb128 0x3b	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0xb
-	.uleb128 0x39
+	.uleb128 0x2e
+	.byte	0x1
+	.uleb128 0x3f	 #    DW_AT_external     DW_FORM_flag_present
+	.uleb128 0x19	 #    DW_AT_name         DW_FORM_strp
+	.uleb128 0x3	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
+	.uleb128 0xe	 #    DW_AT_decl_line    DW_FORM_data1
+	.uleb128 0x3a	 #    DW_AT_decl_column  DW_FORM_data1
+	.uleb128 0x21	 #    DW_AT_prototyped   DW_FORM_flag_present
+	.sleb128 1	 #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x3b	 #    DW_AT_declaration  DW_FORM_flag_present
+	.uleb128 0xb	 #    DW_AT_sibling      DW_FORM_ref4
+	.uleb128 0x39	 #    DW_AT value: 0     DW_FORM value: 0
 	.uleb128 0xb
 	.uleb128 0x27
 	.uleb128 0x19
@@ -288,22 +288,22 @@ main:
 	.byte	0
 	.byte	0
 	.uleb128 0x5	 #   5      DW_TAG_restrict_type    [no children]
-	.uleb128 0x37	 #    DW_AT_type         DW_FORM_ref4
-	.byte	0	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x49
-	.uleb128 0x13
+	.uleb128 0x37
+	.byte	0
+	.uleb128 0x49   #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x13   #    DW_AT value: 0     DW_FORM value: 0
 	.byte	0
 	.byte	0
 	.uleb128 0x6	 #   6      DW_TAG_formal_parameter    [no children]
-	.uleb128 0x5	 #    DW_AT_name         DW_FORM_strp
-	.byte	0	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
-	.uleb128 0x3	 #    DW_AT_decl_line    DW_FORM_implicit_const: 4
-	.uleb128 0xe	 #    DW_AT_decl_column  DW_FORM_data1
-	.uleb128 0x3a	 #    DW_AT_type         DW_FORM_ref4
-	.uleb128 0x21	 #    DW_AT_location     DW_FORM_exprloc
-	.sleb128 1	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x3b
-	.uleb128 0x21
+	.uleb128 0x5
+	.byte	0
+	.uleb128 0x3	 #    DW_AT_name         DW_FORM_strp
+	.uleb128 0xe	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
+	.uleb128 0x3a	 #    DW_AT_decl_line    DW_FORM_implicit_const: 4
+	.uleb128 0x21	 #    DW_AT_decl_column  DW_FORM_data1
+	.sleb128 1	 #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x3b    #    DW_AT_location     DW_FORM_exprloc
+	.uleb128 0x21    #    DW_AT value: 0     DW_FORM value: 0
 	.sleb128 4
 	.uleb128 0x39
 	.uleb128 0xb
@@ -314,15 +314,15 @@ main:
 	.byte	0
 	.byte	0
 	.uleb128 0x7	 #   7      DW_TAG_variable    [no children]
-	.uleb128 0x34	 #    DW_AT_name         DW_FORM_strp
-	.byte	0	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
-	.uleb128 0x3	 #    DW_AT_decl_line    DW_FORM_data1
-	.uleb128 0xe	 #    DW_AT_decl_column  DW_FORM_data1
-	.uleb128 0x3a	 #    DW_AT_type         DW_FORM_ref4
-	.uleb128 0x21	 #    DW_AT_location     DW_FORM_exprloc
-	.sleb128 1	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x3b
-	.uleb128 0xb
+	.uleb128 0x34
+	.byte	0
+	.uleb128 0x3	 #    DW_AT_name         DW_FORM_strp
+	.uleb128 0xe	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
+	.uleb128 0x3a	 #    DW_AT_decl_line    DW_FORM_data1
+	.uleb128 0x21	 #    DW_AT_decl_column  DW_FORM_data1
+	.sleb128 1	 #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x3b    #    DW_AT_location     DW_FORM_exprloc
+	.uleb128 0xb     #    DW_AT value: 0     DW_FORM value: 0
 	.uleb128 0x39
 	.uleb128 0xb
 	.uleb128 0x49
@@ -332,15 +332,15 @@ main:
 	.byte	0
 	.byte	0
 	.uleb128 0x8	 #   8      DW_TAG_variable    [no children]
-	.uleb128 0x34	 #    DW_AT_name         DW_FORM_string
-	.byte	0	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
-	.uleb128 0x3	 #    DW_AT_decl_line    DW_FORM_data1
-	.uleb128 0x8	 #    DW_AT_decl_column  DW_FORM_data1
-	.uleb128 0x3a	 #    DW_AT_type         DW_FORM_ref4
-	.uleb128 0x21	 #    DW_AT_location     DW_FORM_exprloc
-	.sleb128 1	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x3b
-	.uleb128 0xb
+	.uleb128 0x34
+	.byte	0
+	.uleb128 0x3	 #    DW_AT_name         DW_FORM_string
+	.uleb128 0x8	 #    DW_AT_decl_file    DW_FORM_implicit_const: 1
+	.uleb128 0x3a	 #    DW_AT_decl_line    DW_FORM_data1
+	.uleb128 0x21	 #    DW_AT_decl_column  DW_FORM_data1
+	.sleb128 1	 #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x3b    #    DW_AT_location     DW_FORM_exprloc
+	.uleb128 0xb     #    DW_AT value: 0     DW_FORM value: 0
 	.uleb128 0x39
 	.uleb128 0xb
 	.uleb128 0x49
@@ -350,18 +350,18 @@ main:
 	.byte	0
 	.byte	0
 	.uleb128 0x9	 #   9      DW_TAG_compile_unit    [has children]
-	.uleb128 0x11	 #    DW_AT_producer     DW_FORM_strp
-	.byte	0x1	 #    DW_AT_language     DW_FORM_data1
-	.uleb128 0x25	 #    Unknown AT value: 90 DW_FORM_data1
-	.uleb128 0xe	 #    Unknown AT value: 91 DW_FORM_data4
-	.uleb128 0x13	 #    DW_AT_name         DW_FORM_line_strp
+	.uleb128 0x11
+	.byte	0x1
+	.uleb128 0x25	 #    DW_AT_producer     DW_FORM_strp
+	.uleb128 0xe	 #    DW_AT_language     DW_FORM_data1
+	.uleb128 0x13	 #    Unknown AT value: 90 DW_FORM_data1
+	.uleb128 0xb	 #    Unknown AT value: 91 DW_FORM_data4
+	.uleb128 0x90	 #    DW_AT_name         DW_FORM_line_strp
 	.uleb128 0xb	 #    DW_AT_comp_dir     DW_FORM_line_strp
-	.uleb128 0x90	 #    DW_AT_low_pc       DW_FORM_addr
-	.uleb128 0xb	 #    DW_AT_high_pc      DW_FORM_data8
-	.uleb128 0x91	 #    DW_AT_stmt_list    DW_FORM_sec_offset
-	.uleb128 0x6	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x3
-	.uleb128 0x1f
+	.uleb128 0x91	 #    DW_AT_low_pc       DW_FORM_addr
+	.uleb128 0x6	 #    DW_AT_high_pc      DW_FORM_data8
+	.uleb128 0x3     #    DW_AT_stmt_list    DW_FORM_sec_offset
+	.uleb128 0x1f	 #    DW_AT value: 0     DW_FORM value: 0
 	.uleb128 0x1b
 	.uleb128 0x1f
 	.uleb128 0x11
@@ -373,44 +373,44 @@ main:
 	.byte	0
 	.byte	0
 	.uleb128 0xa	 #   10      DW_TAG_unspecified_parameters    [no children]
-	.uleb128 0x18	 #    DW_AT value: 0     DW_FORM value: 0
+	.uleb128 0x18
 	.byte	0
-	.byte	0
+	.byte	0        #    DW_AT value: 0     DW_FORM value: 0
 	.byte	0
 	.uleb128 0xb	 #   11      DW_TAG_base_type    [no children]
-	.uleb128 0x24	 #    DW_AT_byte_size    DW_FORM_data1
-	.byte	0	 #    DW_AT_encoding     DW_FORM_data1
-	.uleb128 0xb	 #    DW_AT_name         DW_FORM_string
+	.uleb128 0x24
+	.byte	0
+	.uleb128 0xb	 #    DW_AT_byte_size    DW_FORM_data1
+	.uleb128 0xb	 #    DW_AT_encoding     DW_FORM_data1
+	.uleb128 0x3e	 #    DW_AT_name         DW_FORM_string
 	.uleb128 0xb	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x3e
-	.uleb128 0xb
 	.uleb128 0x3
 	.uleb128 0x8
 	.byte	0
 	.byte	0
 	.uleb128 0xc	 #   12      DW_TAG_const_type    [no children]
-	.uleb128 0x26	 #    DW_AT_type         DW_FORM_ref4
-	.byte	0	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x49
-	.uleb128 0x13
+	.uleb128 0x26
+	.byte	0
+	.uleb128 0x49    #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x13    #    DW_AT value: 0     DW_FORM value: 0
 	.byte	0
 	.byte	0
 	.uleb128 0xd	 #   13      DW_TAG_subprogram    [has children]
-	.uleb128 0x2e	 #    DW_AT_external     DW_FORM_flag_present
-	.byte	0x1	 #    DW_AT_name         DW_FORM_strp
-	.uleb128 0x3f	 #    DW_AT_decl_file    DW_FORM_data1
-	.uleb128 0x19	 #    DW_AT_decl_line    DW_FORM_data1
-	.uleb128 0x3	 #    DW_AT_decl_column  DW_FORM_data1
-	.uleb128 0xe	 #    DW_AT_prototyped   DW_FORM_flag_present
-	.uleb128 0x3a	 #    DW_AT_type         DW_FORM_ref4
+	.uleb128 0x2e
+	.byte	0x1
+	.uleb128 0x3f	 #    DW_AT_external     DW_FORM_flag_present
+	.uleb128 0x19	 #    DW_AT_name         DW_FORM_strp
+	.uleb128 0x3	 #    DW_AT_decl_file    DW_FORM_data1
+	.uleb128 0xe	 #    DW_AT_decl_line    DW_FORM_data1
+	.uleb128 0x3a	 #    DW_AT_decl_column  DW_FORM_data1
+	.uleb128 0xb	 #    DW_AT_prototyped   DW_FORM_flag_present
+	.uleb128 0x3b	 #    DW_AT_type         DW_FORM_ref4
 	.uleb128 0xb	 #    DW_AT_low_pc       DW_FORM_addr
-	.uleb128 0x3b	 #    DW_AT_high_pc      DW_FORM_data8
+	.uleb128 0x39	 #    DW_AT_high_pc      DW_FORM_data8
 	.uleb128 0xb	 #    DW_AT_frame_base   DW_FORM_exprloc
-	.uleb128 0x39	 #    DW_AT_call_all_tail_calls DW_FORM_flag_present
-	.uleb128 0xb	 #    DW_AT_sibling      DW_FORM_ref4
-	.uleb128 0x27	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x19
-	.uleb128 0x49
+	.uleb128 0x27	 #    DW_AT_call_all_tail_calls DW_FORM_flag_present
+	.uleb128 0x19	 #    DW_AT_sibling      DW_FORM_ref4
+	.uleb128 0x49	 #    DW_AT value: 0     DW_FORM value: 0
 	.uleb128 0x13
 	.uleb128 0x11
 	.uleb128 0x1
@@ -425,12 +425,12 @@ main:
 	.byte	0
 	.byte	0
 	.uleb128 0xe     #   14      DW_TAG_lexical_block    [has children]
-	.uleb128 0xb	 #    DW_AT_low_pc       DW_FORM_addr
-	.byte	0x1	 #    DW_AT_high_pc      DW_FORM_data8
-	.uleb128 0x11	 #    DW_AT value: 0     DW_FORM value: 0
-	.uleb128 0x1	 #
-	.uleb128 0x12
-	.uleb128 0x7
+	.uleb128 0xb
+	.byte	0x1
+	.uleb128 0x11	 #    DW_AT_low_pc       DW_FORM_addr
+	.uleb128 0x1	 #    DW_AT_high_pc      DW_FORM_data8
+	.uleb128 0x12	 #    DW_AT value: 0     DW_FORM value: 0
+	.uleb128 0x7	 #
 	.byte	0
 	.byte	0
 	.byte	0
