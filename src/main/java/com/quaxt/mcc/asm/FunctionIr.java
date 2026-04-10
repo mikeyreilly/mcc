@@ -9,6 +9,7 @@ import com.quaxt.mcc.tacky.TopLevel;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public final class FunctionIr implements AsmNode, TopLevelAsm, TopLevel {
@@ -26,6 +27,8 @@ public final class FunctionIr implements AsmNode, TopLevelAsm, TopLevel {
     public boolean callsVaStart;
     public long stackAlignment;
     public int pos;
+    public Map<String, Long> varTable;
+
     public FunctionIr(String name, boolean global, boolean returnInMemory,
                       List<Instruction> instructions,
                       Pair<Integer, Integer> returnRegisters, boolean callsVaStart,

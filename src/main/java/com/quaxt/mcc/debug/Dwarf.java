@@ -315,6 +315,33 @@ public class Dwarf {
     static final byte DW_ATE_lo_user = (byte)0x80;
     static final byte DW_ATE_hi_user = (byte)0xff;
 
+    // Table 7.9: DWARF operation encodings
+    static final byte DW_OP_reg0 = 0x50;
+    static final byte DW_OP_reg1 = 0x51;
+    static final byte DW_OP_reg31 = 0x6f;
+    static final byte DW_OP_breg0 = 0x70;
+    static final byte DW_OP_breg1 = 0x71;
+    static final byte DW_OP_breg31 = (byte) 0x8f;
+    static final byte DW_OP_regx = (byte) 0x90;
+    static final byte DW_OP_fbreg = (byte) 0x91;
+    static final byte DW_OP_bregx = (byte) 0x92;
+    static final byte DW_OP_piece = (byte) 0x93;
+    static final byte DW_OP_deref_size = (byte) 0x94;
+    static final byte DW_OP_xderef_size = (byte) 0x95;
+    static final byte DW_OP_nop = (byte) 0x96;
+    static final byte DW_OP_push_object_address = (byte) 0x97;
+    static final byte DW_OP_call2 = (byte) 0x98;
+    static final byte DW_OP_call4 = (byte) 0x99;
+    static final byte DW_OP_call_ref = (byte) 0x9a;
+    static final byte DW_OP_form_tls_address = (byte) 0x9b;
+    static final byte DW_OP_call_frame_cfa = (byte) 0x9c;
+    static final byte DW_OP_bit_piece = (byte) 0x9d;
+    static final byte DW_OP_implicit_value = (byte) 0x9e;
+    static final byte DW_OP_stack_value = (byte) 0x9f;
+    static final byte DW_OP_implicit_pointer = (byte) 0xa0;
+    static final byte DW_OP_addrx = (byte) 0xa1;
+    static final byte DW_OP_constx = (byte) 0xa2;
+
     public static void emitDebugInfo(PrintWriter out,
                                      List<TopLevelAsm> topLevelAsms,
                                      Path srcFile,
@@ -393,6 +420,7 @@ public class Dwarf {
                 DW_AT_decl_file, DW_FORM_data1,
                 DW_AT_decl_line, DW_FORM_data2,
                 DW_AT_prototyped, DW_FORM_flag_present,
+                DW_AT_frame_base, DW_FORM_exprloc
 //                DW_AT_type, DW_FORM_ref4,
 //                DW_AT_declaration, DW_FORM_flag_present,
 //                DW_AT_sibling, DW_FORM_ref4
@@ -404,6 +432,7 @@ public class Dwarf {
                 DW_AT_decl_line, DW_FORM_data2,
                 DW_AT_prototyped, DW_FORM_flag_present,
                 DW_AT_type, DW_FORM_ref4,
+                DW_AT_frame_base, DW_FORM_exprloc
 //                DW_AT_declaration, DW_FORM_flag_present,
 //                DW_AT_sibling, DW_FORM_ref4
         };
@@ -420,6 +449,8 @@ public class Dwarf {
             if (returnType != Primitive.VOID) {
                 printInt(out, typeMap.get(returnType));
             }
+            uleb128(out, 1); // 1 byte block
+            printByte(out, DW_OP_call_frame_cfa);
         }
         // no more children of DW_TAG_compile_unit
         printByte(out, (byte)0);

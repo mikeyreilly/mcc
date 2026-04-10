@@ -186,6 +186,7 @@ public class Codegen {
             };
             instructions.set(i, newInst);
         }
+        functionAsm.varTable=varTable;
         return offset.get() + reservedSpace;
     }
 
