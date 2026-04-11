@@ -420,6 +420,8 @@ public class Dwarf {
                 DW_AT_decl_file, DW_FORM_data1,
                 DW_AT_decl_line, DW_FORM_data2,
                 DW_AT_prototyped, DW_FORM_flag_present,
+                DW_AT_low_pc, DW_FORM_addr,
+                DW_AT_high_pc, DW_FORM_data8,
                 DW_AT_frame_base, DW_FORM_exprloc
 //                DW_AT_type, DW_FORM_ref4,
 //                DW_AT_declaration, DW_FORM_flag_present,
@@ -432,6 +434,8 @@ public class Dwarf {
                 DW_AT_decl_line, DW_FORM_data2,
                 DW_AT_prototyped, DW_FORM_flag_present,
                 DW_AT_type, DW_FORM_ref4,
+                DW_AT_low_pc, DW_FORM_addr,
+                DW_AT_high_pc, DW_FORM_data8,
                 DW_AT_frame_base, DW_FORM_exprloc
 //                DW_AT_declaration, DW_FORM_flag_present,
 //                DW_AT_sibling, DW_FORM_ref4
@@ -452,6 +456,13 @@ public class Dwarf {
             if (returnType != Primitive.VOID) {
                 printInt(out, typeMap.get(returnType));
             }
+
+            // DW_AT_low_pc
+            printQuad(out,  fun.name);
+
+            // DW_AT_high_pc
+            printQuad(out,".L"+fun.name+".end"  + "-" + fun.name);
+
             uleb128(out, 1); // 1 byte block
             printByte(out, DW_OP_call_frame_cfa);
 
@@ -469,7 +480,8 @@ public class Dwarf {
                     uleb128(out, variableDieAbbrevNumber);
                     addAndPrintString(out, topLevelAsms, varName);
                     printInt(out, typeMap.get(t));
-                    long offset = -e.getValue();
+                    // the CFA is 16+- wtf (MR-TODO revise this comment)
+                    long offset = e.getValue();
                     uleb128(out, 1 + sleb128ByteCount(offset)); // n byte block
                     printByte(out, DW_OP_fbreg);
                     sleb128(out, offset);

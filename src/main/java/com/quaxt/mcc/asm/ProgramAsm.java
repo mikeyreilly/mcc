@@ -18,6 +18,7 @@ import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.Mcc.makeTemporary;
 import static com.quaxt.mcc.Mcc.printIndent;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
+import static com.quaxt.mcc.asm.IntegerReg.BP;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
@@ -243,12 +244,14 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             // https://gitlab.com/x86-psABIs/x86-64-ABI/-/jobs/artifacts/master/raw/x86-64-ABI/abi.pdf?job=build
             printIndent(out, ".cfi_def_cfa_offset 16\n");
             // We store register 6 (RBP) at CFA - 16
-            printIndent(out, ".cfi_offset 6, -16\n");
+            printIndent(out, ".cfi_offset "+BP.dwarfNumber+", -16\n");
         }
         printIndent(out, "movq\t%rsp, %rbp");
         if (Mcc.addDebugInfo) {
             // From now on CFA is at an offset of RBP so it is RBP+16
-            printIndent(out, ".cfi_def_cfa_register 6");
+           // printIndent(out, ".cfi_def_cfa_register "+BP.dwarfNumber);
+            printIndent(out, ".cfi_def_cfa "+SP.dwarfNumber+", "+0);
+
         }
 
 
@@ -314,6 +317,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         for (Instruction instruction : instructions) {
             emitInstruction(out, instruction, stackCorrection, functionAsm);
         }
+        out.println(".L"+name+".end" + ":");
+        out.println(".size "+name+", .-"+name);
         printIndent(out,".cfi_endproc");
     }
 
@@ -375,7 +380,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 printIndent(out, "movq\t%rbp, %rsp");
                 printIndent(out, "popq\t%rbp");
                 if (Mcc.addDebugInfo) {
-                    printIndent(out,".cfi_def_cfa 7, 8");
+                    printIndent(out,".cfi_def_cfa " +SP.dwarfNumber+ ", 8");
                 }
 
                 yield "ret";
