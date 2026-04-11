@@ -438,7 +438,10 @@ public class Dwarf {
         };
         for (FunctionIr fun : functions) {
             Type returnType = fun.returnType();
-            int subProgramCode =  abbrevNumber(dieMap, new Die(DW_TAG_subprogram, false,returnType == Primitive.VOID?voidAttribs: nonvoidAttribs));
+            boolean hasChildren = !fun.varTable.isEmpty();
+
+
+            int subProgramCode = abbrevNumber(dieMap, new Die(DW_TAG_subprogram, hasChildren, returnType == Primitive.VOID ? voidAttribs : nonvoidAttribs));
             uleb128(out, subProgramCode); // abbreviation code DW_TAG_subprogram
             String funName = makeTemporary(".LfunName.");
             topLevelAsms.add(new DebugString(funName, fun.name));
@@ -451,9 +454,32 @@ public class Dwarf {
             }
             uleb128(out, 1); // 1 byte block
             printByte(out, DW_OP_call_frame_cfa);
+
+            if (hasChildren) {
+                Die variableDie = new Die(DW_TAG_variable, false,
+                        new int[]{
+                                DW_AT_name,         DW_FORM_strp,
+                                DW_AT_type,         DW_FORM_ref4,
+                                DW_AT_location, DW_FORM_exprloc});
+                int variableDieAbbrevNumber = abbrevNumber(dieMap, variableDie);
+                for(Map.Entry<String, Long> e : fun.varTable.entrySet()) {
+                    String varName = e.getKey();
+                    SymbolTableEntry ste = Mcc.SYMBOL_TABLE.get(e.getKey());
+                    Type t = ste.type();
+                    uleb128(out, variableDieAbbrevNumber);
+                    addAndPrintString(out, topLevelAsms, varName);
+                    printInt(out, typeMap.get(t));
+                    long offset = -e.getValue();
+                    uleb128(out, 1 + sleb128ByteCount(offset)); // n byte block
+                    printByte(out, DW_OP_fbreg);
+                    sleb128(out, offset);
+                }
+                // no more children of DW_TAG_subprogram
+                printByte(out, (byte) 0);
+                printByte(out, (byte) 0);
+            }
+
         }
-        // no more children of DW_TAG_compile_unit
-        printByte(out, (byte)0);
 
 
         out.println(endLabel + ":");
@@ -702,14 +728,14 @@ public class Dwarf {
 
                     typeMap.put(t, nextTypeRef);
 
-                    uleb128(out, structDieAbbrevNumber); // abbreviation code DW_TAG_subprogram
+                    uleb128(out, structDieAbbrevNumber);
                     addAndPrintString(out, topLevelAsms, tag);
                     printWhatever(out, size, dwForm);
 
                     nextTypeRef += uleb128ByteCount(structDieAbbrevNumber) + 4 + dwFormSize; // size strp
 
                     for (var m : structDef.members()) {
-                        uleb128(out, memberDieAbbrevNumber); // abbreviation code DW_TAG_subprogram
+                        uleb128(out, memberDieAbbrevNumber);
                         Type mt = m.type();
                         addAndPrintString(out, topLevelAsms, m.name());
                         if (finalTypeMap != null) {
@@ -730,7 +756,7 @@ public class Dwarf {
                                     DW_AT_declaration, DW_FORM_flag_present
                             });
                     int structDieAbbrevNumber = abbrevNumber(dieMap, structDie);
-                    uleb128(out, structDieAbbrevNumber); // abbreviation code DW_TAG_subprogram
+                    uleb128(out, structDieAbbrevNumber);
                     addAndPrintString(out, topLevelAsms, tag);
                     typeMap.put(t, nextTypeRef);
                     nextTypeRef += uleb128ByteCount(structDieAbbrevNumber) + 4; // size strp
@@ -772,6 +798,31 @@ public class Dwarf {
         int bitsNeeded = 64 - Long.numberOfLeadingZeros(l);
         if  (bitsNeeded % 7 == 0) return bitsNeeded / 7;
         return bitsNeeded / 7 + 1;
+    }
+
+    private static int sleb128ByteCount(long value) {
+        int count = 0;
+        boolean more = true;
+
+        while (more) {
+            byte b = (byte)(value & 0x7f);
+            value >>= 7;
+
+            boolean signBitSet = (b & 0x40) != 0;
+
+            if ((value == 0 && !signBitSet) ||
+                    (value == -1 && signBitSet)) {
+                more = false;
+            }
+
+            count++;
+        }
+
+        return count;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(sleb128ByteCount(200));
     }
 
     private static void addAndPrintString(PrintWriter out, List<TopLevelAsm> topLevelAsms, String s) {
@@ -830,6 +881,9 @@ public class Dwarf {
     }
     private static void uleb128(PrintWriter out, int i) {
         printIndent(out, ".uleb128\t0x" + Integer.toHexString(i));
+    }
+    private static void sleb128(PrintWriter out, long l) {
+        printIndent(out, ".sleb128\t" + l);
     }
 
     private static void uleb128s(PrintWriter out, int[] a) {
