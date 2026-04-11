@@ -318,6 +318,7 @@ public class Dwarf {
     // Table 7.9: DWARF operation encodings
     static final byte DW_OP_reg0 = 0x50;
     static final byte DW_OP_reg1 = 0x51;
+    static final byte DW_OP_reg7 = 0x57;
     static final byte DW_OP_reg31 = 0x6f;
     static final byte DW_OP_breg0 = 0x70;
     static final byte DW_OP_breg1 = 0x71;
@@ -464,7 +465,8 @@ public class Dwarf {
             printQuad(out,".L"+fun.name+".end"  + "-" + fun.name);
 
             uleb128(out, 1); // 1 byte block
-            printByte(out, DW_OP_call_frame_cfa);
+
+            printByte(out, DW_OP_reg7); // our frame base is SP
 
             if (hasChildren) {
                 Die variableDie = new Die(DW_TAG_variable, false,
@@ -480,7 +482,6 @@ public class Dwarf {
                     uleb128(out, variableDieAbbrevNumber);
                     addAndPrintString(out, topLevelAsms, varName);
                     printInt(out, typeMap.get(t));
-                    // the CFA is 16+- wtf (MR-TODO revise this comment)
                     long offset = e.getValue();
                     uleb128(out, 1 + sleb128ByteCount(offset)); // n byte block
                     printByte(out, DW_OP_fbreg);

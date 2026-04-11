@@ -249,9 +249,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         printIndent(out, "movq\t%rsp, %rbp");
         if (Mcc.addDebugInfo) {
             // From now on CFA is at an offset of RBP so it is RBP+16
-           // printIndent(out, ".cfi_def_cfa_register "+BP.dwarfNumber);
-            printIndent(out, ".cfi_def_cfa "+SP.dwarfNumber+", "+0);
-
+            printIndent(out, ".cfi_def_cfa_register "+BP.dwarfNumber);
         }
 
 
