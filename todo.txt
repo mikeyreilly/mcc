@@ -18,3 +18,8 @@ compiler never sees where these scopes start or end. It would be
 straight-forward to associate each variable with the correct scope
 object in SemanticAnalysis but how can we have low and
 high pc values for the scope? We could introduce a new BlockItem: Scope(id, startOrEnd)
+
+In SemanticAnalysis, whenever we call copyIdentiferMap we have
+potentially a new lexical_block. I say potentially because it is only
+when we shadow a variable that we really benefit from having a new
+lexical block

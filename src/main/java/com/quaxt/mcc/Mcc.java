@@ -368,7 +368,7 @@ public class Mcc {
         }
         String cSource = Files.readString(intermediateFile);
         Files.delete(intermediateFile);
-        Map<String, SemanticAnalysis.Entry> identifierMap = new HashMap<>();
+        Scope identifierMap = new Scope();
         Map<String, SemanticAnalysis.TagEntry> structureMap = new DebugHashMap<>();
         ArrayList<Declaration> builtinDeclarations = new ArrayList<>();
 
@@ -418,11 +418,11 @@ public class Mcc {
                                  Path srcFile,
                                  boolean doNotCompile,
                                  List<String> libs,
-                                 Map<String, SemanticAnalysis.Entry> identifierMap,
+                                 Scope identifierMap,
                                  Map<String, SemanticAnalysis.TagEntry> structureMap,
                                  ArrayList<Declaration> declarations,
                                  ArrayList<Declaration> builtinDeclarations,
-    String outputFileName) throws IOException, InterruptedException {
+                                 String outputFileName) throws IOException, InterruptedException {
         TokenList tokenList = Lexer.lex(cSource);
         if (mode == Mode.LEX) {
             return 0;

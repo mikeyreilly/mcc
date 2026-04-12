@@ -29,8 +29,7 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 
 public class SemanticAnalysis {
 
-    public record Entry(String name, boolean fromCurrentScope,
-                        boolean hasLinkage) {}
+    public record Entry(String name, boolean hasLinkage) {}
 
     enum TagEntryType {UNION, STRUCT, ENUM}
 
@@ -2072,7 +2071,7 @@ commonType);
 
     public static Type resolveType(Type typeSpecifier,
 
-                                   Map<String, Entry> identifierMap,
+                                   Scope identifierMap,
                                    Map<String, TagEntry> structureMap,
                                    Function enclosingFunction) {
         return switch (typeSpecifier) {
@@ -2134,7 +2133,7 @@ commonType);
 
     public static Program resolveProgram(Program program,
                                          Map<String, TagEntry> structureMap,
-                                         Map<String, Entry> identifierMap) {
+                                         Scope identifierMap) {
         ArrayList<Declaration> decls = program.declarations();
         for (int i = 0; i < decls.size(); i++) {
             switch (decls.get(i)) {
@@ -2189,7 +2188,7 @@ resolveFileScopeVariableDeclaration(varDecl,
 
     private static StructOrUnionSpecifier resolveStructureDeclaration(
             StructOrUnionSpecifier decl,
-            Map<String, Entry> identifierMap,
+            Scope identifierMap,
             Map<String, TagEntry> structureMap,
             Function enclosingFunction) {
         if (decl == null) return null;
@@ -2246,7 +2245,7 @@ resolveFileScopeVariableDeclaration(varDecl,
     struct foo.
     * */
     static void ifStructureResolveAsDeclaration(Type ref,
-                                                Map<String, Entry> identifierMap,
+                                                Scope identifierMap,
                                                 Map<String, TagEntry> structureMap,
                                                 Function enclosingFunction) {
         if (ref instanceof Structure(boolean isUnion, String tag,
@@ -2261,8 +2260,7 @@ resolveFileScopeVariableDeclaration(varDecl,
     }
 
     private static Declaration resolveFileScopeVariableDeclaration(VarDecl varDecl,
-                                                                   Map<String
-                                                                           , Entry> identifierMap,
+                                                                   Scope identifierMap,
                                                                    Map<String
                                                                            ,
                                                                            TagEntry> structureMap) {
@@ -2275,8 +2273,7 @@ resolveFileScopeVariableDeclaration(varDecl,
                     structOrUnionSpecifier =
                             resolveStructureDeclaration(structOrUnionSpecifier, identifierMap, structureMap, null);
                 }
-                identifierMap.put(name.name(), new Entry(name.name(), true,
-                 true));
+                identifierMap.put(name.name(), new Entry(name.name(), true));
                 Type t = resolveType(type, identifierMap, structureMap, null);
                 yield new VarDecl(new Var(name.name(), t), init, t, storageClass, structOrUnionSpecifier, bitFieldWidth, pos);
             }
@@ -2285,7 +2282,7 @@ resolveFileScopeVariableDeclaration(varDecl,
 
     private static Block resolveBlock(Block block,
                                       ArrayList<BlockItem> blockItems,
-                                      Map<String, Entry> identifierMap,
+                                      Scope identifierMap,
                                       Map<String, TagEntry> structureMap,
                                       Function enclosingFunction) {
 
@@ -2297,17 +2294,19 @@ resolveFileScopeVariableDeclaration(varDecl,
     }
 
     private static Function resolveFunctionDeclaration(Function function,
-                                                       Map<String, Entry> identifierMap,
+                                                       Scope identifierMap,
                                                        Map<String, TagEntry> structureMap) {
         String name = function.name;
-        if (identifierMap.get(name) instanceof Entry previousEntry) {
-            if (previousEntry.fromCurrentScope() &&
+        if (identifierMap.getEntryAndCurrentScope(name) instanceof Pair<Entry,Boolean> pair) {
+            Entry previousEntry=pair.key();
+            boolean fromCurrentScope = pair.value();
+            if (fromCurrentScope &&
                     !previousEntry.hasLinkage()) {
                 throw new Err("Duplicate declaration: " + name);
             }
         }
-        identifierMap.put(name, new Entry(name, true, true));
-        Map<String, Entry> innerMap = copyIdentifierMap(identifierMap);
+        identifierMap.put(name, new Entry(name,  true));
+        Scope innerMap = copyIdentifierMap(identifierMap);
         Map<String, TagEntry> innerStructureMap =
                 copyStructureMap(structureMap);
         List<Var> newArgs =
@@ -2339,7 +2338,7 @@ innerStructureMap, function);
     }
 
     private static FunType resolveFunType(FunType funType,
-                                          Map<String, Entry> identifierMap,
+                                          Scope identifierMap,
                                           Map<String, TagEntry> structureMap,
                                           Function enclosingFunction) {
         return new FunType(funType.params().stream().map(p -> resolveType(p,
@@ -2351,18 +2350,17 @@ innerStructureMap, function);
     }
 
     private static List<Var> resolveParams(List<Var> parameters,
-                                           Map<String, Entry> identifierMap,
+                                           Scope identifierMap,
                                            Map<String, TagEntry> innerStructureMap,
                                            Function enclosingFunction) {
         List<Var> newParams = new ArrayList<>();
         for (Var d : parameters) {
             if (d.name() != null &&
-                    identifierMap.get(d.name()) instanceof Entry e &&
-                    e.fromCurrentScope()) {
+                    identifierMap.getEntryAndCurrentScope(d.name()) instanceof Pair<SemanticAnalysis.Entry,Boolean>(Entry e, Boolean fromCurrentScope) && fromCurrentScope) {
                 fail("Duplicate variable declaration");
             }
             String uniqueName = makeTemporary(d.name() + ".");
-            identifierMap.put(d.name(), new Entry(uniqueName, true, false));
+            identifierMap.put(d.name(), new Entry(uniqueName,  false));
             newParams.add(new Var(uniqueName, resolveType(d.type(),
              identifierMap, innerStructureMap, enclosingFunction)));
         }
@@ -2370,7 +2368,7 @@ innerStructureMap, function);
     }
 
     private static BlockItem resolveIdentifiersBlockItem(BlockItem blockItem,
-                                                         Map<String, Entry> identifierMap,
+                                                         Scope identifierMap,
                                                          Map<String,
                                                                  TagEntry> structureMap,
                                                          Function enclosingFunction) {
@@ -2392,7 +2390,7 @@ innerStructureMap, function);
     }
 
     private static Statement resolveStatement(Statement blockItem,
-                                              Map<String, Entry> identifierMap,
+                                              Scope identifierMap,
                                               Map<String, TagEntry> structureMap,
                                               Function enclosingFunction) {
         return switch (blockItem) {
@@ -2443,7 +2441,7 @@ enclosingFunction));
                       identifierMap, structureMap, enclosingFunction), label);
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String label) -> {
-                Map<String, Entry> newVariableMap =
+                Scope newVariableMap =
                         copyIdentifierMap(identifierMap);
                 Map<String, TagEntry> newStructureMap =
                         copyStructureMap(structureMap);
@@ -2485,7 +2483,7 @@ structureMap, enclosingFunction);
     }
 
     private static ForInit resolveForInit(ForInit init,
-                                          Map<String, Entry> identifierMap,
+                                          Scope identifierMap,
                                           Map<String, TagEntry> structureMap,
                                           Function enclosingFunction) {
         return switch (init) {
@@ -2502,13 +2500,14 @@ structureMap, enclosingFunction);
     }
 
 
-    private static Map<String, Entry> copyIdentifierMap(Map<String, Entry> m) {
-        Map<String, Entry> copy = HashMap.newHashMap(m.size());
-        for (Map.Entry<String, Entry> e : m.entrySet()) {
-            Entry v = e.getValue();
-            copy.put(e.getKey(), new Entry(v.name(), false, v.hasLinkage()));
-        }
-        return copy;
+    private static Scope copyIdentifierMap(Scope m) {
+        return m.childScope();
+//        Scope copy = HashMap.newHashMap(m.size());
+//        for (Map.Entry<String, Entry> e : m.entrySet()) {
+//            Entry v = e.getValue();
+//            copy.put(e.getKey(), new Entry(v.name(), false, v.hasLinkage()));
+//        }
+//        return copy;
     }
 
 
@@ -2525,13 +2524,12 @@ structureMap, enclosingFunction);
 
 
     private static VarDecl resolveLocalIdentifierDeclaration(VarDecl decl,
-                                                             Map<String,
-                                                              Entry> identifierMap,
+                                                             Scope identifierMap,
                                                              Map<String,
                                                              TagEntry> structureMap,
                                                              Function enclosingFunction) {
-        if (identifierMap.get(decl.name().name()) instanceof Entry prevEntry) {
-            if (prevEntry.fromCurrentScope()) {
+        if (identifierMap.getEntryAndCurrentScope(decl.name().name()) instanceof Pair<Entry,Boolean>(Entry prevEntry, Boolean fromCurrentScope) ) {
+            if (fromCurrentScope) {
                 if (!(prevEntry.hasLinkage() &&
                         decl.storageClass() == EXTERN)) {
                     fail("Conflicting local declaration");
@@ -2541,14 +2539,14 @@ structureMap, enclosingFunction);
         }
         if (decl.storageClass() == EXTERN) {
             identifierMap.put(decl.name().name(),
-             new Entry(decl.name().name(), true, true));
+             new Entry(decl.name().name(), true));
             return new VarDecl(decl.name(), decl.init(),
                     resolveType(decl.varType(), identifierMap, structureMap,
                      enclosingFunction), decl.storageClass(),
                     decl.structOrUnionSpecifier(), decl.bitFieldWidth(), decl.pos());
         }
         String uniqueName = makeTemporary(decl.name().name() + ".");
-        identifierMap.put(decl.name().name(), new Entry(uniqueName, true,
+        identifierMap.put(decl.name().name(), new Entry(uniqueName,
                 false));
         var init = decl.init();
         StructOrUnionSpecifier sous = decl.structOrUnionSpecifier();
@@ -2567,7 +2565,7 @@ structureMap, enclosingFunction);
     }
 
     private static Initializer resolveInitializer(Initializer init,
-                                                  Map<String, Entry> identifierMap,
+                                                  Scope identifierMap,
                                                   Map<String, TagEntry> structureMap,
                                                   Function enclosingFunction) {
         return switch (init) {
@@ -2586,7 +2584,7 @@ structureMap, enclosingFunction);
     }
 
     private static Exp resolveExp(Exp exp,
-                                  Map<String, Entry> identifierMap,
+                                  Scope identifierMap,
                                   Map<String, TagEntry> structureMap,
                                   Function enclosingFunction) {
         Exp r = switch (exp) {
@@ -2628,7 +2626,7 @@ enclosingFunction), type);
                     new Dereference(resolveExp(arg, identifierMap,
                      structureMap, enclosingFunction), type);
             case Var(String name, Type type) -> {
-                if (identifierMap.get(name) instanceof Entry e) {
+                if (identifierMap.getEntryAndCurrentScope(name) instanceof Pair<Entry,Boolean>(Entry e, Boolean _) ) {
                     if ("__func__".equals(name)) {
                         enclosingFunction.usesFunc = true;
                     }
@@ -2722,7 +2720,7 @@ structureMap, enclosingFunction);
         return r;
     }
 
-    private static <T extends Exp> List<T> resolveArgs(Map<String, Entry> identifierMap,
+    private static <T extends Exp> List<T> resolveArgs(Scope identifierMap,
                                                        Map<String, TagEntry> structureMap,
                                                        List<T> args,
                                                        Function enclosingFunction) {
