@@ -450,6 +450,16 @@ void chars() throws Exception {
     }
 
     @Test
+    void empty_initializer_list_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/empty_initializer_list_invalid.c"));
+    }
+
+    @Test
+    void union_empty_initializer_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/union_empty_initializer_invalid.c"));
+    }
+
+    @Test
     void incomplete_struct_extern_address_compiles() throws Exception {
         assertEquals(0, Mcc.mcc("-S", "src/test/resources/incomplete_struct_extern_address.c"));
     }
