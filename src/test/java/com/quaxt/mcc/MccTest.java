@@ -777,6 +777,13 @@ void chars() throws Exception {
         assertTrue(lines.filter(x -> x.contains("call\tsum")).findAny().isEmpty());
     }
 
+    @Test
+    void function_end_label_absent() throws Exception {
+        String asm = assemble("function_end_label_absent", false);
+        assertFalse(asm.contains(".Ltarget.end:"));
+        assertFalse(asm.contains(".Lmain.end:"));
+    }
+
     @Test void alignment() throws Exception{
         outputs("alignment", "PASS\n", false, false);
     }

@@ -315,7 +315,6 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         for (Instruction instruction : instructions) {
             emitInstruction(out, instruction, stackCorrection, functionAsm);
         }
-        out.println(".L"+name+".end" + ":");
         out.println(".size "+name+", .-"+name);
         printIndent(out,".cfi_endproc");
     }
