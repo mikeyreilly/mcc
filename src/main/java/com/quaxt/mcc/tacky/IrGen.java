@@ -195,6 +195,7 @@ public class IrGen {
                                 instructions.add(new AddPtr(ptr, new IntInit((int) offset), 1, ptr));
                                 instructions.add(new Memset(ptr, 0, bytes, true));
                             }else instructions.add(new Memset(name, 0, bytes, false));
+                            offset += bytes;
                         }
                     }
                 }

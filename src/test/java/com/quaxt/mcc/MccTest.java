@@ -461,6 +461,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void nested_array_partial_init() throws Exception {
+        returns("nested_array_partial_init", 0);
+    }
+
+    @Test
     void automatic() throws Exception {
         returns("automatic", 0);
     }
