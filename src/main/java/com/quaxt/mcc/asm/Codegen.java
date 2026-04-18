@@ -291,10 +291,15 @@ public class Codegen {
                 }
                 case Push(Operand operand) -> {
                     if (operand instanceof DoubleReg) {
-                        instructions.set(i, new Binary(SUB, QUADWORD,
-                                new Imm(8), SP));
-                        instructions.add(i + 1, new Mov(DOUBLE, operand,
-                                new Memory(SP, 0)));
+                        // MR-TODO this is not a good way to push xmm
+                        instructions.set(i, new Mov(QUADWORD, operand,
+                                srcReg(QUADWORD)));
+                        instructions.add(i + 1, new Push(srcReg(QUADWORD)));
+
+//                        instructions.set(i, new Binary(SUB, QUADWORD,
+//                                new Imm(8), SP));
+//                        instructions.add(i + 1, new Mov(DOUBLE, operand,
+//                                new Memory(SP, 0)));
                     } else if (operand instanceof Imm imm && imm.isAwkward()) {
                         instructions.set(i, new Mov(QUADWORD, operand,
                                 srcReg(QUADWORD)));

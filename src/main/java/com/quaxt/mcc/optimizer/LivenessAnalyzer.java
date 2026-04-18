@@ -211,8 +211,12 @@ See p. 606 */
                         currentLiveVars.add(dst); // it's used for indirect addressing (so it is read)
                     }
                 }
-                case Memset(VarIr dst, int _, long _, boolean _) -> {
-                    currentLiveVars.remove(dst);
+                case Memset(VarIr dst, int _, long _, boolean viaPointer) -> {
+                    if (viaPointer) {
+                        currentLiveVars.add(dst);
+                    } else {
+                        currentLiveVars.remove(dst);
+                    }
                 }
                 case CopyBitsToOffset(ValIr src, VarIr dst, long _, int _, int _) -> {
                     if (src instanceof VarIr v) {

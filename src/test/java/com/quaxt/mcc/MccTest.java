@@ -454,6 +454,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void automatic() throws Exception {
+        returns("automatic", 0);
+    }
+
+    @Test
     void funcall_cast_to_void() throws Exception {
         outputs("funcall_cast_to_void","hello\n");
     }
