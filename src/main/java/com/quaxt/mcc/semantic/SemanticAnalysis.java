@@ -1399,15 +1399,6 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
         if (e == NULLPTR || targetType == NULLPTR_T) {
             return convertTo(e, targetType);
         }
-        // GCC by default lets you convert between pointers to integers of different signedness - You can get a warning with -Wpointer-sign
-        // I'm just going to allow it
-        if (targetType instanceof Pointer(Type targetReferenced) &&
-                e.type() instanceof Pointer(Type eReferenced) &&
-                eReferenced.isInteger() && targetReferenced.isInteger() &&
-                size(eReferenced) == size(targetReferenced)) {
-            return convertTo(e, targetType);
-        }
-
         throw new Err("Cannot convert type for assignment");
     }
 

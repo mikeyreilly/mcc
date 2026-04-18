@@ -430,6 +430,21 @@ void chars() throws Exception {
     }
 
     @Test
+    void pointer_assignment_char_pointer_mismatch_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/pointer_assignment_char_pointer_mismatch.c"));
+    }
+
+    @Test
+    void string_literal_pointer_mismatch_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/string_literal_pointer_mismatch.c"));
+    }
+
+    @Test
+    void string_literal_pointer_mismatch_static_local_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/string_literal_pointer_mismatch_static_local.c"));
+    }
+
+    @Test
     void offsetof_no_such_member_test()  {
         Err thrown = assertThrows(Err.class, () -> returns("offsetof_no_such_member", 0));
         assertEquals("Structure has no member with this name",
