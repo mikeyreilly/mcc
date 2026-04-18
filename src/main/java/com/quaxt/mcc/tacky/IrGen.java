@@ -133,14 +133,13 @@ public class IrGen {
                 StructDef sd =
                         Mcc.TYPE_TABLE.get(tag);
                 List<MemberEntry> members = sd.namedMembers();
-                long structSize = Mcc.size(compoundInitType);
-                if (structSize > 0) {
-                    memsetToOffset(name, instructions, offset, 0, structSize, false);
-                }
-
-
                 int initsLen = inits.size();
                 int membersLen = members.size();
+                long structSize = Mcc.size(compoundInitType);
+                boolean needsZeroFill = isUnion ? initsLen == 0 : initsLen < membersLen;
+                if (needsZeroFill && structSize > 0) {
+                    memsetToOffset(name, instructions, offset, 0, structSize, false);
+                }
                 if (isUnion && initsLen > 0) {
                     long biggest = Mcc.size(members.getFirst().type());
                     MemberEntry best = members.getFirst();
@@ -188,13 +187,7 @@ public class IrGen {
                         }
 
                         case ZeroInit(long bytes) -> {
-                            if (offset!=0) {
-                                VarIr ptr =
-                                        makeTemporary("ptr", new Pointer(VOID));
-                                instructions.add(new GetAddress(name, ptr));
-                                instructions.add(new AddPtr(ptr, new IntInit((int) offset), 1, ptr));
-                                instructions.add(new Memset(ptr, 0, bytes, true));
-                            }else instructions.add(new Memset(name, 0, bytes, false));
+                            memsetToOffset(name, instructions, offset, 0, bytes, false);
                             offset += bytes;
                         }
                     }
@@ -224,7 +217,11 @@ public class IrGen {
                                   long offset,
                                   int c,
                                        long byteCount, boolean viaPointer) {
-        if (offset !=0) {
+        if (!viaPointer && offset != 0 && c == 0) {
+            for (long i = 0; i < byteCount; i++) {
+                instructions.add(new CopyToOffset(CharInit.zero(), name, offset + i));
+            }
+        } else if (offset !=0) {
             VarIr ptr =
                     makeTemporary("ptr", new Pointer(VOID));
             if (viaPointer) {

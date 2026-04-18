@@ -858,6 +858,11 @@ void chars() throws Exception {
         assertFalse(asm.contains("stosq"));
     }
 
+    @Test void full_struct_initializer_no_eager_memset() throws Exception {
+        String asm = assemble("full_struct_initializer_no_eager_memset", false);
+        assertFalse(asm.contains("stosq"));
+    }
+
     @Test void param_passing() throws Exception {
         returns("param_passing", 0);
     }
