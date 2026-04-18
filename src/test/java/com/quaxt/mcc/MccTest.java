@@ -475,6 +475,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void named_void_parameter_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/named_void_parameter_invalid.c"));
+    }
+
+    @Test
     void empty_initializer_list_invalid_test() {
         assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/empty_initializer_list_invalid.c"));
     }

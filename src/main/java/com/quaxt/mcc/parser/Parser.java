@@ -804,6 +804,7 @@ public class Parser {
                 boolean varargs = parameterTypeList.varArgs();
                 ArrayList<String> paramNames = new ArrayList<>();
                 List<Type> paramTypes = new ArrayList<>();
+                boolean sawBareVoidParameter = false;
                 for(ParameterDeclaration pi:parameterDeclarations){
                     TypeAndStorageClass typeAndStorageClass =
                             parseTypeAndStorageClass(pi.declarationSpecifiers(), typeAliases, tokens);
@@ -815,7 +816,19 @@ public class Parser {
 
                     String name = decl.name();
                     Type type = decl.type();
-                    if (type == Primitive.VOID) continue;
+                    if (type == Primitive.VOID) {
+                        if (name != null) {
+                            throw new Err("named parameter is void");
+                        }
+                        if (parameterDeclarations.size() != 1) {
+                            throw new Err("void parameter must be the only parameter");
+                        }
+                        sawBareVoidParameter = true;
+                        continue;
+                    }
+                    if (sawBareVoidParameter) {
+                        throw new Err("void parameter must be the only parameter");
+                    }
                     if (type instanceof FunType)
                         throw new Err("function pointers are not supported");
                     paramNames.add(name);
