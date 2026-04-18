@@ -61,6 +61,7 @@ public record IntInit(int i) implements StaticInit, Constant<IntInit> {
             case OR, BITWISE_OR -> c = a | b;
             case BITWISE_XOR -> c = a ^ b;
             case SAR -> c = a >> b;
+            case SHR -> c = a >>> b;
             case SHL -> c = a << b;
             case COMMA -> c = b;
             default -> {

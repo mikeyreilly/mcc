@@ -863,6 +863,11 @@ void chars() throws Exception {
         assertFalse(asm.contains("stosq"));
     }
 
+    @Test void logical_shift_promoted_char_constant_fold() throws Exception {
+        String asm = assemble("logical_shift_promoted_char_constant_fold", true);
+        assertFalse(asm.contains("shr"));
+    }
+
     @Test void param_passing() throws Exception {
         returns("param_passing", 0);
     }
