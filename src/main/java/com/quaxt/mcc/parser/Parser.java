@@ -937,6 +937,9 @@ public class Parser {
 
             switch(t){
                 case CLOSE_PAREN -> {
+                    if (!allowComma && !parameterDeclarations.isEmpty()) {
+                        throw makeErr("Unexpected close paren after comma in parameter list", tokens);
+                    }
                     return new ParameterTypeList(parameterDeclarations, false);
                 }
                 case ELLIPSIS -> {
