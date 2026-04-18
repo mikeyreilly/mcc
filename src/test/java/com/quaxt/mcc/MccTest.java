@@ -804,6 +804,10 @@ void chars() throws Exception {
         returns("stack_spill_small_struct_chunk", 0);
     }
 
+    @Test void nested_partial_struct_initializer_zero_fill() throws Exception {
+        returns("nested_partial_struct_initializer_zero_fill", 0);
+    }
+
     @Test void va_struct_two_fp_registers() throws Exception {
         returns("va_struct_two_fp_registers", 0);
     }

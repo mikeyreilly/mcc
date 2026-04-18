@@ -1062,10 +1062,6 @@ public class Codegen {
                 case Memset(VarIr dstV, int c,
                             long byteCount, boolean viaPointer) -> {
                     Operand dst = toOperand(dstV);
-                    if (!viaPointer && dst instanceof PseudoMem(String identifier, long offset1, int alignment) && offset1==0L) {
-                        SymbolTableEntry e = Mcc.SYMBOL_TABLE.get(identifier);
-                        dst = new Pseudo(identifier, toTypeAsm(e.type()), e.isStatic(), e.aliased, alignment);
-                    }
                     memsetBytes(ins, c, dst, byteCount, viaPointer);
                 }
 

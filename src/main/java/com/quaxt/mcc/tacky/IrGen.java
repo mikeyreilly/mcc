@@ -133,6 +133,10 @@ public class IrGen {
                 StructDef sd =
                         Mcc.TYPE_TABLE.get(tag);
                 List<MemberEntry> members = sd.namedMembers();
+                long structSize = Mcc.size(compoundInitType);
+                if (structSize > 0) {
+                    memsetToOffset(name, instructions, offset, 0, structSize, false);
+                }
 
 
                 int initsLen = inits.size();
@@ -158,10 +162,6 @@ public class IrGen {
                         initMember(memInit, member, name, instructions,
                                 offset, inlineFunctions);
                     }
-                }
-                long structSize = Mcc.size(compoundInitType);
-                if (initsLen == 0 && 0L < structSize) {
-                    memsetToOffset(name, instructions, offset, 0, structSize, false);
                 }
                 return offset + structSize;
             }
