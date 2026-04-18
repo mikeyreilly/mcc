@@ -2032,8 +2032,8 @@ commonType);
             t2 = decayFunType(t2);
         }
         if (t1.equals(t2)) return t1;
-        if (isNullPointerConstant(e1)) return t2;
-        if (isNullPointerConstant(e2)) return t1;
+        if (isNullPointerConstant(e1) && t2 instanceof Pointer) return t2;
+        if (isNullPointerConstant(e2) && t1 instanceof Pointer) return t1;
         if (t1 instanceof Pointer(Type r1) && t2 instanceof Pointer(Type r2)) {
             if (r1 == VOID) return t1;
             if (r2 == VOID) return t2;
