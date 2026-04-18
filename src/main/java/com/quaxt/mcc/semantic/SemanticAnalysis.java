@@ -2000,6 +2000,7 @@ commonType);
     public static boolean isComplete(Type t) {
         return switch (t) {
             case VOID -> false;
+            case FunType _ -> false;
             case Structure(boolean isUnion, String tag, StructDef _) ->
                     TYPE_TABLE.containsKey(tag);
             case Array(Type element, Constant arraySize) -> {
