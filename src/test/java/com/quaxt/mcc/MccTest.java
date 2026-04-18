@@ -852,6 +852,12 @@ void chars() throws Exception {
         returns("char_literal_has_int_type", 0);
     }
 
+    @Test void dead_memset_removed() throws Exception {
+        returns("dead_memset_removed", 7);
+        String asm = assemble("dead_memset_removed", true);
+        assertFalse(asm.contains("stosq"));
+    }
+
     @Test void param_passing() throws Exception {
         returns("param_passing", 0);
     }

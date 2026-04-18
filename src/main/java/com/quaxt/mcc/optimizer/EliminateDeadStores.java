@@ -80,6 +80,8 @@ public class EliminateDeadStores {
                                 !liveVars.contains(dst);
                         case AddPtr(VarIr src1, ValIr src2, int _, VarIr dst) ->
                                 !liveVars.contains(dst);
+                        case Memset(VarIr dst, int _, long _, boolean viaPointer) ->
+                                !viaPointer && !liveVars.contains(dst) && !aliasedVars.contains(dst);
                         default -> false;
 
                     };
