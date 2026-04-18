@@ -720,10 +720,8 @@ public class Codegen {
                 TypeAsm assemblyType = to.type();
                 Operand operand = to.operand();
                 if (assemblyType instanceof ByteArray(long size, _)) {
-                    instructionAsms.add(new Binary(SUB, QUADWORD, new Imm(8),
-                            SP));
-                    copyBytes(instructionAsms, operand, new Memory(SP, 0),
-                            size);
+                    copyBytesToReg(instructionAsms, operand, AX, size);
+                    instructionAsms.add(new Push(AX));
                 } else if (operand instanceof Imm ||
                         operand instanceof IntegerReg ||
                         assemblyType == QUADWORD || assemblyType == DOUBLE) {

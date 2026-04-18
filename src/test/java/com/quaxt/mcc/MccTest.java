@@ -800,6 +800,10 @@ void chars() throws Exception {
         returns("param_passing", 0);
     }
 
+    @Test void stack_spill_small_struct_chunk() throws Exception {
+        returns("stack_spill_small_struct_chunk", 0);
+    }
+
     @Test void va_struct_two_fp_registers() throws Exception {
         returns("va_struct_two_fp_registers", 0);
     }
