@@ -502,7 +502,9 @@ public class Codegen {
                     yield new PseudoMem(identifier, 0, alignment);
                 }
                 if (t instanceof Structure(boolean isUnion, String tag, StructDef structDef)) {
-                    yield new PseudoMem(identifier, 0, TYPE_TABLE.get(tag).alignment());
+                    StructDef def = TYPE_TABLE.get(tag);
+                    int structAlignment = def == null ? alignment : def.alignment();
+                    yield new PseudoMem(identifier, 0, structAlignment);
                 }
                 if (t instanceof FunType && ste.attrs() instanceof FunAttributes) {
                     yield new LabelAddress(identifier);

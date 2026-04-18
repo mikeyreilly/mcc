@@ -450,6 +450,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void incomplete_struct_extern_address_compiles() throws Exception {
+        assertEquals(0, Mcc.mcc("-S", "src/test/resources/incomplete_struct_extern_address.c"));
+    }
+
+    @Test
     void string_literal_pointer_mismatch_test() {
         assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/string_literal_pointer_mismatch.c"));
     }
