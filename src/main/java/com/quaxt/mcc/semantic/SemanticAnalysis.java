@@ -2036,9 +2036,6 @@ commonType);
         if (t1 instanceof Pointer(Type r1) && t2 instanceof Pointer(Type r2)) {
             if (r1 == VOID) return t1;
             if (r2 == VOID) return t2;
-            if (r1.isInteger() && r2.isInteger() && size(r1)== size(r2)) {
-                return r1.isSigned()? r1 : r2;
-            }
         }
         if (t1 == NULLPTR_T && t2 instanceof Pointer) return t2;
         if (t2 == NULLPTR_T && t1 instanceof Pointer) return t1;

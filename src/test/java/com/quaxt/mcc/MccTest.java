@@ -460,6 +460,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void compare_mixed_integer_pointer_types_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/compare_mixed_integer_pointer_types_invalid.c"));
+    }
+
+    @Test
     void empty_initializer_list_invalid_test() {
         assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/empty_initializer_list_invalid.c"));
     }
