@@ -828,6 +828,11 @@ void chars() throws Exception {
     @Test void bitfield_with_compound_assignment() throws Exception {
         returns("bitfield_with_compound_assignment", 0);
     }
+
+    @Test void bitshift_chars_constant_fold_no_crash() throws Exception {
+        returns("bitshift_chars_constant_fold_no_crash", 0);
+    }
+
     @Test void param_passing() throws Exception {
         returns("param_passing", 0);
     }
