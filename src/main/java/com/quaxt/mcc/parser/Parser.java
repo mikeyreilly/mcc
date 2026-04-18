@@ -338,6 +338,9 @@ public class Parser {
 
                     }
                 }
+                if (members.isEmpty()) {
+                    throw makeErr((isUnion ? "union" : "struct") + " member list cannot be empty", tokens);
+                }
                 tokens.discardFirst(); // CLOSE_BRACE
 //                List<DeclarationSpecifier> specifiers =
 //                        parseDeclarationSpecifiers(tokens, typeAliases);
@@ -1247,8 +1250,14 @@ public class Parser {
                             foundSolo = true;
                         }
                         case INT -> {
-                            if (intCount != 0 || type == Primitive.CHAR ||
-                                    foundSolo) fail("invalid type specifier");
+                            if (intCount != 0 || foundSolo ||
+                                    (type != null &&
+                                            type != Primitive.INT &&
+                                            type != Primitive.SHORT &&
+                                            type != Primitive.LONG &&
+                                            type != Primitive.LONGLONG)) {
+                                fail("invalid type specifier");
+                            }
                             else if (type == null) {
                                 type = Primitive.INT;
                                 intCount++;
@@ -1297,7 +1306,7 @@ public class Parser {
                 }
 
                 case StructOrUnionSpecifier sous -> {
-                    if (foundSolo || signedness!=0)
+                    if (foundSolo || signedness!=0 || type != null)
                         fail("can't combine struct or union with other type " + "specifiers");
                     type = new Structure(sous.isUnion(),
                             sous.tag(), null);

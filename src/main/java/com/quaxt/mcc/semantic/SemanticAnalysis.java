@@ -209,6 +209,9 @@ public class SemanticAnalysis {
         if (structDecl == null || structDecl.members() == null) return null;
 
         var existing = TYPE_TABLE.get(structDecl.tag());
+        if (existing != null && !existing.members().isEmpty()) {
+            throw new Err("duplicate " + (structDecl.isUnion() ? "union" : "struct") + " definition");
+        }
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
         boolean isUnion = structDecl.isUnion();
         var alignment=structDecl.alignment();

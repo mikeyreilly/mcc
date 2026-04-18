@@ -435,6 +435,21 @@ void chars() throws Exception {
     }
 
     @Test
+    void empty_struct_declaration_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/empty_struct_declaration_invalid.c"));
+    }
+
+    @Test
+    void mixed_union_and_primitive_specifier_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/mixed_union_and_primitive_specifier_invalid.c"));
+    }
+
+    @Test
+    void duplicate_union_definition_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/duplicate_union_definition_invalid.c"));
+    }
+
+    @Test
     void string_literal_pointer_mismatch_test() {
         assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/string_literal_pointer_mismatch.c"));
     }
