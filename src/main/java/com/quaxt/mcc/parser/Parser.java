@@ -1719,11 +1719,11 @@ public class Parser {
     private static Constant<?> parseChar(String s) {
         int len = s.length();
         if (len == 3) { //fast path
-            return new CharInit((byte) s.charAt(1));
+            return new IntInit(0xff & s.charAt(1));
         }
         int end = len - 1;
         return switch(s.charAt(0)){
-            case '\'' -> new CharInit((byte) (0xff & parseCharHelper(1, end, s)));
+            case '\'' -> new IntInit(0xff & parseCharHelper(1, end, s));
             case 'u' -> new UShortInit((short) (0xffff & parseCharHelper(2, end, s)));
             case 'U' -> new UIntInit(parseCharHelper(2, end, s));
             case 'L' -> new IntInit(parseCharHelper(2, end, s));

@@ -848,6 +848,10 @@ void chars() throws Exception {
         returns("bitshift_chars_constant_fold_no_crash", 0);
     }
 
+    @Test void char_literal_has_int_type() throws Exception {
+        returns("char_literal_has_int_type", 0);
+    }
+
     @Test void param_passing() throws Exception {
         returns("param_passing", 0);
     }
