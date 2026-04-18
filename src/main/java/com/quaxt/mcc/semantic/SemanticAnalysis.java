@@ -1048,6 +1048,18 @@ enclosingFunction), label);
     private static void validateTypeSpecifier(Type type) {
         switch (type) {
             case Array(Type element, Constant arraySize) -> {
+                if (arraySize != null) {
+                    Constant resolved = evaluateConstantExp(arraySize);
+                    if (resolved == null) {
+                        throw new Err("Non constant array size");
+                    }
+                    if (!resolved.type().isInteger()) {
+                        throw new Err("array size must be an integer");
+                    }
+                    if (resolved.toLong() < 0) {
+                        throw new Err("illegal negative array size");
+                    }
+                }
                 if (!isComplete(element))
                     throw new Err("Illegal array of incomplete type");
                 validateTypeSpecifier(element);
@@ -1962,9 +1974,15 @@ commonType);
 
 
     private static Type completeType(Type t) {
-        if (t instanceof Array(Type refType, ConstantExp c)) {
-            Constant val = evaluateConstantExp(c);
-            if (val == null) throw makeErr("Non constant array size", null);
+        if (t instanceof Array(Type refType, Constant size)) {
+            Constant val = size;
+            if (size instanceof ConstantExp c) {
+                val = evaluateConstantExp(c);
+                if (val == null) throw makeErr("Non constant array size", null);
+            }
+            if (val != null && !val.type().isInteger()) {
+                throw new Err("array size must be an integer");
+            }
             return new Array(refType, val);
         }
         return t;

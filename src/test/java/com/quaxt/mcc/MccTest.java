@@ -422,6 +422,13 @@ void chars() throws Exception {
         assertEquals("Structure has no member with this name",
                 thrown.getMessage());
     }
+
+    @Test
+    void array_size_must_be_integer_test() {
+        Err thrown = assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/array_size_must_be_integer.c"));
+        assertEquals("array size must be an integer", thrown.getMessage());
+    }
+
     @Test
     void offsetof_no_such_member_test()  {
         Err thrown = assertThrows(Err.class, () -> returns("offsetof_no_such_member", 0));
