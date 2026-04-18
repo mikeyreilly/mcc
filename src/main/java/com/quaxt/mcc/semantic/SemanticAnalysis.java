@@ -392,26 +392,31 @@ bitFieldWidth);
                     case Array(Type inner, Constant arraySize) -> {
                         long declaredLength =
                                 arraySize == null ? -1L : arraySize.toLong();
-                        if (arraySize != null && declaredLength < initsSize) {
+                        long initializedCount = 0;
+                        for (Initializer i : inits) {
+                            convertCompoundInitializerToStaticInitList(i, inner, acc);
+                            if (i instanceof ZeroInit(long bytes)) {
+                                long innerSize = size(inner);
+                                assert (innerSize > 0);
+                                assert (bytes % innerSize == 0);
+                                initializedCount += bytes / innerSize;
+                            } else {
+                                initializedCount++;
+                            }
+                        }
+                        if (arraySize != null && declaredLength < initializedCount) {
                             throw new Err(
-                                    "Length of initializer (" + initsSize +
+                                    "Length of initializer (" + initializedCount +
                                             ") exceeds declared length of " +
                                             "array (" + arraySize + ")");
                         }
-                        inits.forEach(i -> convertCompoundInitializerToStaticInitList(i, inner, acc));
-                        if (arraySize != null && declaredLength < initsSize) {
-                            throw new Err(
-                                    "Length of initializer (" + initsSize +
-                                            ") exceeds declared length of " +
-                                            "array (" + arraySize + ")");
-                        }
-                        if (arraySize != null && declaredLength > initsSize) {
+                        if (arraySize != null && declaredLength > initializedCount) {
                             acc.add(createZeroInit(new Array(inner,
                                      new ULongInit(
-                                    declaredLength - initsSize))));
+                                    declaredLength - initializedCount))));
                         }
                         return arraySize ==
-                                null ? new IntInit(initsSize) : arraySize;
+                                null ? new LongInit(initializedCount) : arraySize;
                     }
 
                     case Pointer _, NullptrT _, FunType _, Primitive _ ->{

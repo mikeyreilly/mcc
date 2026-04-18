@@ -466,6 +466,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void static_local_nested_partial_init() throws Exception {
+        returns("static_local_nested_partial_init", 0);
+    }
+
+    @Test
     void automatic() throws Exception {
         returns("automatic", 0);
     }
