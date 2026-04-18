@@ -455,6 +455,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void parameter_storage_class_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/parameter_storage_class_invalid.c"));
+    }
+
+    @Test
     void empty_initializer_list_invalid_test() {
         assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/empty_initializer_list_invalid.c"));
     }

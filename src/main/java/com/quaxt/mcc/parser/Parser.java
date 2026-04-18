@@ -807,6 +807,9 @@ public class Parser {
                 for(ParameterDeclaration pi:parameterDeclarations){
                     TypeAndStorageClass typeAndStorageClass =
                             parseTypeAndStorageClass(pi.declarationSpecifiers(), typeAliases, tokens);
+                    if (typeAndStorageClass.storageClass() != null) {
+                        throw new Err("Storage class not allowed in function parameter declaration");
+                    }
                     NameDeclTypeParams decl =
                             processDeclarator((Declarator) pi.declarator(), typeAndStorageClass.type(), typeAliases, tokens);
 
