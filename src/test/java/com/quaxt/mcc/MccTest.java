@@ -501,6 +501,11 @@ void chars() throws Exception {
     }
 
     @Test
+    void union_partial_initializer_stack_safety() throws Exception {
+        returns("union_partial_initializer_stack_safety", 0);
+    }
+
+    @Test
     void automatic() throws Exception {
         returns("automatic", 0);
     }

@@ -227,7 +227,12 @@ public class IrGen {
         if (offset !=0) {
             VarIr ptr =
                     makeTemporary("ptr", new Pointer(VOID));
-            instructions.add(new AddPtr(name, new IntInit((int) offset), 1, ptr));
+            if (viaPointer) {
+                instructions.add(new AddPtr(name, new IntInit((int) offset), 1, ptr));
+            } else {
+                instructions.add(new GetAddress(name, ptr));
+                instructions.add(new AddPtr(ptr, new IntInit((int) offset), 1, ptr));
+            }
             instructions.add(new Memset(ptr, c, byteCount, true));
         } else {
             instructions.add(new Memset(name, c, byteCount, viaPointer));
