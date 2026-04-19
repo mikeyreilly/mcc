@@ -353,10 +353,11 @@ class MccTest {
                 y=1030
                 """);
     }
-@Test
-void chars() throws Exception {
+
+    @Test
+    void chars() throws Exception {
         returns("chars", 0);
-}
+    }
 
     @Test
     void bytes_swap()  throws Exception {
@@ -477,16 +478,6 @@ void chars() throws Exception {
     @Test
     void named_void_parameter_invalid_test() {
         assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/named_void_parameter_invalid.c"));
-    }
-
-    @Test
-    void empty_initializer_list_invalid_test() {
-        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/empty_initializer_list_invalid.c"));
-    }
-
-    @Test
-    void union_empty_initializer_invalid_test() {
-        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/union_empty_initializer_invalid.c"));
     }
 
     @Test

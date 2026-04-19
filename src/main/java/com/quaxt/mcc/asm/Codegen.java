@@ -576,7 +576,7 @@ public class Codegen {
 
             Long varOffset = varTable.get(identifier);
             if (varOffset == null) {
-                // it starts ar -8 - we can use this for the first var
+                // it starts at 0 - we can use this for the first var
                 // when that var is written it will update bytes stack-8 to
                 // stack-1
                 varOffset = offsetA.get();

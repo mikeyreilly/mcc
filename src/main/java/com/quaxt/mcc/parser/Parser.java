@@ -1028,7 +1028,8 @@ public class Parser {
 
             while (!done) {
                 if (tokens.getFirst() == CLOSE_BRACE) {
-                    throw makeErr("Empty initializer list", tokens);
+                    tokens.discardFirst();
+                    break;
                 }
                 Initializer init = parseInitializer(tokens, typeAliases, labels, enclosingSwitch);
                 inits.add(init);
