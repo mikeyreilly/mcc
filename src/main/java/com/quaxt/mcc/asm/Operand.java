@@ -4,7 +4,9 @@ import com.quaxt.mcc.AbstractValue;
 import com.quaxt.mcc.Err;
 
 public sealed interface Operand extends AbstractValue permits Data,
+        FrameSlot,
         Imm,
+        IncomingStackArg,
         Indexed,
         LabelAddress,
         Memory,

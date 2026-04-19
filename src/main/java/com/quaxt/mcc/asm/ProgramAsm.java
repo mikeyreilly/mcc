@@ -25,12 +25,16 @@ import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> positions) {
 
     /**
-     * When formatting a Memory(SP, offset) we add stackCorrection to offset to output the true memory location
-     * */
+     * FrameSlot offsets are relative to an abstract local-frame base and are
+     * lowered to the current %rsp plus stackCorrection at emission time.
+     */
     private static String formatOperand(Instruction s, Operand o, AtomicInteger stackCorrection) {
         return switch (o) {
             case Imm(long i) -> "$" + i;
             case Pseudo p -> p.identifier;
+            case FrameSlot(long offset, int _) ->
+                    (offset + stackCorrection.get()) + "(%" + SP.q + ")";
+            case IncomingStackArg(long offset) -> offset + "(%" + BP.q + ")";
             case IntegerReg reg -> "%" + switch (s) {
                 case Push _, Pop _ -> reg.q;
                 case SetCC _ -> reg.b;

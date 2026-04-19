@@ -455,7 +455,9 @@ public class Codegen {
     }
 
     private static boolean isRam(Operand src) {
-        return src instanceof Memory || src instanceof Indexed || src instanceof Data;
+        return src instanceof Memory || src instanceof Indexed ||
+                src instanceof Data || src instanceof FrameSlot ||
+                src instanceof IncomingStackArg;
     }
 
     public static Data resolveConstantDouble(double d) {
@@ -545,7 +547,8 @@ public class Codegen {
         String identifier;
         int alignment = 0;
         switch (in) {
-            case Imm _, IntegerReg _, Memory _, DoubleReg _, Data _, Indexed _, LabelAddress _:
+            case Imm _, IntegerReg _, Memory _, DoubleReg _, Data _, Indexed _,
+                 LabelAddress _, FrameSlot _, IncomingStackArg _:
                 return in;
             case Pseudo p: {
                 identifier = p.identifier;
@@ -585,12 +588,14 @@ public class Codegen {
                     varOffset += (alignment - remainder);
                 }
                 varTable.put(identifier, varOffset);
-                var r = new Memory(SP, varOffset + offsetFromStartOfArray);
+                var r = new FrameSlot(varOffset + offsetFromStartOfArray,
+                        alignment);
                 varOffset += size;
                 offsetA.set(varOffset);
                 return r;
             }
-            return new Memory(SP, varOffset + offsetFromStartOfArray);
+            return new FrameSlot(varOffset + offsetFromStartOfArray,
+                    alignment);
 
         } else throw new IllegalArgumentException(identifier);
     }
@@ -872,10 +877,10 @@ public class Codegen {
             TypedOperand to = stackArguments.get(i);
             TypeAsm paramType = to.type();
             if (paramType instanceof ByteArray(long size, _)) {
-                Operand src = new Memory(BP, offset);
+                Operand src = new IncomingStackArg(offset);
                 copyBytes(ins, src, to.operand(), size);
             } else
-                ins.add(new Mov(to.type(), new Memory(BP, 16 + i * 8L),
+                ins.add(new Mov(to.type(), new IncomingStackArg(16 + i * 8L),
                         to.operand()));
             offset += 8;
         }
@@ -1468,7 +1473,7 @@ public class Codegen {
                     ins.add(new Mov(LONGWORD, new Imm(48 + doubleArguments.size() * 16),
                             new PseudoMem(vaList.identifier(), 4)));
                     // overflow_arg_area
-                    ins.add(new Lea(new Memory(BP, offset),
+                    ins.add(new Lea(new IncomingStackArg(offset),
                             new PseudoMem(vaList.identifier(), 8)));
 
                     // reg_save_area The element points to the start of the
