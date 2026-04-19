@@ -15,8 +15,7 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
-import static com.quaxt.mcc.Mcc.makeTemporary;
-import static com.quaxt.mcc.Mcc.printIndent;
+import static com.quaxt.mcc.Mcc.*;
 import static com.quaxt.mcc.asm.Codegen.BACKEND_SYMBOL_TABLE;
 import static com.quaxt.mcc.asm.IntegerReg.BP;
 import static com.quaxt.mcc.asm.IntegerReg.SP;
@@ -317,6 +316,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         for (Instruction instruction : instructions) {
             emitInstruction(out, instruction, stackCorrection, functionAsm);
         }
+        if (addDebugInfo)
+            out.println(".L"+name+".end" + ":");
         out.println(".size "+name+", .-"+name);
         printIndent(out,".cfi_endproc");
     }
