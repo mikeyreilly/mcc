@@ -1893,14 +1893,16 @@ commonType);
             }
             case Alignof(Exp e) -> {
                 Exp typedE = typeCheckExpression(e);
-                if (!isComplete(typedE.type())) {
+                if (!(typedE.type() instanceof FunType) &&
+                        !isComplete(typedE.type())) {
                     fail("Complete type required here");
                 }
                 yield new Alignof(typedE);
             }
             case AlignofT(Type typeToSize) -> {
                 validateTypeSpecifier(typeToSize);
-                if (!isComplete(typeToSize)) {
+                if (!(typeToSize instanceof FunType) &&
+                        !isComplete(typeToSize)) {
                     fail("Complete type required here");
                 }
                 yield exp;
