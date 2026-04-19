@@ -5,7 +5,7 @@ int main() {
     if (c!='A') return 1;
     c = '\xfff';
     if (c!=-1) return 2;
-    unsigned char *x = "\200\20b\x7f";
+    unsigned char *x = (unsigned char *) "\200\20b\x7f";
     if(x[0] != 128) {
         return 3;
     }

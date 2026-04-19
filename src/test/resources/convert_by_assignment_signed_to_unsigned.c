@@ -5,6 +5,6 @@ int main() {
     unsigned int u;
     unsigned int* pu=&u;
     int* pi=&i;
-    pu=pi;
+    pu=(unsigned int*)pi;
     printf("%u\n",*pu);
 }
