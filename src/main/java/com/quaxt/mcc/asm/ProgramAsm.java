@@ -41,8 +41,6 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 default -> reg.d;
             };
             case Memory(IntegerReg reg, long offset) ->
-                    (reg == SP) ?
-                    (offset + stackCorrection.get()) + "(%" + reg.q + ")" :
                     offset + "(%" + reg.q + ")";
             case Data(String identifier, long offset) -> {
                 boolean isConstant =

@@ -295,9 +295,7 @@ public class Codegen {
                         // rewrite the destination away from the pushed slot.
                         instructions.set(i, new Binary(SUB, QUADWORD,
                                 new Imm(8), SP));
-                        instructions.add(i + 1, new Mov(QUADWORD, SP, R10));
-                        instructions.add(i + 2, new Mov(QUADWORD, operand,
-                                new Memory(R10, 0)));
+                        instructions.add(i + 1, new Mov(QUADWORD, operand, new Memory(SP, 0)));
                     } else if (operand instanceof Imm imm && imm.isAwkward()) {
                         instructions.set(i, new Mov(QUADWORD, operand,
                                 srcReg(QUADWORD)));

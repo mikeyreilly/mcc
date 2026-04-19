@@ -867,6 +867,13 @@ class MccTest {
         returns("stack_spill_small_struct_chunk", 0);
     }
 
+    @Test void push_xmm_stack_arg() throws Exception {
+        returns("push_xmm_stack_arg", 0, true, true);
+        String asm = assemble("push_xmm_stack_arg", false);
+        assertTrue(asm.lines().anyMatch(x -> x.matches("\\s*movq\\t%xmm\\d+, 0\\(%rsp\\)")));
+        assertFalse(asm.contains("movq\t%rsp, %r10"));
+    }
+
     @Test void nested_partial_struct_initializer_zero_fill() throws Exception {
         returns("nested_partial_struct_initializer_zero_fill", 0);
     }
