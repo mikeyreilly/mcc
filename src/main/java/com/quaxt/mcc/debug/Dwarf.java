@@ -17,6 +17,8 @@ import static com.quaxt.mcc.Mcc.printIndent;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.isComplete;
 
 public class Dwarf {
+    private static final int ROOT_DEBUG_SCOPE_ID = 0;
+
     /* Throughout the comments in this class section numbers and table numbers
      * refer to DWARF Version 5 Debugging Format Standard
      * https://dwarfstd.org/doc/DWARF5.pdf
@@ -343,6 +345,10 @@ public class Dwarf {
     static final byte DW_OP_addrx = (byte) 0xa1;
     static final byte DW_OP_constx = (byte) 0xa2;
 
+    // 7.28.2 Location List Entry Encodings
+    static final byte DW_LLE_end_of_list = 0x00;
+    static final byte DW_LLE_start_end = 0x07;
+
     public static void emitDebugInfo(PrintWriter out,
                                      List<TopLevelAsm> topLevelAsms,
                                      Path srcFile,
@@ -415,7 +421,7 @@ public class Dwarf {
 
 
         LinkedHashMap<Type, Integer> typeMap = makeTypeTable(out, topLevelAsms, dieMap);
-        int[] voidAttribs = new int[]{
+        int[] voidExprFrameBaseAttribs = new int[]{
                 DW_AT_external, DW_FORM_flag_present,
                 DW_AT_name, DW_FORM_strp,
                 DW_AT_decl_file, DW_FORM_data1,
@@ -428,7 +434,7 @@ public class Dwarf {
 //                DW_AT_declaration, DW_FORM_flag_present,
 //                DW_AT_sibling, DW_FORM_ref4
         };
-        int[] nonvoidAttribs = new int[]{
+        int[] nonvoidExprFrameBaseAttribs = new int[]{
                 DW_AT_external, DW_FORM_flag_present,
                 DW_AT_name, DW_FORM_strp,
                 DW_AT_decl_file, DW_FORM_data1,
@@ -441,12 +447,43 @@ public class Dwarf {
 //                DW_AT_declaration, DW_FORM_flag_present,
 //                DW_AT_sibling, DW_FORM_ref4
         };
+        int[] voidLocListFrameBaseAttribs = new int[]{
+                DW_AT_external, DW_FORM_flag_present,
+                DW_AT_name, DW_FORM_strp,
+                DW_AT_decl_file, DW_FORM_data1,
+                DW_AT_decl_line, DW_FORM_data2,
+                DW_AT_prototyped, DW_FORM_flag_present,
+                DW_AT_low_pc, DW_FORM_addr,
+                DW_AT_high_pc, DW_FORM_data8,
+                DW_AT_frame_base, DW_FORM_sec_offset
+        };
+        int[] nonvoidLocListFrameBaseAttribs = new int[]{
+                DW_AT_external, DW_FORM_flag_present,
+                DW_AT_name, DW_FORM_strp,
+                DW_AT_decl_file, DW_FORM_data1,
+                DW_AT_decl_line, DW_FORM_data2,
+                DW_AT_prototyped, DW_FORM_flag_present,
+                DW_AT_type, DW_FORM_ref4,
+                DW_AT_low_pc, DW_FORM_addr,
+                DW_AT_high_pc, DW_FORM_data8,
+                DW_AT_frame_base, DW_FORM_sec_offset
+        };
         for (FunctionIr fun : functions) {
             Type returnType = fun.returnType();
-            boolean hasChildren = !fun.varTable.isEmpty();
+            boolean hasChildren = hasEmittableDebugChildren(fun);
+            boolean usesFrameBaseLocList = fun.frameBaseLocListLabel != null &&
+                    !fun.frameBaseRanges.isEmpty();
+            int[] subprogramAttribs =
+                    returnType == Primitive.VOID ?
+                            (usesFrameBaseLocList ?
+                                    voidLocListFrameBaseAttribs :
+                                    voidExprFrameBaseAttribs) :
+                            (usesFrameBaseLocList ?
+                                    nonvoidLocListFrameBaseAttribs :
+                                    nonvoidExprFrameBaseAttribs);
 
 
-            int subProgramCode = abbrevNumber(dieMap, new Die(DW_TAG_subprogram, hasChildren, returnType == Primitive.VOID ? voidAttribs : nonvoidAttribs));
+            int subProgramCode = abbrevNumber(dieMap, new Die(DW_TAG_subprogram, hasChildren, subprogramAttribs));
             uleb128(out, subProgramCode); // abbreviation code DW_TAG_subprogram
             String funName = makeTemporary(".LfunName.");
             topLevelAsms.add(new DebugString(funName, fun.name));
@@ -464,30 +501,17 @@ public class Dwarf {
             // DW_AT_high_pc
             printQuad(out,".L"+fun.name+".end"  + "-" + fun.name);
 
-            uleb128(out, 1); // 1 byte block
-
-            printByte(out, DW_OP_reg7); // our frame base is SP
+            if (usesFrameBaseLocList) {
+                printInt(out, fun.frameBaseLocListLabel);
+            } else {
+                long frameBaseOffset = fun.frameBaseRanges.isEmpty() ? 0 :
+                        -fun.frameBaseRanges.getFirst().spDelta();
+                emitFrameBaseExpression(out, frameBaseOffset);
+            }
 
             if (hasChildren) {
-                Die variableDie = new Die(DW_TAG_variable, false,
-                        new int[]{
-                                DW_AT_name,         DW_FORM_strp,
-                                DW_AT_type,         DW_FORM_ref4,
-                                DW_AT_location, DW_FORM_exprloc});
-                int variableDieAbbrevNumber = abbrevNumber(dieMap, variableDie);
-                for(Map.Entry<String, Long> e : fun.varTable.entrySet()) {
-                    String varName = e.getKey();
-                    SymbolTableEntry ste = Mcc.SYMBOL_TABLE.get(e.getKey());
-                    Type t = ste.type();
-                    uleb128(out, variableDieAbbrevNumber);
-                    addAndPrintString(out, topLevelAsms, varName);
-                    printInt(out, typeMap.get(t));
-                    long offset = e.getValue();
-                    uleb128(out, 1 + sleb128ByteCount(offset)); // n byte block
-                    printByte(out, DW_OP_fbreg);
-                    sleb128(out, offset);
-                }
-                // no more children of DW_TAG_subprogram
+                emitFunctionDebugChildren(out, fun, topLevelAsms, dieMap,
+                        typeMap);
                 printByte(out, (byte) 0);
                 printByte(out, (byte) 0);
             }
@@ -496,6 +520,8 @@ public class Dwarf {
 
 
         out.println(endLabel + ":");
+
+        emitDebugLocLists(out, functions);
 
         printIndent(out, ".section\t.debug_line,\"\",@progbits");
         out.println(debugLineLabel+":");
@@ -521,6 +547,182 @@ public class Dwarf {
         //end of debug abbrev
         printByte(out, (byte) 0);
 
+    }
+
+    private static boolean hasEmittableDebugChildren(FunctionIr fun) {
+        if (fun.debugScopes != null && !fun.debugScopes.isEmpty()) {
+            return true;
+        }
+        if (fun.debugLocals == null || fun.varTable == null) {
+            return false;
+        }
+        for (DebugLocal local : fun.debugLocals) {
+            if (fun.varTable.containsKey(local.internalName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void emitFunctionDebugChildren(PrintWriter out,
+                                                  FunctionIr fun,
+                                                  List<TopLevelAsm> topLevelAsms,
+                                                  LinkedHashMap<Die, Integer> dieMap,
+                                                  LinkedHashMap<Type, Integer> typeMap) {
+        Die variableDie = new Die(DW_TAG_variable, false,
+                new int[]{
+                        DW_AT_name,         DW_FORM_strp,
+                        DW_AT_type,         DW_FORM_ref4,
+                        DW_AT_location, DW_FORM_exprloc});
+        Die parameterDie = new Die(DW_TAG_formal_parameter, false,
+                new int[]{
+                        DW_AT_name,         DW_FORM_strp,
+                        DW_AT_type,         DW_FORM_ref4,
+                        DW_AT_location, DW_FORM_exprloc});
+        Die lexicalBlockDie = new Die(DW_TAG_lexical_block, true,
+                new int[]{
+                        DW_AT_low_pc, DW_FORM_addr,
+                        DW_AT_high_pc, DW_FORM_data8});
+        int variableDieAbbrevNumber = abbrevNumber(dieMap, variableDie);
+        int parameterDieAbbrevNumber = abbrevNumber(dieMap, parameterDie);
+        int lexicalBlockDieAbbrevNumber =
+                abbrevNumber(dieMap, lexicalBlockDie);
+
+        Map<Integer, List<DebugLocal>> localsByScope = new HashMap<>();
+        if (fun.debugLocals != null) {
+            for (DebugLocal local : fun.debugLocals) {
+                localsByScope.computeIfAbsent(local.scopeId(),
+                        ignored -> new ArrayList<>()).add(local);
+            }
+        }
+
+        Map<Integer, List<DebugScope>> scopesByParent = new HashMap<>();
+        if (fun.debugScopes != null) {
+            for (DebugScope scope : fun.debugScopes) {
+                scopesByParent.computeIfAbsent(scope.parentId(),
+                        ignored -> new ArrayList<>()).add(scope);
+            }
+        }
+
+        emitScopeDebugChildren(out, fun, ROOT_DEBUG_SCOPE_ID, topLevelAsms,
+                typeMap, localsByScope, scopesByParent,
+                variableDieAbbrevNumber, parameterDieAbbrevNumber,
+                lexicalBlockDieAbbrevNumber);
+    }
+
+    private static void emitScopeDebugChildren(PrintWriter out,
+                                               FunctionIr fun,
+                                               int scopeId,
+                                               List<TopLevelAsm> topLevelAsms,
+                                               LinkedHashMap<Type, Integer> typeMap,
+                                               Map<Integer, List<DebugLocal>> localsByScope,
+                                               Map<Integer, List<DebugScope>> scopesByParent,
+                                               int variableDieAbbrevNumber,
+                                               int parameterDieAbbrevNumber,
+                                               int lexicalBlockDieAbbrevNumber) {
+        for (DebugLocal local : localsByScope.getOrDefault(scopeId, List.of())) {
+            emitLocalDebugInfo(out, fun, local, topLevelAsms, typeMap,
+                    variableDieAbbrevNumber, parameterDieAbbrevNumber);
+        }
+
+        for (DebugScope scope : scopesByParent.getOrDefault(scopeId,
+                List.of())) {
+            uleb128(out, lexicalBlockDieAbbrevNumber);
+            printQuad(out, scope.startLabel());
+            printQuad(out, scope.endLabel() + "-" + scope.startLabel());
+            emitScopeDebugChildren(out, fun, scope.id(), topLevelAsms,
+                    typeMap, localsByScope, scopesByParent,
+                    variableDieAbbrevNumber, parameterDieAbbrevNumber,
+                    lexicalBlockDieAbbrevNumber);
+            printByte(out, (byte) 0);
+            printByte(out, (byte) 0);
+        }
+    }
+
+    private static void emitLocalDebugInfo(PrintWriter out,
+                                           FunctionIr fun,
+                                           DebugLocal local,
+                                           List<TopLevelAsm> topLevelAsms,
+                                           LinkedHashMap<Type, Integer> typeMap,
+                                           int variableDieAbbrevNumber,
+                                           int parameterDieAbbrevNumber) {
+        if (fun.varTable == null) {
+            return;
+        }
+        Long offset = fun.varTable.get(local.internalName());
+        if (offset == null) {
+            return;
+        }
+        SymbolTableEntry ste = Mcc.SYMBOL_TABLE.get(local.internalName());
+        if (ste == null) {
+            return;
+        }
+        Integer typeDieOffset = typeMap.get(ste.type());
+        if (typeDieOffset == null) {
+            return;
+        }
+
+        uleb128(out, local.parameter() ? parameterDieAbbrevNumber :
+                variableDieAbbrevNumber);
+        addAndPrintString(out, topLevelAsms, local.displayName());
+        printInt(out, typeDieOffset);
+        uleb128(out, 1 + sleb128ByteCount(offset));
+        printByte(out, DW_OP_fbreg);
+        sleb128(out, offset);
+    }
+
+    private static void emitDebugLocLists(PrintWriter out,
+                                          List<FunctionIr> functions) {
+        boolean any = false;
+        for (FunctionIr function : functions) {
+            if (function.frameBaseLocListLabel != null &&
+                    !function.frameBaseRanges.isEmpty()) {
+                any = true;
+                break;
+            }
+        }
+        if (!any) {
+            return;
+        }
+
+        printIndent(out, ".section\t.debug_loclists,\"\",@progbits");
+        String startLabel = makeTemporary(".LdebugLoclistsStart.");
+        String endLabel = makeTemporary(".LdebugLoclistsEnd.");
+        printIndent(out, ".long\t" + endLabel + "-" + startLabel);
+        out.println(startLabel + ":");
+        printIndent(out, ".value\t5");
+        printByte(out, (byte) 8); // address size
+        printByte(out, (byte) 0); // segment selector size
+        printInt(out, 0); // offset entry count
+
+        for (FunctionIr function : functions) {
+            if (function.frameBaseLocListLabel == null ||
+                    function.frameBaseRanges.isEmpty()) {
+                continue;
+            }
+            out.println(function.frameBaseLocListLabel + ":");
+            for (FrameBaseRange range : function.frameBaseRanges) {
+                printByte(out, DW_LLE_start_end);
+                printQuad(out, range.startLabel());
+                printQuad(out, range.endLabel());
+                emitFrameBaseExpression(out, -range.spDelta());
+            }
+            printByte(out, DW_LLE_end_of_list);
+        }
+        out.println(endLabel + ":");
+    }
+
+    private static void emitFrameBaseExpression(PrintWriter out,
+                                                long rspOffset) {
+        uleb128(out, 1 + sleb128ByteCount(rspOffset));
+        printByte(out, (byte) (DW_OP_breg0 + IntegerReg.SP.dwarfNumber));
+        sleb128(out, rspOffset);
+    }
+
+    private static String displayName(String internalName) {
+        int dotIndex = internalName.indexOf('.');
+        return dotIndex == -1 ? internalName : internalName.substring(0,
+                dotIndex);
     }
 
     private static LinkedHashMap<Type, Integer> makeTypeTable(PrintWriter out,

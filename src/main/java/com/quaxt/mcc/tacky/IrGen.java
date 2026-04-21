@@ -1,6 +1,8 @@
 package com.quaxt.mcc.tacky;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.DebugLocal;
+import com.quaxt.mcc.asm.DebugScope;
 import com.quaxt.mcc.asm.FunctionIr;
 import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.asm.Todo;
@@ -22,6 +24,81 @@ import static com.quaxt.mcc.semantic.Primitive.*;
 import static com.quaxt.mcc.semantic.SemanticAnalysis.convertConst;
 
 public class IrGen {
+    private static final int ROOT_DEBUG_SCOPE_ID = 0;
+
+    private record DebugScopeFrame(int previousScopeId, String endLabel) {
+    }
+
+    private static final class DebugContext {
+        private final boolean enabled;
+        private final ArrayList<DebugScope> scopes = new ArrayList<>();
+        private final ArrayList<DebugLocal> locals = new ArrayList<>();
+        private int currentScopeId = ROOT_DEBUG_SCOPE_ID;
+        private int nextScopeId = ROOT_DEBUG_SCOPE_ID + 1;
+
+        private DebugContext(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        static DebugContext forCurrentBuild() {
+            return new DebugContext(Mcc.addDebugInfo);
+        }
+
+        static DebugContext disabled() {
+            return new DebugContext(false);
+        }
+
+        List<DebugScope> scopes() {
+            return scopes;
+        }
+
+        List<DebugLocal> locals() {
+            return locals;
+        }
+
+        void addParameter(Var parameter) {
+            addLocal(parameter, true);
+        }
+
+        void addLocal(Var var, boolean parameter) {
+            if (!enabled || var == null || var.name() == null) {
+                return;
+            }
+            String internalName = var.name();
+            locals.add(new DebugLocal(internalName, displayName(internalName),
+                    currentScopeId, parameter));
+        }
+
+        DebugScopeFrame enterScope(List<InstructionIr> instructions) {
+            if (!enabled) {
+                return null;
+            }
+            int previousScopeId = currentScopeId;
+            int scopeId = nextScopeId++;
+            String startLabel = Mcc.makeTemporary(".LscopeStart.");
+            String endLabel = Mcc.makeTemporary(".LscopeEnd.");
+            scopes.add(new DebugScope(scopeId, previousScopeId, startLabel,
+                    endLabel));
+            instructions.add(new DebugScopeMarker(startLabel));
+            currentScopeId = scopeId;
+            return new DebugScopeFrame(previousScopeId, endLabel);
+        }
+
+        void exitScope(List<InstructionIr> instructions,
+                       DebugScopeFrame frame) {
+            if (frame == null) {
+                return;
+            }
+            instructions.add(new DebugScopeMarker(frame.endLabel()));
+            currentScopeId = frame.previousScopeId();
+        }
+
+        private static String displayName(String internalName) {
+            int dotIndex = internalName.indexOf('.');
+            return dotIndex == -1 ? internalName :
+                    internalName.substring(0, dotIndex);
+        }
+    }
 
     public static ProgramIr programIr(Program program) {
         List<TopLevel> tackyDefs = new ArrayList<>();
@@ -66,7 +143,12 @@ public class IrGen {
     private static FunctionIr  compileFunction(Function function,
                                                Map<String, FunctionIr> inlineFunctions) {
         List<InstructionIr> instructions = new ArrayList<>();
-        compileBlock(function.body, instructions, inlineFunctions);
+        DebugContext debugContext = DebugContext.forCurrentBuild();
+        for (Var parameter : function.parameters) {
+            debugContext.addParameter(parameter);
+        }
+        compileBlock(function.body, instructions, inlineFunctions,
+                debugContext);
         FunctionIr f =
                 new FunctionIr(function.name,
                         SYMBOL_TABLE.get(function.name).attrs().global(),
@@ -79,6 +161,8 @@ public class IrGen {
                         instructions,
                         function.funType,
                         function.inline && !function.callsVaStart);
+        f.debugScopes = debugContext.scopes();
+        f.debugLocals = debugContext.locals();
         ReturnIr ret = new ReturnIr(IntInit.ZERO);
         instructions.add(ret);
         if (f.inline) {
@@ -91,15 +175,26 @@ public class IrGen {
 
     private static void compileBlock(Block block,
                                      List<InstructionIr> instructions,
-                                     Map<String, FunctionIr> inlineFunctions) {
+                                     Map<String, FunctionIr> inlineFunctions,
+                                     DebugContext debugContext) {
         for (BlockItem i : block.blockItems()) {
-            compileBlockItem(i, instructions, inlineFunctions);
+            compileBlockItem(i, instructions, inlineFunctions, debugContext);
         }
+    }
+
+    private static void compileScopedBlock(Block block,
+                                           List<InstructionIr> instructions,
+                                           Map<String, FunctionIr> inlineFunctions,
+                                           DebugContext debugContext) {
+        DebugScopeFrame frame = debugContext.enterScope(instructions);
+        compileBlock(block, instructions, inlineFunctions, debugContext);
+        debugContext.exitScope(instructions, frame);
     }
 
     private static void compileDeclaration(Declaration d,
                                            List<InstructionIr> instructions,
-                                           Map<String, FunctionIr> inlineFunctions) {
+                                           Map<String, FunctionIr> inlineFunctions,
+                                           DebugContext debugContext) {
         switch (d) {
             case EnumSpecifier enumSpecifier -> throw new Todo();
             case Function function -> {
@@ -110,6 +205,7 @@ public class IrGen {
                          StructOrUnionSpecifier structOrUnionSpecifier,
                          Constant _, int pos) -> {
                 if (storageClass == STATIC || storageClass == EXTERN) return;
+                debugContext.addLocal(name, false);
                 if (init != null) {
                     Mcc.addDebugPos(instructions, pos);
                     assign(new VarIr(name.name()), init, instructions, 0, inlineFunctions);
@@ -299,37 +395,49 @@ public class IrGen {
     }
 
 
+    private static void compileBlockItem(BlockItem i,
+                                         List<InstructionIr> instructions,
+                                         Map<String, FunctionIr> inlineFunctions) {
+        compileBlockItem(i, instructions, inlineFunctions,
+                DebugContext.disabled());
+    }
+
     private static void compileBlockItem(BlockItem i,List<InstructionIr> instructions,
-                            Map<String, FunctionIr> inlineFunctions) {
+                            Map<String, FunctionIr> inlineFunctions,
+                            DebugContext debugContext) {
         switch (i) {
-            case Declaration d -> compileDeclaration(d, instructions, inlineFunctions);
+            case Declaration d -> compileDeclaration(d, instructions,
+                    inlineFunctions, debugContext);
             case Statement statement ->
-                    compileStatement(statement, instructions, inlineFunctions);
+                    compileStatement(statement, instructions, inlineFunctions,
+                            debugContext);
         }
     }
 
     private static void compileIfElse(Exp condition, Statement ifTrue,
                                       Statement ifFalse,
-                                      List<InstructionIr> instructions,
-                                      Map<String, FunctionIr> inlineFunctions) {
+                                     List<InstructionIr> instructions,
+                                      Map<String, FunctionIr> inlineFunctions,
+                                      DebugContext debugContext) {
         ValIr c = emitTackyAndConvert(condition, instructions, inlineFunctions);
         LabelIr e2Label = newLabel(Mcc.makeTemporary(".Le2."));
         instructions.add(new JumpIfZero(c, e2Label.label()));
-        compileStatement(ifTrue, instructions, inlineFunctions);
+        compileStatement(ifTrue, instructions, inlineFunctions, debugContext);
         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
         instructions.add(new Jump(endLabel.label()));
         instructions.add(e2Label);
-        compileStatement(ifFalse, instructions, inlineFunctions);
+        compileStatement(ifFalse, instructions, inlineFunctions, debugContext);
         instructions.add(endLabel);
     }
 
     private static void compileIf(Exp condition, Statement ifTrue,
                                   List<InstructionIr> instructions,
-                                  Map<String, FunctionIr> inlineFunctions) {
+                                  Map<String, FunctionIr> inlineFunctions,
+                                  DebugContext debugContext) {
         ValIr c = emitTackyAndConvert(condition, instructions, inlineFunctions);
         LabelIr endLabel = newLabel(Mcc.makeTemporary(".Lend."));
         instructions.add(new JumpIfZero(c, endLabel.label()));
-        compileStatement(ifTrue, instructions, inlineFunctions);
+        compileStatement(ifTrue, instructions, inlineFunctions, debugContext);
         instructions.add(endLabel);
     }
 
@@ -337,18 +445,27 @@ public class IrGen {
     public static void compileStatement(Statement i,
                                          List<InstructionIr> instructions,
                                          Map<String, FunctionIr> inlineFunctions) {
+        compileStatement(i, instructions, inlineFunctions,
+                DebugContext.disabled());
+    }
+
+    private static void compileStatement(Statement i,
+                                         List<InstructionIr> instructions,
+                                         Map<String, FunctionIr> inlineFunctions,
+                                         DebugContext debugContext) {
         if (i instanceof LocatedStatement locatedStatement) {
             compileStatement(locatedStatement.statement(), locatedStatement.pos(),
-                    instructions, inlineFunctions);
+                    instructions, inlineFunctions, debugContext);
             return;
         }
-        compileStatement(i, null, instructions, inlineFunctions);
+        compileStatement(i, null, instructions, inlineFunctions, debugContext);
     }
 
     private static void compileStatement(Statement i,
                                          Integer pos,
                                          List<InstructionIr> instructions,
-                                         Map<String, FunctionIr> inlineFunctions) {
+                                         Map<String, FunctionIr> inlineFunctions,
+                                         DebugContext debugContext) {
         switch (i) {
             case BuiltinC23VaStart(Var exp) -> {
                 addStatementDebugPos(instructions, pos);
@@ -358,7 +475,8 @@ public class IrGen {
             }
             case Switch switchStatement -> {
                 addStatementDebugPos(instructions, pos);
-                compileSwitch(switchStatement, instructions, inlineFunctions);
+                compileSwitch(switchStatement, instructions, inlineFunctions,
+                        debugContext);
             }
             case Return(Exp exp) -> {
                 addStatementDebugPos(instructions, pos);
@@ -376,15 +494,18 @@ public class IrGen {
             case If(Exp condition, Statement ifTrue, Statement ifFalse) -> {
                 addStatementDebugPos(instructions, pos);
                 if (ifFalse != null) {
-                    compileIfElse(condition, ifTrue, ifFalse, instructions, inlineFunctions);
+                    compileIfElse(condition, ifTrue, ifFalse, instructions,
+                            inlineFunctions, debugContext);
                 } else {
-                    compileIf(condition, ifTrue, instructions, inlineFunctions);
+                    compileIf(condition, ifTrue, instructions, inlineFunctions,
+                            debugContext);
 
                 }
             }
             case NullStatement _ -> {
             }
-            case Block b -> compileBlock(b, instructions, inlineFunctions);
+            case Block b -> compileScopedBlock(b, instructions, inlineFunctions,
+                    debugContext);
 
             case Break aBreak -> {
                 addStatementDebugPos(instructions, pos);
@@ -402,7 +523,8 @@ public class IrGen {
                 addStatementDebugPos(instructions, pos);
                 LabelIr start = newLabel(Mcc.makeTemporary(".Lstart."));
                 instructions.add(start);
-                compileStatement(body, instructions, inlineFunctions);
+                compileStatement(body, instructions, inlineFunctions,
+                        debugContext);
                 LabelIr continueLabel = newLabel(continueLabel(label));
                 instructions.add(continueLabel);
                 addStatementDebugPos(instructions, pos);
@@ -413,6 +535,9 @@ public class IrGen {
             }
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String label) -> {
+                DebugScopeFrame forScopeFrame =
+                        init instanceof DeclarationList ?
+                                debugContext.enterScope(instructions) : null;
                 if (init != null) {
                     addStatementDebugPos(instructions, pos);
                 }
@@ -423,7 +548,8 @@ public class IrGen {
                     }
                     case DeclarationList(List<Declaration> list) -> {
                         for (var d: list){
-                            compileDeclaration(d, instructions, inlineFunctions);
+                            compileDeclaration(d, instructions, inlineFunctions,
+                                    debugContext);
                         }
                     }
                 }
@@ -437,7 +563,8 @@ public class IrGen {
                     ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                     instructions.add(new JumpIfZero(v, breakLabel.label()));
                 }
-                compileStatement(body, instructions, inlineFunctions);
+                compileStatement(body, instructions, inlineFunctions,
+                        debugContext);
                 instructions.add(continueLabel);
                 if (post != null) {
                     addStatementDebugPos(instructions, pos);
@@ -445,6 +572,7 @@ public class IrGen {
                 }
                 instructions.add(new Jump(start.label()));
                 instructions.add(breakLabel);
+                debugContext.exitScope(instructions, forScopeFrame);
             }
             case While(Exp condition, Statement body, String label) -> {
                 LabelIr continueLabel = newLabel(continueLabel(label));
@@ -453,20 +581,23 @@ public class IrGen {
                 ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                 LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(new JumpIfZero(v, breakLabel.label()));
-                compileStatement(body, instructions, inlineFunctions);
+                compileStatement(body, instructions, inlineFunctions,
+                        debugContext);
                 instructions.add(new Jump(continueLabel.label()));
                 instructions.add(breakLabel);
             }
             case LabelledStatement(String label, Statement statement) -> {
                 addStatementDebugPos(instructions, pos);
                 instructions.add(newLabel(label));
-                compileStatement(statement, instructions, inlineFunctions);
+                compileStatement(statement, instructions, inlineFunctions,
+                        debugContext);
             }
             case CaseStatement(Switch enclosingSwitch, Constant<?> label, Statement statement) -> {
                 String s = enclosingSwitch.labelFor(label);
                 addStatementDebugPos(instructions, pos);
                 instructions.add(newLabel(s));
-                compileStatement(statement, instructions, inlineFunctions);
+                compileStatement(statement, instructions, inlineFunctions,
+                        debugContext);
             }
             case BuiltinVaEnd builtinVaEnd -> {
                 // it's a NOOP
@@ -485,7 +616,8 @@ public class IrGen {
 
     private static void compileSwitch(Switch switchStatement,
                                       List<InstructionIr> instructions,
-                                      Map<String, FunctionIr> inlineFunctions) {
+                                      Map<String, FunctionIr> inlineFunctions,
+                                      DebugContext debugContext) {
         ValIr switchVal = emitTackyAndConvert(switchStatement.exp,
                 instructions, inlineFunctions);
         Type type = switchStatement.exp.type();
@@ -500,7 +632,8 @@ public class IrGen {
         }
         String end = breakLabel(switchStatement.label);
         instructions.add(new Jump(end));
-        compileStatement(switchStatement.body, instructions, inlineFunctions);
+        compileStatement(switchStatement.body, instructions, inlineFunctions,
+                debugContext);
         instructions.add(newLabel(end));
     }
 

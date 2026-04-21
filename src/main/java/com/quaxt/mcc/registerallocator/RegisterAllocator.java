@@ -66,7 +66,8 @@ public class RegisterAllocator {
                     }
                 }
                 case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _,
-                     Comment _, Literal  _, Pos _ -> instructions.set(copyTo++, oldInst);
+                     Comment _, Literal  _, Pos _ ->
+                        instructions.set(copyTo++, oldInst);
                 case Call(Operand operand, FunType t) -> {
                      instructions.set(copyTo++,
                              new Call(find(operand,
@@ -515,7 +516,8 @@ public class RegisterAllocator {
                     incrementSpillCost(interferenceGraph,
                             interferenceGraphMmx, operand);
                 }
-                case Comment _, Literal _, JmpCC _, Nullary _, Jump _, LabelIr _ -> {}
+                case Comment _, Literal _, JmpCC _, Nullary _, Jump _,
+                     LabelIr _ -> {}
                 case Test test -> {throw new Todo();}
             }
         }

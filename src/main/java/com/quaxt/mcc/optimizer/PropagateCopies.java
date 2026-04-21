@@ -117,7 +117,8 @@ public class PropagateCopies {
                                 new ZeroExtendIr(replaceOperand(v1, reachingCopies), dst);
                         case BuiltinVaArgIr(VarIr v1, VarIr dst, Type type) ->
                                 new BuiltinVaArgIr((VarIr) replaceOperand(v1, reachingCopies), dst, type);
-                        case GetAddress _, LabelIr _, Jump _, BuiltinC23VaStartIr _, Pos _,
+                        case GetAddress _, LabelIr _, Jump _,
+                             BuiltinC23VaStartIr _, Pos _, DebugScopeMarker _,
                              AtomicStore _ -> instr;
                         case Ignore.IGNORE -> instr;
 
@@ -218,7 +219,8 @@ public class PropagateCopies {
                 case BuiltinVaArgIr(VarIr _, VarIr dst, Type _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
-                     ReturnIr _, Ignore _, Compare _, Pos _ -> {}
+                     ReturnIr _, Ignore _, Compare _, Pos _,
+                     DebugScopeMarker _ -> {}
 
 
                 default ->

@@ -30,6 +30,19 @@ class MccTest {
         }
     }
 
+    private static Pair<String, Integer> runAndCapture(String... args)
+            throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(args);
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        byte[] bytes;
+        try (InputStream is = p.getInputStream()) {
+            bytes = is.readAllBytes();
+        }
+        int exitCode = p.waitFor();
+        return new Pair<>(new String(bytes, StandardCharsets.UTF_8), exitCode);
+    }
+
     @Test
     void void_fn_pointer() throws Exception {
         outputs("void_fn_pointer", "hello\n");
@@ -899,6 +912,50 @@ class MccTest {
         String asm = assemble("push_xmm_stack_arg", false);
         assertTrue(asm.lines().anyMatch(x -> x.matches("\\s*movq\\t%xmm\\d+, 0\\(%rsp\\)")));
         assertFalse(asm.contains("movq\t%rsp, %r10"));
+    }
+
+    @Test void debugFrameBaseTracksStackPointerChanges() throws Exception {
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        Path asm = Files.createTempFile("mcc-debug-frame-base", ".s");
+        try {
+            Mcc.addDebugInfo = false;
+            assertEquals(0, Mcc.mcc("-g", "-S", "-o", asm.toString(),
+                    "src/test/resources/push_xmm_stack_arg.c"));
+            String assembly = Files.readString(asm);
+            assertTrue(assembly.contains(".section\t.debug_loclists"));
+            assertTrue(assembly.contains(".byte\t0x77"));
+            assertTrue(assembly.contains(".sleb128\t8"));
+            assertTrue(assembly.contains(".byte\t0x91"));
+            assertTrue(assembly.contains(".cfi_remember_state"));
+            assertTrue(assembly.contains(".cfi_restore_state"));
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Files.deleteIfExists(asm);
+        }
+    }
+
+    @Test void debugLexicalBlockScopesShadowedLocals() throws Exception {
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        Path object = Files.createTempFile("mcc-debug-scopes", ".o");
+        try {
+            Mcc.addDebugInfo = false;
+            assertEquals(0, Mcc.mcc("-g", "-c", "-o", object.toString(),
+                    "src/test/resources/scopes.c"));
+
+            Pair<String, Integer> readelf =
+                    runAndCapture("readelf", "--debug-dump=info",
+                            object.toString());
+            assertEquals(0, readelf.value(), readelf.key());
+            String debugInfo = readelf.key();
+            assertTrue(debugInfo.contains("DW_TAG_lexical_block"),
+                    debugInfo);
+            assertTrue(Pattern.compile(
+                    "(?s)DW_TAG_lexical_block.*DW_AT_name\\s+: .*: a")
+                    .matcher(debugInfo).find(), debugInfo);
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Files.deleteIfExists(object);
+        }
     }
 
     @Test void nested_partial_struct_initializer_zero_fill() throws Exception {

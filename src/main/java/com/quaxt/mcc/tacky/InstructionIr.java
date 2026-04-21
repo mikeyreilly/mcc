@@ -20,6 +20,7 @@ public sealed interface InstructionIr extends AbstractInstruction permits Ignore
         CopyBitsToOffsetViaPointer,
         CopyFromOffset,
         CopyToOffset,
+        DebugScopeMarker,
         DoubleToFloat,
         DoubleToInt,
         DoubleToUInt,

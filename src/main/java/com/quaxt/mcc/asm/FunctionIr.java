@@ -28,6 +28,12 @@ public final class FunctionIr implements AsmNode, TopLevelAsm, TopLevel {
     public long stackAlignment;
     public int pos;
     public Map<String, Long> varTable;
+    public List<DebugScope> debugScopes = List.of();
+    public List<DebugLocal> debugLocals = List.of();
+    public long[] instructionStackDeltas;
+    public String[] frameBaseBoundaryLabels;
+    public List<FrameBaseRange> frameBaseRanges = List.of();
+    public String frameBaseLocListLabel;
 
     public FunctionIr(String name, boolean global, boolean returnInMemory,
                       List<Instruction> instructions,
@@ -86,4 +92,3 @@ public final class FunctionIr implements AsmNode, TopLevelAsm, TopLevel {
     }
 
 }
-

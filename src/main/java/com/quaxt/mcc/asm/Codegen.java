@@ -142,7 +142,8 @@ public class Codegen {
             Instruction newInst = switch (oldInst) {
                 case Call(Operand p, FunType t) ->
                         new Call(dePseudo(p, varTable, offset, functionAsm), t);
-                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ,   Literal _
+                case Nullary _, Cdq _, Jump _, JmpCC _, LabelIr _ ,
+                     Literal _
                       -> oldInst;
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) ->
                         new Mov(typeAsm, dePseudo(src, varTable, offset, functionAsm),
@@ -1485,6 +1486,7 @@ public class Codegen {
                         emitBuiltInVarArg(vaList, dst, ins, type);
                 case MFENCE -> ins.add(MFENCE);
                 case Pos pos -> ins.add(pos);
+                case DebugScopeMarker marker -> ins.add(new LabelIr(marker.label()));
                 default ->
                         throw new IllegalStateException("Unexpected value: " + inst);
             }

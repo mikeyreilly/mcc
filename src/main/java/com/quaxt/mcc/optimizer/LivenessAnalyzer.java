@@ -302,7 +302,7 @@ See p. 606 */
                 case BuiltinC23VaStartIr(VarIr dst) -> {
                     currentLiveVars.remove(dst);
                 }
-                case LabelIr _, Jump _, Ignore _, Pos _ -> {}
+                case LabelIr _, Jump _, Ignore _, Pos _, DebugScopeMarker _ -> {}
 
                 default ->
                         throw new IllegalStateException("Unexpected value: " + instruction);

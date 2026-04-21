@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.Mcc.*;
@@ -24,15 +23,15 @@ import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> positions) {
 
     /**
-     * FrameSlot offsets are relative to an abstract local-frame base and are
-     * lowered to the current %rsp plus stackCorrection at emission time.
+     * FrameSlot offsets are relative to an abstract local-frame base. spDelta
+     * is the current %rsp minus that base at this instruction.
      */
-    private static String formatOperand(Instruction s, Operand o, AtomicInteger stackCorrection) {
+    private static String formatOperand(Instruction s, Operand o, long spDelta) {
         return switch (o) {
             case Imm(long i) -> "$" + i;
             case Pseudo p -> p.identifier;
             case FrameSlot(long offset, int _) ->
-                    (offset + stackCorrection.get()) + "(%" + SP.q + ")";
+                    (offset - spDelta) + "(%" + SP.q + ")";
             case IncomingStackArg(long offset) -> offset + "(%" + BP.q + ")";
             case IntegerReg reg -> "%" + switch (s) {
                 case Push _, Pop _ -> reg.q;
@@ -64,7 +63,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     }
 
 
-    private static String formatOperand(TypeAsm t, Instruction s, Operand o, AtomicInteger stackCorrection) {
+    private static String formatOperand(TypeAsm t, Instruction s, Operand o, long spDelta) {
         if (o instanceof IntegerReg reg) {
             return "%" + switch (t) {
                 case BYTE -> reg.b;
@@ -85,12 +84,18 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                         throw new IllegalArgumentException("wrong type (" + t + ") for integer register (" + reg + ")");
             };
         }
-        return formatOperand(s, o, stackCorrection);
+        return formatOperand(s, o, spDelta);
     }
 
     public void emitAsm(PrintWriter out, Path srcFile) {
         String textStart = null;
         String textEnd = null;
+
+        for (TopLevelAsm t : topLevelAsms) {
+            if (t instanceof FunctionIr functionAsm) {
+                prepareStackMetadata(functionAsm, Mcc.addDebugInfo);
+            }
+        }
 
         if (Mcc.addDebugInfo) {
             textStart = makeTemporary(".Ltext.");
@@ -293,29 +298,30 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         long adjustedStackBytes = roundAwayFromZero(totalStackBytes, 16);
 
 
-        AtomicInteger stackCorrection = new AtomicInteger((int) - adjustedStackBytes);
-
         if (adjustedStackBytes != 0) {
             emitInstruction(out, new Binary(SUB, QUADWORD,
-                    new Imm(adjustedStackBytes), SP), stackCorrection, functionAsm);
+                    new Imm(adjustedStackBytes), SP), 0, functionAsm);
         }
-        emitInstruction(out, new Comment("Check alignment"), stackCorrection, functionAsm);
+        emitInstruction(out, new Comment("Check alignment"), 0, functionAsm);
         var stackAlignment = functionAsm.stackAlignment;
         if (stackAlignment != 0) {
-            emitInstruction(out, new Binary(BITWISE_AND, QUADWORD, new Imm(-stackAlignment), SP), stackCorrection, functionAsm);
+            emitInstruction(out, new Binary(BITWISE_AND, QUADWORD, new Imm(-stackAlignment), SP), 0, functionAsm);
         }
         // push in reverse direction so we can pop in forward direction
         if (calleeSavedRegs.length % 2 == 1) {
             emitInstruction(out, new Binary(SUB, QUADWORD, new Imm(8), SP),
-                    stackCorrection, functionAsm);
+                    0, functionAsm);
         }
         for (int i = calleeSavedRegs.length - 1; i >= 0; i--) {
             IntegerReg r = calleeSavedRegs[i];
-            emitInstruction(out, new Push(r), stackCorrection, functionAsm);
+            emitInstruction(out, new Push(r), 0, functionAsm);
         }
-        for (Instruction instruction : instructions) {
-            emitInstruction(out, instruction, stackCorrection, functionAsm);
+        for (int i = 0; i < instructions.size(); i++) {
+            emitFrameBaseBoundaryLabel(out, functionAsm, i);
+            emitInstruction(out, instructions.get(i),
+                    functionAsm.instructionStackDeltas[i], functionAsm);
         }
+        emitFrameBaseBoundaryLabel(out, functionAsm, instructions.size());
         if (addDebugInfo)
             out.println(".L"+name+".end" + ":");
         out.println(".size "+name+", .-"+name);
@@ -325,7 +331,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
     private void emitInstruction(PrintWriter out,
                                         Instruction instruction,
-                                        AtomicInteger stackCorrection, FunctionIr functionAsm) {
+                                        long spDelta, FunctionIr functionAsm) {
         String s = switch (instruction) {
             case Pos(int pos) -> {
                 Position p = positions.get(pos);
@@ -353,23 +359,24 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
 
                 yield o +
-                        formatOperand(t, instruction, src, stackCorrection) + ", " +
-                        formatOperand(t, instruction, dst, stackCorrection);
+                        formatOperand(t, instruction, src, spDelta) + ", " +
+                        formatOperand(t, instruction, dst, spDelta);
             }
             case Xchg(TypeAsm t, Operand src, Operand dst) ->
                     instruction.format(t) + formatOperand(t, instruction,
-                            src, stackCorrection) + ", " + formatOperand(t, instruction, dst, stackCorrection);
+                            src, spDelta) + ", " + formatOperand(t, instruction, dst, spDelta);
             case Lea(Operand src, Operand dst) ->
-                    "leaq\t" + formatOperand(QUADWORD, instruction, src, stackCorrection) + ","
-                            + " " + formatOperand(QUADWORD, instruction, dst, stackCorrection);
+                    "leaq\t" + formatOperand(QUADWORD, instruction, src, spDelta) + ","
+                            + " " + formatOperand(QUADWORD, instruction, dst, spDelta);
             case Push(Operand arg) ->{
-                    String r = "pushq\t" + formatOperand(QUADWORD, instruction, arg, stackCorrection);
-                    addTo(stackCorrection, 8, out);
-                    yield r;
+                    yield "pushq\t" + formatOperand(QUADWORD, instruction, arg, spDelta);
             }
 
             case Nullary.RET -> {
                 // epilogue
+                if (Mcc.addDebugInfo) {
+                    printIndent(out, ".cfi_remember_state");
+                }
                 int calleeSavedCount=functionAsm.calleeSavedRegs.length;
                 if (calleeSavedCount > 0) {
                     for (int j =  0; j < calleeSavedCount; j++) {
@@ -383,43 +390,38 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                     printIndent(out,".cfi_def_cfa " +SP.dwarfNumber+ ", 8");
                 }
 
-                yield "ret";
+                printIndent(out, "ret");
+                if (Mcc.addDebugInfo) {
+                    printIndent(out, ".cfi_restore_state");
+                }
+                yield null;
             }
             case Nullary.MFENCE -> "mfence";
 
             case Unary(UnaryOperator op, TypeAsm t, Operand operand) ->
                     op == UnaryOperator.BSWAP && t == WORD ?
                             "rolw\t" + "$8, " +
-                                    formatOperand(t, instruction, operand, stackCorrection) :
+                                    formatOperand(t, instruction, operand, spDelta) :
                             instruction.format(t) +
-                                    formatOperand(t, instruction, operand, stackCorrection);
+                                    formatOperand(t, instruction, operand, spDelta);
             case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) ->
                     instruction.format(t) + formatOperand(t, instruction,
-                            subtrahend, stackCorrection) + ", " + formatOperand(t, instruction
-                            , minuend, stackCorrection);
+                            subtrahend, spDelta) + ", " + formatOperand(t, instruction
+                            , minuend, spDelta);
             case Binary(ArithmeticOperator op, TypeAsm t, Operand src,
                         Operand dst) -> {
                 String srcF = formatOperand(switch(op){
                     case SHL, SAR, SHR -> BYTE;
                     default -> t;
-                }, instruction, src, stackCorrection);
-                String dstF = formatOperand(t, instruction, dst, stackCorrection);
-                if (dst == SP){
-                    if (src instanceof Imm(long i)) {
-                        if (op == ArithmeticOperator.ADD) {
-                            addTo(stackCorrection, (int)-i, out);
-                        } else if (op == ArithmeticOperator.SUB) {
-                            addTo(stackCorrection, (int)i, out);
-                        }
-                    }
-                }
+                }, instruction, src, spDelta);
+                String dstF = formatOperand(t, instruction, dst, spDelta);
                 yield instruction.format(t) + srcF + ", " + dstF;
             }
             case Jump(String label) -> "jmp\t" + label;
             case LabelIr(String label) -> label + ":";
             case SetCC(CmpOperator cmpOperator, boolean unsigned, Operand o) ->
                     "set" + (unsigned ? cmpOperator.unsignedCode :
-                            cmpOperator.code) + "\t" + formatOperand(instruction, o, stackCorrection);
+                            cmpOperator.code) + "\t" + formatOperand(instruction, o, spDelta);
             case JmpCC(CC cc,
                        String label) ->
                     "j" + cc.name().toLowerCase(Locale.ENGLISH) + "\t" +label;
@@ -431,25 +433,25 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                                     functionName + "@PLT");
                 } else yield "call\t" + "*" +
                         formatOperand(QUADWORD, instruction, address,
-                                stackCorrection);
+                                spDelta);
             }
             case Cdq(TypeAsm t) -> instruction.format(t);
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src,
                        Operand dst) -> {
-                String srcF = formatOperand(srcType, instruction, src, stackCorrection);
-                String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
+                String srcF = formatOperand(srcType, instruction, src, spDelta);
+                String dstF = formatOperand(dstType, instruction, dst, spDelta);
                 yield "movs" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
             case MovZeroExtend(TypeAsm srcType, TypeAsm dstType, Operand src,
                                Operand dst) -> {
-                String srcF = formatOperand(srcType, instruction, src, stackCorrection);
-                String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
+                String srcF = formatOperand(srcType, instruction, src, spDelta);
+                String dstF = formatOperand(dstType, instruction, dst, spDelta);
                 yield "movz" + srcType.suffix() + dstType.suffix() + "\t" + srcF + ", " + dstF;
             }
             case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                 if (srcType.isInteger()) {
-                    String srcF = formatOperand(srcType, instruction, src, stackCorrection);
-                    String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
+                    String srcF = formatOperand(srcType, instruction, src, spDelta);
+                    String dstF = formatOperand(dstType, instruction, dst, spDelta);
                     yield (srcType == QUADWORD
                             ? dstType == DOUBLE
                             ? "cvtsi2sdq\t"
@@ -461,8 +463,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                             ", " +
                             dstF;
                 } else {
-                    String srcF = formatOperand(srcType, instruction, src, stackCorrection);
-                    String dstF = formatOperand(dstType, instruction, dst, stackCorrection);
+                    String srcF = formatOperand(srcType, instruction, src, spDelta);
+                    String dstF = formatOperand(dstType, instruction, dst, spDelta);
 
                     if (srcType == DOUBLE) {
                         yield dstType == FLOAT ?
@@ -486,19 +488,15 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             case Literal(String string) -> string;
             case Pop(IntegerReg arg) -> {
                 String r=
-                    "popq\t" + formatOperand(instruction, arg, stackCorrection);
-                // We don't do `addTo(stackCorrection, -8, out)` because pop is
-                // just used to restore registers prior to executing RET
-                // instructionIrs. "Fixing" the stackCorrection would leave us
-                // with the wrong result in other basic blocks of the function
-                // following the RET
+                    "popq\t" + formatOperand(instruction, arg, spDelta);
                 yield r;
             }
 
             case Test(TypeAsm t, Operand src1, Operand src2) ->
                     instruction.format(t) + formatOperand(t, instruction,
-                            src1, stackCorrection) + formatOperand(t, instruction, src2, stackCorrection);
+                            src1, spDelta) + formatOperand(t, instruction, src2, spDelta);
         };
+        if (s == null) return;
         if (instruction instanceof LabelIr) {
             out.println(s);
         } else {
@@ -506,10 +504,77 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         }
     }
 
-    private static void addTo(AtomicInteger stackCorrection, int i,
-                              PrintWriter out) {
-        stackCorrection.addAndGet(i);
-        printIndent(out, "# stackCorrection="+stackCorrection.get());
+    private static void prepareStackMetadata(FunctionIr functionAsm,
+                                             boolean addDebugInfo) {
+        long initialSpDelta = bodyInitialSpDelta(functionAsm);
+        functionAsm.instructionStackDeltas =
+                StackStateAnalysis.instructionDeltas(functionAsm.instructions,
+                        initialSpDelta);
+        if (addDebugInfo) {
+            prepareFrameBaseRanges(functionAsm);
+        }
+    }
+
+    private static long bodyInitialSpDelta(FunctionIr functionAsm) {
+        int calleeSavedCount = functionAsm.calleeSavedRegs.length;
+        long oddPadding = calleeSavedCount % 2 == 1 ? 8 : 0;
+        return -(oddPadding + 8L * calleeSavedCount);
+    }
+
+    private static void prepareFrameBaseRanges(FunctionIr functionAsm) {
+        List<Instruction> instructions = functionAsm.instructions;
+        String[] boundaryLabels = new String[instructions.size() + 1];
+        ArrayList<FrameBaseRange> ranges = new ArrayList<>();
+        int rangeStart = -1;
+        long rangeDelta = 0;
+        for (int i = 0; i < instructions.size(); i++) {
+            Instruction instruction = instructions.get(i);
+            if (instruction == Nullary.RET) {
+                if (rangeStart != -1) {
+                    ranges.add(new FrameBaseRange(labelAt(boundaryLabels,
+                            rangeStart), labelAt(boundaryLabels, i),
+                            rangeDelta));
+                    rangeStart = -1;
+                }
+                continue;
+            }
+            long delta = functionAsm.instructionStackDeltas[i];
+            if (rangeStart == -1) {
+                rangeStart = i;
+                rangeDelta = delta;
+                labelAt(boundaryLabels, i);
+            } else if (delta != rangeDelta) {
+                ranges.add(new FrameBaseRange(labelAt(boundaryLabels,
+                        rangeStart), labelAt(boundaryLabels, i), rangeDelta));
+                rangeStart = i;
+                rangeDelta = delta;
+            }
+        }
+        if (rangeStart != -1) {
+            ranges.add(new FrameBaseRange(labelAt(boundaryLabels, rangeStart),
+                    labelAt(boundaryLabels, instructions.size()), rangeDelta));
+        }
+        functionAsm.frameBaseBoundaryLabels = boundaryLabels;
+        functionAsm.frameBaseRanges = ranges;
+        functionAsm.frameBaseLocListLabel =
+                ranges.isEmpty() ? null : makeTemporary(".LframeBase.");
+    }
+
+    private static String labelAt(String[] labels, int index) {
+        if (labels[index] == null) {
+            labels[index] = makeTemporary(".LframeBaseBoundary.");
+        }
+        return labels[index];
+    }
+
+    private static void emitFrameBaseBoundaryLabel(PrintWriter out,
+                                                   FunctionIr functionAsm,
+                                                   int instructionIndex) {
+        String[] labels = functionAsm.frameBaseBoundaryLabels;
+        if (labels != null && instructionIndex < labels.length &&
+                labels[instructionIndex] != null) {
+            out.println(labels[instructionIndex] + ":");
+        }
     }
 
 }
