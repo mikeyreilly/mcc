@@ -9,6 +9,8 @@ public record ExpressionStatement(Block stmt) implements Exp {
     public Type type() {
         BlockItem x= stmt.blockItems().getLast();
         return switch (x) {
+            case LocatedStatement(Exp e, int _) -> e.type();
+            case LocatedStatement(If _, int _) -> Primitive.VOID;
             case Exp e -> e.type();
             case If _-> Primitive.VOID;
             default -> {

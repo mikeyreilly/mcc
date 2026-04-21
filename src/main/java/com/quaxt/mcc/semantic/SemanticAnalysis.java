@@ -66,6 +66,9 @@ public class SemanticAnalysis {
                                                               String currentNonSwitchLabel) {
         return switch (statement) {
             case null -> null;
+            case LocatedStatement locatedStatement ->
+                    (T) new LocatedStatement(loopLabelStatement(locatedStatement.statement(),
+                            currentLabel, currentNonSwitchLabel), locatedStatement.pos());
             case Block block -> {//update the blockItems in-place
                 ArrayList<BlockItem> blockItems = block.blockItems();
                 blockItems.replaceAll(blockItem -> switch (blockItem) {
@@ -914,6 +917,9 @@ false);
                                                 Function enclosingFunction) {
         return switch (blockItem) {
             case EnumSpecifier enumSpecifier -> throw new Todo();
+            case LocatedStatement locatedStatement ->
+                    new LocatedStatement((Statement) typeCheckBlockItem(
+                            locatedStatement.statement(), enclosingFunction), locatedStatement.pos());
             case LabelledStatement(String label, Statement statement) ->
                     new LabelledStatement(label,
                      (Statement) typeCheckBlockItem(statement,
@@ -2412,6 +2418,9 @@ innerStructureMap, function);
                                               Function enclosingFunction) {
         return switch (blockItem) {
             case null -> null;
+            case LocatedStatement locatedStatement ->
+                    new LocatedStatement(resolveStatement(locatedStatement.statement(),
+                            identifierMap, structureMap, enclosingFunction), locatedStatement.pos());
             case Exp exp ->
                     resolveExp(exp, identifierMap, structureMap,
                      enclosingFunction);

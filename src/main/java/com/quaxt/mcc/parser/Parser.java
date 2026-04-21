@@ -538,18 +538,21 @@ public class Parser {
         }
 
         Token token = tokens.getFirst();
+        int pos = tokens.getCurrentPosition();
         Token tokenType = token.type();
         switch (token) {
             case RETURN -> {
                 tokens.discardFirst();
-                if (tokens.getFirst() == SEMICOLON) return new Return(null);
+                if (tokens.getFirst() == SEMICOLON) {
+                    return new LocatedStatement(new Return(null), pos);
+                }
                 Exp exp = parseExp(tokens, 0, true, typeAliases, labels, enclosingSwitch);
                 expect(SEMICOLON, tokens);
-                return new Return(exp);
+                return new LocatedStatement(new Return(exp), pos);
             }
             case SEMICOLON -> {
                 tokens.discardFirst();
-                return NULL_STATEMENT;
+                return new LocatedStatement(NULL_STATEMENT, pos);
             }
             case IF -> {
                 tokens.discardFirst();
@@ -565,63 +568,63 @@ public class Parser {
                     }
                     default -> null;
                 };
-                return new If(condition, ifTrue, ifFalse);
+                return new LocatedStatement(new If(condition, ifTrue, ifFalse), pos);
             }
             case OPEN_BRACE -> {
-                return parseBlock(tokens, labels, enclosingSwitch, typeAliases);
+                return new LocatedStatement(parseBlock(tokens, labels, enclosingSwitch, typeAliases), pos);
             }
             case WHILE -> {
-                return parseWhile(tokens, labels, enclosingSwitch, typeAliases);
+                return new LocatedStatement(parseWhile(tokens, labels, enclosingSwitch, typeAliases), pos);
             }
             case DO -> {
-                return parseDoWhile(tokens, labels, enclosingSwitch, typeAliases);
+                return new LocatedStatement(parseDoWhile(tokens, labels, enclosingSwitch, typeAliases), pos);
             }
             case FOR -> {
                 tokens.discardFirst();
-                return parseFor(tokens, labels, enclosingSwitch, typeAliases);
+                return new LocatedStatement(parseFor(tokens, labels, enclosingSwitch, typeAliases), pos);
             }
             case SWITCH -> {
                 tokens.discardFirst();
-                return parseSwitch(tokens, typeAliases, labels, enclosingSwitch);
+                return new LocatedStatement(parseSwitch(tokens, typeAliases, labels, enclosingSwitch), pos);
             }
             case BUILTIN_C23_VA_START -> {
                 tokens.discardFirst();
-                return parseBuiltinC23VaStart(tokens, labels, typeAliases);
+                return new LocatedStatement(parseBuiltinC23VaStart(tokens, labels, typeAliases), pos);
             }
             case BUILTIN_VA_END -> {
                 tokens.discardFirst();
-                return parseBuiltinVaEnd(tokens, labels, typeAliases);
+                return new LocatedStatement(parseBuiltinVaEnd(tokens, labels, typeAliases), pos);
             }
             case BREAK -> {
                 tokens.discardFirst();
                 expect(SEMICOLON, tokens);
-                return new Break();
+                return new LocatedStatement(new Break(), pos);
             }
             case CONTINUE -> {
                 tokens.discardFirst();
                 expect(SEMICOLON, tokens);
-                return new Continue();
+                return new LocatedStatement(new Continue(), pos);
             }
             case GOTO -> {
                 tokens.discardFirst();
                 var label = expectIdentifier(tokens);
                 expect(SEMICOLON, tokens);
-                return new Goto(label);
+                return new LocatedStatement(new Goto(label), pos);
             }
              case CASE -> {
                 tokens.discardFirst(); // CASE
                 Constant<?> c = parseConstExp(tokens, typeAliases, labels, enclosingSwitch);
                 expect(COLON, tokens);
-                return new CaseStatement(enclosingSwitch, c,
+                return new LocatedStatement(new CaseStatement(enclosingSwitch, c,
                         parseStatement(tokens, labels, enclosingSwitch,
-                                typeAliases));
+                                typeAliases)), pos);
             }
             case DEFAULT -> {
                 tokens.discardFirst(); // CASE
                 expect(COLON, tokens);
-                return new CaseStatement(enclosingSwitch, null,
+                return new LocatedStatement(new CaseStatement(enclosingSwitch, null,
                         parseStatement(tokens, labels, enclosingSwitch,
-                                typeAliases));
+                                typeAliases)), pos);
             }
             default -> {}
         }
@@ -637,8 +640,8 @@ public class Parser {
                 throw new Err("duplicate label: " + label);
             }
             labels.add(label);
-            return new LabelledStatement(label, parseStatement(tokens,
-                    labels, enclosingSwitch, typeAliases));
+            return new LocatedStatement(new LabelledStatement(label, parseStatement(tokens,
+                    labels, enclosingSwitch, typeAliases)), pos);
         }
         if (tokens.getFirst() == OPEN_PAREN &&
                 tokens.get(1) == OPEN_BRACE) {
@@ -654,7 +657,7 @@ public class Parser {
             throw makeErr("function application is not supported in this kind of situation yet", tokens);
         }
         expect(SEMICOLON, tokens);
-        return exp;
+        return new LocatedStatement(exp, pos);
     }
 
 

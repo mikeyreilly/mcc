@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static com.quaxt.mcc.Mcc.assembleAndLink;
@@ -116,6 +117,32 @@ class MccTest {
     @Test
     void multipleInitDeclarators() throws Exception {
         returns("multiple_init_declarators", 0);
+    }
+
+    @Test
+    void emitsDebugLinesForStatements() throws Exception {
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        Path asm = Files.createTempFile("mcc-debug-lines", ".s");
+        try {
+            Mcc.addDebugInfo = false;
+            assertEquals(0, Mcc.mcc("-g", "-S", "-o", asm.toString(),
+                    "src/test/resources/debug_statement_lines.c"));
+            String assembly = Files.readString(asm);
+
+            for (int line : List.of(3, 4, 5, 8, 11, 14, 16, 18, 19, 21, 22, 25, 28, 29)) {
+                assertHasLocLine(assembly, line);
+            }
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Files.deleteIfExists(asm);
+        }
+    }
+
+    private static void assertHasLocLine(String assembly, int lineNumber) {
+        Pattern pattern =
+                Pattern.compile("(?m)^\\s*\\.loc\\s+1\\s+" + lineNumber + "\\b");
+        assertTrue(pattern.matcher(assembly).find(),
+                "missing .loc entry for source line " + lineNumber + "\n" + assembly);
     }
 
 

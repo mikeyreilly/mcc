@@ -337,25 +337,44 @@ public class IrGen {
     public static void compileStatement(Statement i,
                                          List<InstructionIr> instructions,
                                          Map<String, FunctionIr> inlineFunctions) {
+        if (i instanceof LocatedStatement locatedStatement) {
+            compileStatement(locatedStatement.statement(), locatedStatement.pos(),
+                    instructions, inlineFunctions);
+            return;
+        }
+        compileStatement(i, null, instructions, inlineFunctions);
+    }
+
+    private static void compileStatement(Statement i,
+                                         Integer pos,
+                                         List<InstructionIr> instructions,
+                                         Map<String, FunctionIr> inlineFunctions) {
         switch (i) {
             case BuiltinC23VaStart(Var exp) -> {
+                addStatementDebugPos(instructions, pos);
                 ValIr retVal = emitTackyAndConvert(exp,
                         instructions, inlineFunctions);
                 instructions.add(new BuiltinC23VaStartIr((VarIr) retVal));
             }
             case Switch switchStatement -> {
+                addStatementDebugPos(instructions, pos);
                 compileSwitch(switchStatement, instructions, inlineFunctions);
             }
             case Return(Exp exp) -> {
+                addStatementDebugPos(instructions, pos);
                 ValIr retVal = exp == null ? null : emitTackyAndConvert(exp,
                         instructions, inlineFunctions);
                 ReturnIr ret = new ReturnIr(retVal);
                 instructions.add(ret);
             }
 
-            case Exp exp -> emitTacky(exp, instructions, inlineFunctions);
+            case Exp exp -> {
+                addStatementDebugPos(instructions, pos);
+                emitTacky(exp, instructions, inlineFunctions);
+            }
 
             case If(Exp condition, Statement ifTrue, Statement ifFalse) -> {
+                addStatementDebugPos(instructions, pos);
                 if (ifFalse != null) {
                     compileIfElse(condition, ifTrue, ifFalse, instructions, inlineFunctions);
                 } else {
@@ -367,17 +386,26 @@ public class IrGen {
             }
             case Block b -> compileBlock(b, instructions, inlineFunctions);
 
-            case Break aBreak ->
+            case Break aBreak -> {
+                addStatementDebugPos(instructions, pos);
                     instructions.add(new Jump(breakLabel(aBreak.label)));
-            case Goto aGoto -> instructions.add(new Jump(aGoto.label));
-            case Continue aContinue ->
+            }
+            case Goto aGoto -> {
+                addStatementDebugPos(instructions, pos);
+                instructions.add(new Jump(aGoto.label));
+            }
+            case Continue aContinue -> {
+                addStatementDebugPos(instructions, pos);
                     instructions.add(new Jump(continueLabel(aContinue.label)));
+            }
             case DoWhile(Statement body, Exp condition, String label) -> {
+                addStatementDebugPos(instructions, pos);
                 LabelIr start = newLabel(Mcc.makeTemporary(".Lstart."));
                 instructions.add(start);
                 compileStatement(body, instructions, inlineFunctions);
                 LabelIr continueLabel = newLabel(continueLabel(label));
                 instructions.add(continueLabel);
+                addStatementDebugPos(instructions, pos);
                 ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                 instructions.add(new JumpIfNotZero(v, start.label()));
                 LabelIr breakLabel = newLabel(breakLabel(label));
@@ -385,6 +413,9 @@ public class IrGen {
             }
             case For(ForInit init, Exp condition, Exp post, Statement body,
                      String label) -> {
+                if (init != null) {
+                    addStatementDebugPos(instructions, pos);
+                }
 
                 switch (init) {
                     case Exp e -> emitTacky(e, instructions, inlineFunctions);
@@ -402,18 +433,23 @@ public class IrGen {
                 LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(start);
                 if (condition != null) {
+                    addStatementDebugPos(instructions, pos);
                     ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                     instructions.add(new JumpIfZero(v, breakLabel.label()));
                 }
                 compileStatement(body, instructions, inlineFunctions);
                 instructions.add(continueLabel);
-                emitTacky(post, instructions, inlineFunctions);
+                if (post != null) {
+                    addStatementDebugPos(instructions, pos);
+                    emitTacky(post, instructions, inlineFunctions);
+                }
                 instructions.add(new Jump(start.label()));
                 instructions.add(breakLabel);
             }
             case While(Exp condition, Statement body, String label) -> {
                 LabelIr continueLabel = newLabel(continueLabel(label));
                 instructions.add(continueLabel);
+                addStatementDebugPos(instructions, pos);
                 ValIr v = emitTackyAndConvert(condition, instructions, inlineFunctions);
                 LabelIr breakLabel = newLabel(breakLabel(label));
                 instructions.add(new JumpIfZero(v, breakLabel.label()));
@@ -422,17 +458,28 @@ public class IrGen {
                 instructions.add(breakLabel);
             }
             case LabelledStatement(String label, Statement statement) -> {
+                addStatementDebugPos(instructions, pos);
                 instructions.add(newLabel(label));
                 compileStatement(statement, instructions, inlineFunctions);
             }
             case CaseStatement(Switch enclosingSwitch, Constant<?> label, Statement statement) -> {
                 String s = enclosingSwitch.labelFor(label);
+                addStatementDebugPos(instructions, pos);
                 instructions.add(newLabel(s));
                 compileStatement(statement, instructions, inlineFunctions);
             }
             case BuiltinVaEnd builtinVaEnd -> {
                 // it's a NOOP
             }
+            case LocatedStatement _ ->
+                    throw new IllegalStateException("LocatedStatement should be unwrapped before compilation");
+        }
+    }
+
+    private static void addStatementDebugPos(List<InstructionIr> instructions,
+                                             Integer pos) {
+        if (pos != null) {
+            Mcc.addDebugPos(instructions, pos);
         }
     }
 
@@ -853,7 +900,12 @@ public class IrGen {
                 }
                 var l = blockItems.getLast();
                 return switch(l){
+                    case LocatedStatement(Exp e, int _) -> emitTacky(e, instructions, inlineFunctions);
                     case Exp e -> emitTacky(e, instructions, inlineFunctions);
+                    case LocatedStatement(If _, int _) -> {
+                        compileBlockItem(l, instructions, inlineFunctions);
+                        yield null;
+                    }
                     case If _ -> {
                         compileBlockItem(l, instructions, inlineFunctions);
                         yield null;
