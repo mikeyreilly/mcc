@@ -212,9 +212,6 @@ public class SemanticAnalysis {
         if (structDecl == null || structDecl.members() == null) return null;
 
         var existing = TYPE_TABLE.get(structDecl.tag());
-        if (existing != null && !existing.members().isEmpty()) {
-            throw new Err("duplicate " + (structDecl.isUnion() ? "union" : "struct") + " definition");
-        }
         ArrayList<MemberEntry> memberEntries = new ArrayList<>();
         boolean isUnion = structDecl.isUnion();
         var alignment=structDecl.alignment();
@@ -266,13 +263,50 @@ toInteger(member.bitFieldWidth()));
         return (int) c.toLong();
     }
 
+    private static Long staticSize(Type type) {
+        if (type instanceof Array(Type element, Constant arraySize)) {
+            if (arraySize == null) return null;
+            Long elementSize = staticSize(element);
+            if (elementSize == null) return null;
+            Constant resolved = arraySize instanceof ConstantExp c ?
+                    evaluateConstantExp(c) : arraySize;
+            if (resolved == null) return null;
+            return elementSize * resolved.toLong();
+        }
+        return size(type);
+    }
+
+    private static boolean hasVariableSize(Type type) {
+        return switch (type) {
+            case Array(Type element, Constant arraySize) ->
+                    hasVariableSize(element) ||
+                            arraySize instanceof ConstantExp c &&
+                                    evaluateConstantExp(c) == null;
+            case Structure(boolean _, String tag, StructDef _) -> {
+                StructDef structDef = TYPE_TABLE.get(tag);
+                if (structDef == null) yield false;
+                boolean variableSize = false;
+                for (MemberEntry member : structDef.members()) {
+                    if (hasVariableSize(member.type())) {
+                        variableSize = true;
+                        break;
+                    }
+                }
+                yield variableSize;
+            }
+            default -> false;
+        };
+    }
+
     private static StructDef addMemberToStruct(String name,
                                                Type memberType,
                                                StructDef sd,
                                                Integer bitFieldWidth) {
         memberType = completeType(memberType);
         int memberAlignment = typeAlignment(memberType);
-        int memberSize = (int) size(memberType);
+        Long staticMemberSize = staticSize(memberType);
+        int memberSize = staticMemberSize == null ? 0 :
+                Math.toIntExact(staticMemberSize);
 
         ArrayList<MemberEntry> members = sd.members();
         int structAlignment = Math.max(sd.alignment(), memberAlignment);
@@ -294,8 +328,13 @@ bitFieldWidth);
             // Align struct size to member's alignment.
             int offset = roundUp(sd.size(), memberAlignment);
             members.add(new OrdinaryMember(name, memberType, offset, memberAlignment));
-            int newSize = offset + memberSize;
+            int newSize = staticMemberSize == null ? offset :
+                    offset + memberSize;
             return new StructDef(false, structAlignment, newSize, members);
+        }
+
+        if (staticMemberSize == null) {
+            throw new Err("Bit-field member cannot have variable size");
         }
 
         // ---- Bit-field member ----
@@ -351,7 +390,7 @@ bitFieldWidth);
     private static void validateStructDefinition(StructOrUnionSpecifier structDecl) {
         for (var m : structDecl.members()) {
             if (m.type() == VOID) fail("Can't declare void field");
-            validateTypeSpecifier(m.type());
+            validateTypeSpecifier(m.type(), true);
         }
     }
 
@@ -1060,31 +1099,45 @@ enclosingFunction), label);
 
 
     private static void validateTypeSpecifier(Type type) {
+        validateTypeSpecifier(type, false);
+    }
+
+    private static void validateTypeSpecifier(Type type,
+                                              boolean allowVariableLengthArray) {
         switch (type) {
             case Array(Type element, Constant arraySize) -> {
                 if (arraySize != null) {
                     Constant resolved = evaluateConstantExp(arraySize);
                     if (resolved == null) {
-                        throw new Err("Non constant array size");
-                    }
-                    if (!resolved.type().isInteger()) {
-                        throw new Err("array size must be an integer");
-                    }
-                    if (resolved.toLong() < 0) {
-                        throw new Err("illegal negative array size");
+                        if (!allowVariableLengthArray) {
+                            throw new Err("Non constant array size");
+                        }
+                        Exp bound = arraySize instanceof ConstantExp(Exp exp) ?
+                                typeCheckAndConvert(exp) : arraySize;
+                        if (!bound.type().isInteger()) {
+                            throw new Err("array size must be an integer");
+                        }
+                    } else {
+                        if (!resolved.type().isInteger()) {
+                            throw new Err("array size must be an integer");
+                        }
+                        if (resolved.toLong() < 0) {
+                            throw new Err("illegal negative array size");
+                        }
                     }
                 }
                 if (!isComplete(element))
                     throw new Err("Illegal array of incomplete type");
-                validateTypeSpecifier(element);
+                validateTypeSpecifier(element, allowVariableLengthArray);
             }
             case FunType(List<Type> params, Type ret, boolean _, Exp _) -> {
-                validateTypeSpecifier(ret);
+                validateTypeSpecifier(ret, allowVariableLengthArray);
                 for (Type p : params) {
-                    validateTypeSpecifier(p);
+                    validateTypeSpecifier(p, allowVariableLengthArray);
                 }
             }
-            case Pointer(Type element) -> validateTypeSpecifier(element);
+            case Pointer(Type element) ->
+                    validateTypeSpecifier(element, allowVariableLengthArray);
             default -> {}
         }
     }
@@ -1092,10 +1145,21 @@ enclosingFunction), label);
     private static VarDecl typeCheckLocalVariableDeclaration(VarDecl _decl) {
         Type varType = typeCheckType(_decl.varType());
         final VarDecl decl = _decl.withType(varType);
-        if (varType == VOID) fail("Can't declare void variable");
+        if (varType == VOID && decl.storageClass() != TYPEDEF)
+            fail("Can't declare void variable");
         var sd = typeCheckStructureDeclaration(decl.structOrUnionSpecifier());
-        validateTypeSpecifier(varType);
+        validateTypeSpecifier(varType, decl.storageClass() == TYPEDEF);
         Initializer init = decl.init();
+        if (decl.storageClass() == TYPEDEF) {
+            SYMBOL_TABLE.put(decl.name().name(), new SymbolTableEntry(varType,
+                    new StaticAttributes(NO_INITIALIZER, false, TYPEDEF)));
+            return new VarDecl(new Var(decl.name().name(), varType), init,
+                    varType, decl.storageClass(), decl.structOrUnionSpecifier(),
+                    decl.bitFieldWidth(), decl.pos());
+        }
+        if (hasVariableSize(varType)) {
+            throw new Err("Variable length object type is not supported");
+        }
         if (init != null) {
             // this entry will likely be overwritten - we just need
             // typeCheckInit
@@ -1946,15 +2010,8 @@ commonType);
             }
             case BuiltinVaArg(Var ap, Type type) ->
                     new BuiltinVaArg(requireVaList(ap), type);
-            case Offsetof(Structure s, String member) -> {
-                validateTypeSpecifier(s);
-                StructDef structDef = TYPE_TABLE.get(s.tag());
-                MemberEntry me = structDef.findMember(member);
-                if (me == null) {
-                    throw new Err("Structure has no member with this name");
-                }
-                yield exp;
-            }
+            case Offsetof(Structure s, ArrayList<OffsetofComponent> designators) ->
+                    typeCheckOffsetof(s, designators);
             case Generic(Exp controllingExp, ArrayList<Cast> genericAssocList,
                          Exp defaultExp) -> {
                 Type controllingType =
@@ -1979,13 +2036,111 @@ commonType);
         return t instanceof FunType ? new Pointer(t) : t;
     }
 
+    private static Exp typeCheckOffsetof(Structure structure,
+                                         ArrayList<OffsetofComponent> designators) {
+        validateTypeSpecifier(structure);
+        if (!isComplete(structure)) {
+            fail("Complete type required here");
+        }
+        if (designators.isEmpty()) {
+            fail("__builtin_offsetof requires a member designator");
+        }
+
+        Type current = structure;
+        Exp offset = new ULongInit(0);
+        for (OffsetofComponent designator : designators) {
+            switch (designator) {
+                case OffsetofMember(String member) -> {
+                    if (!(current instanceof Structure(boolean _, String tag,
+                                                       StructDef _))) {
+                        throw new Err("Tried to get member of non-structure");
+                    }
+                    StructDef structDef = TYPE_TABLE.get(tag);
+                    MemberEntry me = structDef.findMember(member);
+                    if (me == null) {
+                        throw new Err("Structure has no member with this name");
+                    }
+                    if (me instanceof BitFieldMember) {
+                        throw new Err("Cannot apply __builtin_offsetof to a bit-field");
+                    }
+                    offset = addOffset(offset, new ULongInit(me.byteOffset()));
+                    current = me.type();
+                }
+                case OffsetofSubscript(Exp index) -> {
+                    if (!(current instanceof Array(Type element,
+                                                   Constant arraySize))) {
+                        throw new Err("Subscript in __builtin_offsetof requires an array");
+                    }
+                    if (arraySize == null) {
+                        throw new Err("Subscript in __builtin_offsetof requires a complete array type");
+                    }
+                    Exp typedIndex = typeCheckAndConvert(index);
+                    if (!typedIndex.type().isInteger()) {
+                        throw new Err("Array subscript is not an integer");
+                    }
+                    Exp scaledIndex = multiplyOffset(convertTo(typedIndex,
+                            ULONG), sizeExpression(element));
+                    offset = addOffset(offset, scaledIndex);
+                    current = element;
+                }
+            }
+        }
+
+        return typeCheckExpression(offset);
+    }
+
+    private static Exp sizeExpression(Type type) {
+        if (type instanceof Array(Type element, Constant arraySize)) {
+            if (arraySize == null) {
+                throw new Err("Complete type required here");
+            }
+            return multiplyOffset(arrayBoundExpression(arraySize),
+                    sizeExpression(element));
+        }
+        if (!isComplete(type)) {
+            fail("Complete type required here");
+        }
+        return new ULongInit(Mcc.size(type));
+    }
+
+    private static Exp arrayBoundExpression(Constant arraySize) {
+        if (arraySize instanceof ConstantExp(Exp exp)) {
+            Exp typedBound = typeCheckAndConvert(exp);
+            if (!typedBound.type().isInteger()) {
+                throw new Err("Array size must be an integer");
+            }
+            return convertTo(typedBound, ULONG);
+        }
+        if (!arraySize.type().isInteger()) {
+            throw new Err("Array size must be an integer");
+        }
+        return convertTo(arraySize, ULONG);
+    }
+
+    private static Exp addOffset(Exp left, Exp right) {
+        if (right instanceof Constant c && c.isZero()) {
+            return left;
+        }
+        return new BinaryOp(ADD, left, right, null);
+    }
+
+    private static Exp multiplyOffset(Exp left, Exp right) {
+        return new BinaryOp(IMUL, left, right, null);
+    }
+
 
     private static Type completeType(Type t) {
         if (t instanceof Array(Type refType, Constant size)) {
             Constant val = size;
             if (size instanceof ConstantExp c) {
                 val = evaluateConstantExp(c);
-                if (val == null) throw makeErr("Non constant array size", null);
+                if (val == null) {
+                    Exp typedBound = typeCheckAndConvert(c.exp());
+                    if (!typedBound.type().isInteger()) {
+                        throw new Err("array size must be an integer");
+                    }
+                    val = new ConstantExp(typedBound);
+                }
             }
             if (val != null && !val.type().isInteger()) {
                 throw new Err("array size must be an integer");
@@ -2706,9 +2861,12 @@ enclosingFunction), type);
             case AlignofT(Type type) ->
                     new AlignofT(resolveType(type, identifierMap, structureMap
                             , enclosingFunction));
-            case Offsetof(Structure structure, String member) ->
+            case Offsetof(Structure structure, ArrayList<OffsetofComponent> designators) ->
                     new Offsetof((Structure) resolveType(structure,
-                     identifierMap, structureMap, enclosingFunction), member);
+                     identifierMap, structureMap, enclosingFunction),
+                            resolveOffsetofDesignators(designators,
+                                    identifierMap, structureMap,
+                                    enclosingFunction));
             case Arrow(Exp pointer, String member, Type type) ->
                     new Arrow(resolveExp(pointer, identifierMap, structureMap
                     , enclosingFunction), member, type);
@@ -2744,6 +2902,24 @@ structureMap, enclosingFunction);
                       enclosingFunction));
         };
         return r;
+    }
+
+    private static ArrayList<OffsetofComponent> resolveOffsetofDesignators(
+            ArrayList<OffsetofComponent> designators,
+            Scope identifierMap,
+            Map<String, TagEntry> structureMap,
+            Function enclosingFunction) {
+        ArrayList<OffsetofComponent> resolved = new ArrayList<>();
+        for (OffsetofComponent designator : designators) {
+            switch (designator) {
+                case OffsetofMember member -> resolved.add(member);
+                case OffsetofSubscript(Exp index) ->
+                        resolved.add(new OffsetofSubscript(resolveExp(index,
+                                identifierMap, structureMap,
+                                enclosingFunction)));
+            }
+        }
+        return resolved;
     }
 
     private static <T extends Exp> List<T> resolveArgs(Scope identifierMap,

@@ -204,7 +204,8 @@ public class IrGen {
                          StorageClass storageClass,
                          StructOrUnionSpecifier structOrUnionSpecifier,
                          Constant _, int pos) -> {
-                if (storageClass == STATIC || storageClass == EXTERN) return;
+                if (storageClass == STATIC || storageClass == EXTERN ||
+                        storageClass == TYPEDEF) return;
                 debugContext.addLocal(name, false);
                 if (init != null) {
                     Mcc.addDebugPos(instructions, pos);
@@ -962,11 +963,9 @@ public class IrGen {
             case SizeOfT(Type t): {
                 return new PlainOperand(new ULongInit(Mcc.size(t)));
             }
-            case Offsetof(Structure structure, String member): {
-                StructDef structDef = Mcc.TYPE_TABLE.get(structure.tag());
-                MemberEntry memberEntry =  structDef.findMember(member);
-                return new PlainOperand(new ULongInit(memberEntry.byteOffset()));
-            }
+            case Offsetof offsetof:
+                return emitTacky(SemanticAnalysis.typeCheckExpression(offsetof),
+                        instructions, inlineFunctions);
             case Dot(Exp structure, String member, Type type): {
                 StructDef structDef = Mcc.TYPE_TABLE.get(tag(structure));
                 MemberEntry memberEntry = structDef.findMember(member);

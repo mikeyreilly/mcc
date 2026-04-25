@@ -360,14 +360,19 @@ public class Mcc {
             return -1;
         }
         String bareFileName = removeEnding(srcFile.getFileName().toString());
-        Path intermediateFile = srcFile.resolveSibling(bareFileName + ".i");
-
-        int preprocessExitCode = preprocess(srcFile, intermediateFile, includePaths);
-        if (preprocessExitCode != 0) {
-            return preprocessExitCode;
+        Path intermediateFile = Files.createTempFile("mcc-" + bareFileName,
+                ".i");
+        String cSource;
+        try {
+            int preprocessExitCode =
+                    preprocess(srcFile, intermediateFile, includePaths);
+            if (preprocessExitCode != 0) {
+                return preprocessExitCode;
+            }
+            cSource = Files.readString(intermediateFile);
+        } finally {
+            Files.deleteIfExists(intermediateFile);
         }
-        String cSource = Files.readString(intermediateFile);
-        Files.delete(intermediateFile);
         Scope identifierMap = new Scope();
         Map<String, SemanticAnalysis.TagEntry> structureMap = new DebugHashMap<>();
         ArrayList<Declaration> builtinDeclarations = new ArrayList<>();

@@ -216,8 +216,8 @@ class MccTest {
                 assertEquals(expected, startProcessAndCaptureOutput(mccExe));
             }
         }catch (Exception ex){
-            ex.printStackTrace();
-            System.out.println("compile failed");
+//            ex.printStackTrace();
+//            System.out.println("compile failed");
         }
 
     }
@@ -444,6 +444,12 @@ class MccTest {
                 the double is at offset 8
                 """);
     }
+
+    @Test
+    void offsetof_designator_test() throws Exception {
+        returns("offsetof_designator", 0, false, false);
+    }
+
     @Test
     void string_init()  throws Exception {
         outputs("string_init", "howdy");
@@ -486,8 +492,8 @@ class MccTest {
     }
 
     @Test
-    void duplicate_union_definition_invalid_test() {
-        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/duplicate_union_definition_invalid.c"));
+    void contradictory_union_definition_invalid_test() {
+        assertThrows(Err.class, () -> Mcc.mcc("src/test/resources/contradictory_union_definition_invalid.c"));
     }
 
     @Test

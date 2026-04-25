@@ -3,7 +3,7 @@ int main(void) {
         long a;
     };
     union V {
-        long a;
+        long b;
     };
     return 0;
 }

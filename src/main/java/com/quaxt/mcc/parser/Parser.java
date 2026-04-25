@@ -1804,13 +1804,15 @@ public class Parser {
                 Type t = typeNameToType(typeName, tokens, typeAliases, labels, enclosingSwitch);
 
                 expect(COMMA, tokens);
-                String member = expectIdentifier(tokens);
+                ArrayList<OffsetofComponent> designators =
+                        parseOffsetofMemberDesignator(tokens, typeAliases,
+                                labels, enclosingSwitch);
 
                 if (t instanceof Structure type) {
                     expect(CLOSE_PAREN, tokens);
-                    yield new Offsetof(type, member);
+                    yield new Offsetof(type, designators);
                 } else {
-                    throw makeErr("request for member ‘" + member +
+                    throw makeErr("request for member ‘" + designators.getFirst() +
                             "’ in something not a structure or union", tokens);
                 }
             }
@@ -1925,6 +1927,33 @@ public class Parser {
 
         }
         return null;
+    }
+
+    private static ArrayList<OffsetofComponent> parseOffsetofMemberDesignator(
+            TokenList tokens,
+            ArrayList<Map<String, Type>> typeAliases,
+            List<String> labels,
+            Switch enclosingSwitch) {
+        ArrayList<OffsetofComponent> designators = new ArrayList<>();
+        designators.add(new OffsetofMember(expectIdentifier(tokens)));
+        while (true) {
+            switch (tokens.getFirst()) {
+                case DOT -> {
+                    tokens.discardFirst();
+                    designators.add(new OffsetofMember(expectIdentifier(tokens)));
+                }
+                case OPEN_BRACKET -> {
+                    tokens.discardFirst();
+                    Exp index = parseExp(tokens, 0, true, typeAliases, labels,
+                            enclosingSwitch);
+                    expect(CLOSE_BRACKET, tokens);
+                    designators.add(new OffsetofSubscript(index));
+                }
+                default -> {
+                    return designators;
+                }
+            }
+        }
     }
 
     private static Exp newFunctionCall(Exp name,
