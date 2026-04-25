@@ -205,6 +205,13 @@ See p. 606 */
                         currentLiveVars.add(v);
                     }
                 }
+                case CopyBitsFromOffsetViaPointer(ValIr src, int _, int _, int _, ValIr dst) -> {
+                    currentLiveVars.remove(dst);
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                    currentLiveVars.addAll(aliasedVars);
+                }
                 case CopyToOffset(ValIr src, VarIr dst, long _) -> {
                     if (src instanceof VarIr v) {
                         currentLiveVars.add(v);
@@ -223,6 +230,12 @@ See p. 606 */
                         currentLiveVars.add(v);
                         currentLiveVars.add(dst); // it's used for indirect addressing (so it is read)
                     }
+                }
+                case CopyBitsToOffsetViaPointer(ValIr src, VarIr dst, int _, int _, int _) -> {
+                    if (src instanceof VarIr v) {
+                        currentLiveVars.add(v);
+                    }
+                    currentLiveVars.add(dst);
                 }
                 case ZeroExtendIr(ValIr src, ValIr dst) -> {
                     currentLiveVars.remove(dst);
@@ -302,7 +315,8 @@ See p. 606 */
                 case BuiltinC23VaStartIr(VarIr dst) -> {
                     currentLiveVars.remove(dst);
                 }
-                case LabelIr _, Jump _, Ignore _, Pos _, DebugScopeMarker _ -> {}
+                case LabelIr _, Jump _, Ignore _, Pos _, DebugScopeMarker _,
+                     Nullary _ -> {}
 
                 default ->
                         throw new IllegalStateException("Unexpected value: " + instruction);

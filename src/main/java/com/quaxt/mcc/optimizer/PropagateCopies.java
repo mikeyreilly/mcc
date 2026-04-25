@@ -1,6 +1,7 @@
 package com.quaxt.mcc.optimizer;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.asm.Nullary;
 import com.quaxt.mcc.atomics.MemoryOrder;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.semantic.Type;
@@ -87,6 +88,12 @@ public class PropagateCopies {
                                                 int bitWidth,
                                             VarIr dstName) ->
                                 new CopyBitsFromOffset((VarIr) replaceOperand(v1, reachingCopies), byteOffset, bitOffset, bitWidth, dstName);
+                        case CopyBitsFromOffsetViaPointer(VarIr v1,
+                                                          int byteOffset,
+                                                          int bitOffset,
+                                                          int bitWidth,
+                                                          VarIr dstName) ->
+                                new CopyBitsFromOffsetViaPointer((VarIr) replaceOperand(v1, reachingCopies), byteOffset, bitOffset, bitWidth, dstName);
                         case CopyToOffset(ValIr v1, VarIr dstName,
                                           long offset) ->
                                 new CopyToOffset(replaceOperand(v1, reachingCopies),
@@ -97,6 +104,14 @@ public class PropagateCopies {
                                           long byteOffset, int bitOffset, int bitWidth) ->
                                 new CopyBitsToOffset(replaceOperand(v1, reachingCopies), dstName,
                                          byteOffset, bitOffset, bitWidth);
+                        case CopyBitsToOffsetViaPointer(ValIr v1,
+                                                        VarIr dstName,
+                                                        int byteOffset,
+                                                        int bitOffset,
+                                                        int bitWidth) ->
+                                new CopyBitsToOffsetViaPointer(replaceOperand(v1, reachingCopies),
+                                        (VarIr) replaceOperand(dstName, reachingCopies),
+                                        byteOffset, bitOffset, bitWidth);
                         case DoubleToInt(ValIr v1, VarIr dstName) ->
                                 new DoubleToInt(replaceOperand(v1, reachingCopies), dstName);
                         case DoubleToUInt(ValIr v1, VarIr dst) ->
@@ -119,7 +134,7 @@ public class PropagateCopies {
                                 new BuiltinVaArgIr((VarIr) replaceOperand(v1, reachingCopies), dst, type);
                         case GetAddress _, LabelIr _, Jump _,
                              BuiltinC23VaStartIr _, Pos _, DebugScopeMarker _,
-                             AtomicStore _ -> instr;
+                             AtomicStore _, Nullary _ -> instr;
                         case Ignore.IGNORE -> instr;
 
                         default ->
@@ -190,12 +205,16 @@ public class PropagateCopies {
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyBitsFromOffset(ValIr _, int _, int _, int _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case CopyBitsFromOffsetViaPointer(ValIr _, int _, int _, int _, ValIr dst) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyToOffset(ValIr _, VarIr dst, long _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case Memset(VarIr dst, int c, long byteCount, boolean viaPointer) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case CopyBitsToOffset(ValIr _, VarIr dst, long _, int _, int _) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
+                case CopyBitsToOffsetViaPointer(ValIr _, VarIr _, int _, int _, int _) ->
+                        currentReachingCopies = removeIf(currentReachingCopies, copy -> aliasedVars.contains(copy.src()) || aliasedVars.contains(copy.dst()));
                 case ZeroExtendIr(ValIr _, ValIr dst) ->
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case DoubleToInt(ValIr _, ValIr dst) ->
@@ -220,7 +239,7 @@ public class PropagateCopies {
                         currentReachingCopies = removeIf(currentReachingCopies, copy -> copy.src().equals(dst) || copy.dst().equals(dst));
                 case LabelIr _, Jump _, JumpIfZero _, JumpIfNotZero _,
                      ReturnIr _, Ignore _, Compare _, Pos _,
-                     DebugScopeMarker _ -> {}
+                     DebugScopeMarker _, Nullary _ -> {}
 
 
                 default ->

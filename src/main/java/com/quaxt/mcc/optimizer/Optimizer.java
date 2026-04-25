@@ -397,8 +397,9 @@ public class Optimizer {
             BasicBlock<T> node = (BasicBlock<T>) nodeId;
             T instr = node.instructions().getLast();
             switch (instr) {
-                /** RET is the only Nullary */
-                case Nullary _, ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
+                case Nullary n when n == Nullary.RET -> addEdge(nodes, nodeId,
+                        exitNode);
+                case ReturnIr _ -> addEdge(nodes, nodeId, exitNode);
                 case Jump(String label) ->
                         addEdge(nodes, nodeId, labelToNodeId.get(label));
                 case JmpCC(CC _,
@@ -437,7 +438,12 @@ public class Optimizer {
                 currentBlock = new ArrayList<>();
                 currentBlock.add(instr);
             } else switch (instr) {
-                case Nullary _, JmpCC _, Jump _, JumpIfNotZero _, JumpIfZero _,
+                case Nullary n when n == Nullary.RET -> {
+                    currentBlock.add(instr);
+                    finishedBlocks.add(currentBlock);
+                    currentBlock = new ArrayList<>();
+                }
+                case JmpCC _, Jump _, JumpIfNotZero _, JumpIfZero _,
                      ReturnIr _ -> {
                     currentBlock.add(instr);
                     finishedBlocks.add(currentBlock);

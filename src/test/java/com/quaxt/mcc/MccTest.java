@@ -1016,4 +1016,12 @@ class MccTest {
         returns("va_struct_two_fp_registers", 0);
     }
 
+    @Test void mfence_not_terminal() throws Exception {
+        returns("mfence_not_terminal", 0);
+    }
+
+    @Test void bitfield_via_pointer_optimize() throws Exception {
+        returns("bitfield_via_pointer_optimize", 0);
+    }
+
 }
