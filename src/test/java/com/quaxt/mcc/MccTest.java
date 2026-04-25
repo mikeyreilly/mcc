@@ -304,6 +304,50 @@ class MccTest {
     }
 
     @Test
+    void forwarded_va_list_two_pointers() throws Exception {
+        outputs("forwarded_va_list_two_pointers",
+                "main.sqlite_master\n", false, false);
+        outputs("forwarded_va_list_two_pointers",
+                "main.sqlite_master\n", false, true);
+    }
+
+    @Test
+    void forwarded_va_list_pointer_int_pointer() throws Exception {
+        outputs("forwarded_va_list_pointer_int_pointer",
+                "TABLE create tab\n", false, false);
+        outputs("forwarded_va_list_pointer_int_pointer",
+                "TABLE create tab\n", false, true);
+    }
+
+    @Test
+    void forwarded_va_list_two_layers() throws Exception {
+        outputs("forwarded_va_list_two_layers",
+                "TABLE create tab\n", false, false);
+        outputs("forwarded_va_list_two_layers",
+                "TABLE create tab\n", false, true);
+    }
+
+    @Test
+    void forwarded_va_list_mini_formatter() throws Exception {
+        outputs("forwarded_va_list_mini_formatter",
+                "CREATE TABLE foo(i int)\n", false, false);
+        outputs("forwarded_va_list_mini_formatter",
+                "CREATE TABLE foo(i int)\n", false, true);
+    }
+
+    @Test
+    void switch_default_before_case() throws Exception {
+        returns("switch_default_before_case", 0, false, false);
+        returns("switch_default_before_case", 0, false, true);
+    }
+
+    @Test
+    void stack_args_before_register_args() throws Exception {
+        returns("stack_args_before_register_args", 0, false, false);
+        returns("stack_args_before_register_args", 0, false, true);
+    }
+
+    @Test
     void struct3() throws Exception {
         outputs("struct3", "sum=708270", false, true);
     }

@@ -80,7 +80,8 @@ public class Codegen {
                 // Currently, the FunctionIr has a varTable which keeps track of where variables are for debug info
                 // and the register allocator does not update this table - so the debug info for variables would be incorrect.
                 // That's why we don't do register allocation in debug builds
-                if(!registerAllocatorDisabled && !addDebugInfo){
+                if(!registerAllocatorDisabled && !addDebugInfo &&
+                        !usesVaArg(functionAsm)){
                     RegisterAllocator.allocateRegisters(functionAsm);
                 }
                 functionAsm.stackSize = replacePseudoRegisters(functionAsm);
@@ -89,6 +90,12 @@ public class Codegen {
         }
 
         return new ProgramAsm(topLevels, programIr.positions());
+    }
+
+    private static boolean usesVaArg(FunctionIr functionAsm) {
+        return functionAsm.instructionIrs != null &&
+                functionAsm.instructionIrs.stream()
+                        .anyMatch(BuiltinVaArgIr.class::isInstance);
     }
 
     private static void generateBackendSymbolTable() {
@@ -668,12 +675,6 @@ public class Codegen {
                 returnInMemory = false;
             }
 
-            if (returnInMemory) {
-                var dstOperand = toOperand(dst);
-                instructionAsms.add(new Lea(dstOperand, DI));
-                regIndex = 1;
-            }
-
             final List<TypedOperand> operands = new ArrayList<>();
             for (ValIr arg : args) {
                 TypeAsm typeAsm = valToAsmType(arg);
@@ -695,10 +696,34 @@ public class Codegen {
                 instructionAsms.add(new Binary(SUB, QUADWORD,
                         new Imm(stackPadding), SP));
             }
-            int correction = stackPadding;
 
+            // Prepare stack arguments before assigning argument registers, so
+            // stack argument materialization cannot clobber a physical call
+            // register that has already been loaded.
+            for (int i = stackArguments.size() - 1; i >= 0; i--) {
+                TypedOperand to = stackArguments.get(i);
+                TypeAsm assemblyType = to.type();
+                Operand operand = to.operand();
+                if (assemblyType instanceof ByteArray(long size, _)) {
+                    copyBytesToReg(instructionAsms, operand, AX, size);
+                    instructionAsms.add(new Push(AX));
+                } else if (operand instanceof Imm ||
+                        operand instanceof IntegerReg ||
+                        assemblyType == QUADWORD || assemblyType == DOUBLE) {
+                    instructionAsms.add(new Push(operand));
+                } else {
+                    instructionAsms.add(new Mov(assemblyType, operand, AX));
+                    instructionAsms.add(new Push(AX));
+                }
+            }
 
-            //pass args in registers
+            if (returnInMemory) {
+                var dstOperand = toOperand(dst);
+                instructionAsms.add(new Lea(dstOperand, DI));
+                regIndex = 1;
+            }
+
+            // Pass remaining arguments in registers.
             for (TypedOperand integerArg : integerArguments) {
                 var assemblyType = integerArg.type();
 
@@ -716,24 +741,6 @@ public class Codegen {
                 Operand doubleArg = doubleArguments.get(i);
                 DoubleReg r = DOUBLE_REGISTERS[i];
                 instructionAsms.add(new Mov(DOUBLE, doubleArg, r));
-            }
-            for (int i = stackArguments.size() - 1; i >= 0; i--) {
-                TypedOperand to = stackArguments.get(i);
-                TypeAsm assemblyType = to.type();
-                Operand operand = to.operand();
-                if (assemblyType instanceof ByteArray(long size, _)) {
-                    copyBytesToReg(instructionAsms, operand, AX, size);
-                    instructionAsms.add(new Push(AX));
-                } else if (operand instanceof Imm ||
-                        operand instanceof IntegerReg ||
-                        assemblyType == QUADWORD || assemblyType == DOUBLE) {
-                    instructionAsms.add(new Push(operand));
-                    correction += 8;
-                } else {
-                    instructionAsms.add(new Mov(assemblyType, operand, AX));
-                    instructionAsms.add(new Push(AX));
-                    correction += 8;
-                }
             }
             if (varargs) {
                 instructionAsms.add(new Mov(LONGWORD,
@@ -1518,6 +1525,21 @@ public class Codegen {
         return new PseudoMem(vaList.identifier(), offset);
     }
 
+    private static void incrementVaListField(VarIr vaList, int offset,
+                                             boolean vaListIsPointer,
+                                             TypeAsm type,
+                                             long amount,
+                                             List<Instruction> ins) {
+        Operand field;
+        if (vaListIsPointer) {
+            ins.add(new Mov(QUADWORD, toOperand(vaList), R10));
+            field = new Memory(R10, offset);
+        } else {
+            field = new PseudoMem(vaList.identifier(), offset);
+        }
+        ins.add(new Binary(ADD, type, new Imm(amount), field));
+    }
+
     private static void emitBuiltInVarArg(VarIr vaList, VarIr dst,
                                           List<Instruction> ins, Type type) {
         ins.add(new Comment("VA_ARG START"));
@@ -1595,9 +1617,11 @@ public class Codegen {
                 ins.add(new Mov(toTypeAsm(type), new Memory(AX, 0),
                         dstOperand));
                 if (isFp) {
-                    ins.add(new Binary(ADD, LONGWORD, new Imm(16L), vaListField(vaList, 4, vaListIsPointer, ins)));
+                    incrementVaListField(vaList, 4, vaListIsPointer,
+                            LONGWORD, 16L, ins);
                 } else {
-                    ins.add(new Binary(ADD, LONGWORD, new Imm(8L), vaListField(vaList, 0, vaListIsPointer, ins)));
+                    incrementVaListField(vaList, 0, vaListIsPointer,
+                            LONGWORD, 8L, ins);
                 }
             }
 
@@ -1635,7 +1659,8 @@ public class Codegen {
 // 10. Align l->overflow_arg_area upwards to an 8 byte boundary.
 // 11. Return the fetched type.
         long nextSlotOffset=ProgramAsm.roundAwayFromZero(typeSize, Math.max(typeAlignment(type), 8));
-        ins.add(new Binary(ADD, QUADWORD, new Imm(nextSlotOffset), overFlowArgArea));
+        incrementVaListField(vaList, 8, vaListIsPointer, QUADWORD,
+                nextSlotOffset, ins);
         ins.add(endLabel);
         ins.add(new Comment("VA_ARG END"));
 

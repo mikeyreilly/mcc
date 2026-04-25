@@ -622,6 +622,7 @@ public class IrGen {
         ValIr switchVal = emitTackyAndConvert(switchStatement.exp,
                 instructions, inlineFunctions);
         Type type = switchStatement.exp.type();
+        boolean hasDefault = false;
         for (Constant c : switchStatement.entries) {
             if (c != null) {
                 Constant<?> converted =
@@ -629,10 +630,10 @@ public class IrGen {
                 instructions.add(new Compare(type, converted, switchVal));
                 instructions.add(new JumpIfZero(null,
                         switchStatement.labelFor(c)));
-            } else instructions.add(new Jump(switchStatement.labelFor(null)));
+            } else hasDefault = true;
         }
         String end = breakLabel(switchStatement.label);
-        instructions.add(new Jump(end));
+        instructions.add(new Jump(hasDefault ? switchStatement.labelFor(null) : end));
         compileStatement(switchStatement.body, instructions, inlineFunctions,
                 debugContext);
         instructions.add(newLabel(end));
