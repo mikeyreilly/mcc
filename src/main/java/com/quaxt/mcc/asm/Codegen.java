@@ -77,7 +77,7 @@ public class Codegen {
         for (TopLevelAsm topLevelAsm : topLevels) {
 
             if (topLevelAsm instanceof FunctionIr functionAsm) {
-                if(!registerAllocatorDisabled && !usesVaArg(functionAsm)){
+                if(!registerAllocatorDisabled){
                     RegisterAllocator.allocateRegisters(functionAsm);
                 }
                 functionAsm.stackSize = replacePseudoRegisters(functionAsm);
@@ -86,12 +86,6 @@ public class Codegen {
         }
 
         return new ProgramAsm(topLevels, programIr.positions());
-    }
-
-    private static boolean usesVaArg(FunctionIr functionAsm) {
-        return functionAsm.instructionIrs != null &&
-                functionAsm.instructionIrs.stream()
-                        .anyMatch(BuiltinVaArgIr.class::isInstance);
     }
 
     private static void generateBackendSymbolTable() {

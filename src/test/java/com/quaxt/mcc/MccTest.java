@@ -267,6 +267,36 @@ class MccTest {
     }
 
     @Test
+    void registerAllocatorRunsForVaArgFunction() throws Exception {
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path asm = Files.createTempFile("mcc-va-arg-ra", ".s");
+        try {
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-S", "-o", asm.toString(),
+                    "src/test/resources/varargs2.c"));
+            String assembly = Files.readString(asm);
+            var matcher = Pattern.compile("(?ms)^add_nums_c23:.*?^\\.size add_nums_c23,")
+                    .matcher(assembly);
+            assertTrue(matcher.find(), assembly);
+            String addNums = matcher.group();
+            assertTrue(addNums.contains("# VA_ARG START"), addNums);
+            assertTrue(addNums.lines().anyMatch(line ->
+                    line.matches("\\s*addl\\t%[a-z0-9]+, %[a-z0-9]+")),
+                    addNums);
+            assertFalse(addNums.lines().anyMatch(line ->
+                    line.matches("\\s*addl\\t%r10d, \\d+\\(%rsp\\)")),
+                    addNums);
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(asm);
+        }
+    }
+
+    @Test
     void varargs3()  throws Exception {
         returns("varargs3", 66);
     }
