@@ -135,9 +135,12 @@ class MccTest {
     @Test
     void emitsDebugLinesForStatements() throws Exception {
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
         Path asm = Files.createTempFile("mcc-debug-lines", ".s");
         try {
             Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
             assertEquals(0, Mcc.mcc("-g", "-S", "-o", asm.toString(),
                     "src/test/resources/debug_statement_lines.c"));
             String assembly = Files.readString(asm);
@@ -147,6 +150,7 @@ class MccTest {
             }
         } finally {
             Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
             Files.deleteIfExists(asm);
         }
     }
@@ -966,29 +970,35 @@ class MccTest {
 
     @Test void debugFrameBaseTracksStackPointerChanges() throws Exception {
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
         Path asm = Files.createTempFile("mcc-debug-frame-base", ".s");
         try {
             Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
             assertEquals(0, Mcc.mcc("-g", "-S", "-o", asm.toString(),
                     "src/test/resources/push_xmm_stack_arg.c"));
             String assembly = Files.readString(asm);
             assertTrue(assembly.contains(".section\t.debug_loclists"));
             assertTrue(assembly.contains(".byte\t0x77"));
             assertTrue(assembly.contains(".sleb128\t8"));
-            assertTrue(assembly.contains(".byte\t0x91"));
             assertTrue(assembly.contains(".cfi_remember_state"));
             assertTrue(assembly.contains(".cfi_restore_state"));
         } finally {
             Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
             Files.deleteIfExists(asm);
         }
     }
 
     @Test void debugLexicalBlockScopesShadowedLocals() throws Exception {
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
         Path object = Files.createTempFile("mcc-debug-scopes", ".o");
         try {
             Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
             assertEquals(0, Mcc.mcc("-g", "-c", "-o", object.toString(),
                     "src/test/resources/scopes.c"));
 
@@ -1004,6 +1014,32 @@ class MccTest {
                     .matcher(debugInfo).find(), debugInfo);
         } finally {
             Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(object);
+        }
+    }
+
+    @Test void debugVariablesCanUseAllocatedRegisters() throws Exception {
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path object = Files.createTempFile("mcc-debug-registers", ".o");
+        try {
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "-c", "-o", object.toString(),
+                    "src/test/resources/debug_register_local.c"));
+
+            Pair<String, Integer> readelf =
+                    runAndCapture("readelf", "--debug-dump=info",
+                            object.toString());
+            assertEquals(0, readelf.value(), readelf.key());
+            String debugInfo = readelf.key();
+            assertTrue(Pattern.compile("DW_AT_location\\s+:.*DW_OP_reg")
+                    .matcher(debugInfo).find(), debugInfo);
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
             Files.deleteIfExists(object);
         }
     }

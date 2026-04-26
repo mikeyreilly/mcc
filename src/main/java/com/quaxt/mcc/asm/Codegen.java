@@ -77,11 +77,7 @@ public class Codegen {
         for (TopLevelAsm topLevelAsm : topLevels) {
 
             if (topLevelAsm instanceof FunctionIr functionAsm) {
-                // Currently, the FunctionIr has a varTable which keeps track of where variables are for debug info
-                // and the register allocator does not update this table - so the debug info for variables would be incorrect.
-                // That's why we don't do register allocation in debug builds
-                if(!registerAllocatorDisabled && !addDebugInfo &&
-                        !usesVaArg(functionAsm)){
+                if(!registerAllocatorDisabled && !usesVaArg(functionAsm)){
                     RegisterAllocator.allocateRegisters(functionAsm);
                 }
                 functionAsm.stackSize = replacePseudoRegisters(functionAsm);

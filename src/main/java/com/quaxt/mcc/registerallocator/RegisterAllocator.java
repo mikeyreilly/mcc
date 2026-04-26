@@ -26,6 +26,7 @@ public class RegisterAllocator {
         List<Instruction> instructions = functionAsm.instructions;
         List<Node> interferenceGraphGpr;
         List<Node> interferenceGraphMmx;
+        Map<Operand, Operand> allCoalescedRegs = initDisjointSets();
         while (true) {
             var graphs = buildGraph(functionAsm);
             interferenceGraphGpr = graphs.key();
@@ -34,6 +35,7 @@ public class RegisterAllocator {
             coalesce(interferenceGraphGpr, instructions, 12, coalescedRegs);
             coalesce(interferenceGraphMmx, instructions, 14, coalescedRegs);
             if (nothingWasCoalesced(coalescedRegs)) break;
+            allCoalescedRegs.putAll(coalescedRegs);
             rewriteCoalesced(instructions, coalescedRegs);
         }
         addSpillCosts(interferenceGraphGpr, interferenceGraphMmx, instructions);
@@ -42,6 +44,8 @@ public class RegisterAllocator {
         colorGraph(interferenceGraphMmx, 14);
         var registerMaps = createRegisterMap(interferenceGraphGpr,
                 interferenceGraphMmx, functionAsm);
+        recordDebugRegisterLocations(functionAsm, allCoalescedRegs,
+                registerMaps.key(), registerMaps.value());
         replacePseudoRegs(instructions, registerMaps.key());
         replacePseudoRegs(instructions, registerMaps.value());
     }
@@ -401,6 +405,47 @@ public class RegisterAllocator {
         }
         function.calleeSavedRegs = calleeSavedRegs.toArray(new IntegerReg[0]);
         return new Pair<>(registerMap, registerMapMmx);
+    }
+
+    private static void recordDebugRegisterLocations(FunctionIr function,
+                                                     Map<Operand, Operand> coalescedRegs,
+                                                     Map<String, Reg> registerMap,
+                                                     Map<String, Reg> registerMapMmx) {
+        Map<String, Reg> combinedRegisterMap = new HashMap<>();
+        combinedRegisterMap.putAll(registerMap);
+        combinedRegisterMap.putAll(registerMapMmx);
+
+        Map<String, Reg> debugRegisterTable = new HashMap<>();
+        if (function.debugLocals != null) {
+            for (DebugLocal local : function.debugLocals) {
+                Reg reg = combinedRegisterMap.get(local.internalName());
+                if (reg == null) {
+                    reg = registerForCoalescedPseudo(local.internalName(),
+                            coalescedRegs, combinedRegisterMap);
+                }
+                if (reg != null) {
+                    debugRegisterTable.put(local.internalName(), reg);
+                }
+            }
+        }
+        function.debugRegisterTable = debugRegisterTable;
+    }
+
+    private static Reg registerForCoalescedPseudo(String identifier,
+                                                  Map<Operand, Operand> coalescedRegs,
+                                                  Map<String, Reg> registerMap) {
+        for (Operand operand : coalescedRegs.keySet()) {
+            if (operand instanceof Pseudo p && p.identifier.equals(identifier)) {
+                Operand representative = find(operand, coalescedRegs);
+                return switch (representative) {
+                    case HardReg hardReg -> hardReg;
+                    case Pseudo finalPseudo ->
+                            registerMap.get(finalPseudo.identifier);
+                    default -> null;
+                };
+            }
+        }
+        return null;
     }
 
     /* p. 644*/

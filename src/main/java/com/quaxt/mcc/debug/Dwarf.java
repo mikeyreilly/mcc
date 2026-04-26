@@ -553,11 +553,14 @@ public class Dwarf {
         if (fun.debugScopes != null && !fun.debugScopes.isEmpty()) {
             return true;
         }
-        if (fun.debugLocals == null || fun.varTable == null) {
+        if (fun.debugLocals == null) {
             return false;
         }
         for (DebugLocal local : fun.debugLocals) {
-            if (fun.varTable.containsKey(local.internalName())) {
+            if ((fun.debugRegisterTable != null &&
+                    fun.debugRegisterTable.containsKey(local.internalName())) ||
+                    (fun.varTable != null &&
+                            fun.varTable.containsKey(local.internalName()))) {
                 return true;
             }
         }
@@ -646,13 +649,6 @@ public class Dwarf {
                                            LinkedHashMap<Type, Integer> typeMap,
                                            int variableDieAbbrevNumber,
                                            int parameterDieAbbrevNumber) {
-        if (fun.varTable == null) {
-            return;
-        }
-        Long offset = fun.varTable.get(local.internalName());
-        if (offset == null) {
-            return;
-        }
         SymbolTableEntry ste = Mcc.SYMBOL_TABLE.get(local.internalName());
         if (ste == null) {
             return;
@@ -661,14 +657,49 @@ public class Dwarf {
         if (typeDieOffset == null) {
             return;
         }
+        Reg reg = fun.debugRegisterTable == null ? null :
+                fun.debugRegisterTable.get(local.internalName());
+        Long offset = null;
+        if (reg == null && fun.varTable != null) {
+            offset = fun.varTable.get(local.internalName());
+        }
+        if (reg == null && offset == null) {
+            return;
+        }
 
         uleb128(out, local.parameter() ? parameterDieAbbrevNumber :
                 variableDieAbbrevNumber);
         addAndPrintString(out, topLevelAsms, local.displayName());
         printInt(out, typeDieOffset);
+        if (reg != null) {
+            emitRegisterLocationExpression(out, reg);
+            return;
+        }
         uleb128(out, 1 + sleb128ByteCount(offset));
         printByte(out, DW_OP_fbreg);
         sleb128(out, offset);
+    }
+
+    private static void emitRegisterLocationExpression(PrintWriter out,
+                                                       Reg reg) {
+        int dwarfNumber = dwarfRegisterNumber(reg);
+        if (dwarfNumber <= DW_OP_reg31 - DW_OP_reg0) {
+            uleb128(out, 1);
+            printByte(out, (byte) (DW_OP_reg0 + dwarfNumber));
+            return;
+        }
+        uleb128(out, 1 + uleb128ByteCount(dwarfNumber));
+        printByte(out, DW_OP_regx);
+        uleb128(out, dwarfNumber);
+    }
+
+    private static int dwarfRegisterNumber(Reg reg) {
+        return switch (reg) {
+            case IntegerReg integerReg -> integerReg.dwarfNumber;
+            case DoubleReg doubleReg -> doubleReg.dwarfNumber;
+            case Pseudo _ -> throw new IllegalArgumentException(
+                    "Pseudo register has no DWARF register number");
+        };
     }
 
     private static void emitDebugLocLists(PrintWriter out,
