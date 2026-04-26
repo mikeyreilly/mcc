@@ -54,8 +54,9 @@ public class Lexer {
 
             }
             boolean atStartOfLine = i - startOfLine <= 1;
-            while (atStartOfLine && src.charAt(i) == '#' && i < len - 1 && src.charAt(i + 1) == ' ') {
-                int startOfLineNumber = i + 2;
+            while (atStartOfLine && src.charAt(i) == '#' && i < len - 1 &&
+                    (src.charAt(i + 1) == ' ' || src.startsWith("#line ", i))) {
+                int startOfLineNumber = src.startsWith("#line ", i) ? i + 6 : i + 2;
                 int endOfLineNumber = startOfLineNumber;
                 char c;
                 while (Character.isDigit(c = src.charAt(endOfLineNumber))) {

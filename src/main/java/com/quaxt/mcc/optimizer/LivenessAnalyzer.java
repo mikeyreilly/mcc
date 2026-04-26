@@ -9,8 +9,6 @@ import com.quaxt.mcc.tacky.*;
 
 import java.util.*;
 
-import static com.quaxt.mcc.asm.Codegen.DOUBLE_REGISTERS;
-import static com.quaxt.mcc.asm.Codegen.INTEGER_RETURN_REGISTERS;
 import static com.quaxt.mcc.asm.DoubleReg.*;
 import static com.quaxt.mcc.asm.IntegerReg.*;
 import static com.quaxt.mcc.optimizer.PropagateCopies.addNodesInReversePostOrder;
@@ -363,10 +361,10 @@ See p. 606 */
                     int intDestsSize = returnRegsSize.key();
                     int doubleDestsSize = returnRegsSize.value();
                     for (int i = 0; i < intDestsSize; i++) {
-                        liveVars.add(INTEGER_RETURN_REGISTERS[i]);
+                        liveVars.add(Codegen.integerReturnRegisters()[i]);
                     }
                     for (int i = 0; i < doubleDestsSize; i++) {
-                        liveVars.add(DOUBLE_REGISTERS[i]);
+                        liveVars.add(Codegen.doubleRegisters()[i]);
                     }
 
                 }
@@ -445,17 +443,20 @@ See p. 606 */
                 addMemoryAndIndexedRegsToUsed(address, used);
                 ParameterClassification pc =
                         Codegen.PARAMETER_CLASSIFICATION_MAP.get(t);
+                if (com.quaxt.mcc.Mcc.target.isWindowsMsvc()) {
+                    used.addAll(Arrays.asList(Codegen.integerRegisters()));
+                    used.addAll(Arrays.asList(Codegen.doubleRegisters()));
+                    return new Pair<>(used, Codegen.callerSavedRegisters());
+                }
                 int len = pc.integerArguments().size();
                 for (int i = 0; i < len; i++) {
-                    used.add(Codegen.INTEGER_REGISTERS[i]);
+                    used.add(Codegen.integerRegisters()[i]);
                 }
                 len = pc.doubleArguments().size();
                 for (int i = 0; i < len; i++) {
-                    used.add(DOUBLE_REGISTERS[i]);
+                    used.add(Codegen.doubleRegisters()[i]);
                 }
-                return new Pair<>(used, Set.of(DI, SI, DX, CX, R8, R9, AX,
-                        XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8,
-                        XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15));
+                return new Pair<>(used, Codegen.callerSavedRegisters());
 
             }
             case Cdq cdq -> {

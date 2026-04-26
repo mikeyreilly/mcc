@@ -88,6 +88,10 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     }
 
     public void emitAsm(PrintWriter out, Path srcFile) {
+        if (Mcc.target.isWindowsMsvc()) {
+            emitMasm(out);
+            return;
+        }
         String textStart = null;
         String textEnd = null;
 
@@ -143,6 +147,302 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         out.println("                .ident	\"GCC: (Ubuntu 11.4.0-1ubuntu1~22" + ".04) 11.4.0\"");
         out.println("                .section	.note.GNU-stack,\"\"," +
                 "@progbits");
+    }
+
+    private void emitMasm(PrintWriter out) {
+        out.println("option casemap:none");
+        for (var e : Mcc.SYMBOL_TABLE.entrySet()) {
+            if (e.getValue().attrs() instanceof FunAttributes(boolean defined, boolean _)
+                    && !defined && !e.getKey().startsWith("__builtin")) {
+                out.println("EXTERN " + masmSymbol(e.getKey()) + ":PROC");
+            }
+        }
+        out.println(".code");
+        for (TopLevelAsm t : topLevelAsms) {
+            if (t instanceof FunctionIr functionAsm) {
+                prepareStackMetadata(functionAsm, false);
+                emitMasmFunction(out, functionAsm);
+            }
+        }
+        for (TopLevelAsm t : topLevelAsms) {
+            switch (t) {
+                case StaticVariableAsm staticVariableAsm -> emitMasmStaticVariable(out, staticVariableAsm);
+                case StaticConstant sc -> emitMasmStaticConstant(out, sc);
+                default -> {}
+            }
+        }
+        out.println("END");
+    }
+
+    private void emitMasmStaticConstant(PrintWriter out, StaticConstant v) {
+        out.println(".const");
+        if (v.alignment() > 1) out.println("ALIGN " + v.alignment());
+        out.println(masmLocal("L" + v.label()) + " LABEL BYTE");
+        writeMasmValue(out, v.init());
+    }
+
+    private void emitMasmStaticVariable(PrintWriter out, StaticVariableAsm v) {
+        boolean zeroOnly = v.init().size() == 1 &&
+                v.init().getFirst() instanceof ZeroInit;
+        out.println(zeroOnly ? ".data?" : ".data");
+        if (v.global()) out.println("PUBLIC " + masmSymbol(v.name()));
+        if (v.alignment() > 1) out.println("ALIGN " + v.alignment());
+        out.println(masmSymbol(v.name()) + " LABEL BYTE");
+        for (StaticInit init : v.init()) writeMasmValue(out, init);
+    }
+
+    private static void writeMasmValue(PrintWriter out, StaticInit init) {
+        String s = switch (init) {
+            case DoubleInit(double d) -> "QWORD " + Double.doubleToLongBits(d);
+            case FloatInit(float d) -> "DWORD " + Float.floatToIntBits(d);
+            case ShortInit(short l) -> "WORD " + l;
+            case UShortInit(short l) -> "WORD " + Integer.toUnsignedString(l & 0xffff);
+            case IntInit(int l) -> "DWORD " + l;
+            case LongInit(long l) -> "DWORD " + (int) l;
+            case LongLongInit(long l) -> "QWORD " + l;
+            case UIntInit(int l) -> "DWORD " + Integer.toUnsignedString(l);
+            case ULongInit(long l) -> "DWORD " + Integer.toUnsignedString((int) l);
+            case ULongLongInit(long l) -> "QWORD " + Long.toUnsignedString(l);
+            case ZeroInit(long l) -> "BYTE " + l + " DUP (0)";
+            case CharInit(byte i) -> "BYTE " + (i & 0xff);
+            case UCharInit(byte i) -> "BYTE " + (i & 0xff);
+            case BoolInit(byte i) -> "BYTE " + (i & 0xff);
+            case PointerInit(String label, long offset) -> {
+                boolean isConstant =
+                        BACKEND_SYMBOL_TABLE.get(label) instanceof ObjEntry e && e.isConstant();
+                String symbol = isConstant ? masmLocal("L" + label) : masmSymbol(label);
+                yield "QWORD " + symbol + (offset == 0 ? "" :
+                        offset > 0 ? " + " + offset : " - " + -offset);
+            }
+            case StringInit(String s0, boolean nullTerminated) ->
+                    masmStringBytes(s0, nullTerminated);
+        };
+        out.println("    " + s);
+    }
+
+    private static String masmStringBytes(String s, boolean nullTerminated) {
+        ArrayList<String> bytes = new ArrayList<>();
+        for (int i = 0; i < s.length(); i++) bytes.add(Integer.toString(s.charAt(i) & 0xff));
+        if (nullTerminated) bytes.add("0");
+        ArrayList<String> lines = new ArrayList<>();
+        for (int i = 0; i < bytes.size(); i += 32) {
+            lines.add("BYTE " + String.join(",",
+                    bytes.subList(i, Math.min(i + 32, bytes.size()))));
+        }
+        return String.join(System.lineSeparator() + "    ", lines);
+    }
+
+    private void emitMasmFunction(PrintWriter out, FunctionIr functionAsm) {
+        String name = masmSymbol(functionAsm.name);
+        if (functionAsm.global) out.println("PUBLIC " + name);
+        out.println(name + " PROC");
+        printIndent(out, "push rbp");
+        printIndent(out, "mov rbp, rsp");
+        long stackSize = functionAsm.stackSize;
+        IntegerReg[] calleeSavedRegs = functionAsm.calleeSavedRegs;
+        long calleeSavedBytes = roundAwayFromZero(8L * calleeSavedRegs.length, 16);
+        long totalStackBytes = roundAwayFromZero(calleeSavedBytes + stackSize, 16);
+        if (totalStackBytes != 0)
+            printIndent(out, "sub rsp, " + totalStackBytes);
+        if (calleeSavedRegs.length % 2 == 1) {
+            printIndent(out, "sub rsp, 8");
+        }
+        for (int i = calleeSavedRegs.length - 1; i >= 0; i--) {
+            printIndent(out, "push " + calleeSavedRegs[i].q);
+        }
+        for (int i = 0; i < functionAsm.instructions.size(); i++) {
+            emitMasmInstruction(out, functionAsm.instructions.get(i),
+                    functionAsm.instructionStackDeltas[i], functionAsm);
+        }
+        out.println(name + " ENDP");
+    }
+
+    private static String masmSymbol(String s) {
+        String base = s.replace('.', '$');
+        SymbolTableEntry entry = Mcc.SYMBOL_TABLE.get(s);
+        if (!"main".equals(s) && entry != null &&
+                entry.attrs() instanceof FunAttributes(boolean defined, boolean _) &&
+                defined) {
+            return "mcc$" + base;
+        }
+        if (entry != null && entry.attrs() instanceof StaticAttributes) {
+            return "mcc$" + base;
+        }
+        return base;
+    }
+
+    private static String masmLocal(String s) {
+        return "$" + masmSymbol(s).replace("$L", "L");
+    }
+
+    private static String masmLabel(String s) {
+        return s.startsWith(".") ? masmLocal(s.substring(1)) : masmSymbol(s);
+    }
+
+    private static String sizePrefix(TypeAsm t) {
+        return switch (t) {
+            case BYTE -> "BYTE PTR ";
+            case WORD -> "WORD PTR ";
+            case LONGWORD, FLOAT -> "DWORD PTR ";
+            case QUADWORD, DOUBLE -> "QWORD PTR ";
+            case ByteArray(long size, int _) ->
+                    size <= 1 ? "BYTE PTR " : size <= 2 ? "WORD PTR " :
+                            size <= 4 ? "DWORD PTR " : "QWORD PTR ";
+        };
+    }
+
+    private static String masmOperand(TypeAsm t, Instruction s, Operand o,
+                                      long spDelta, boolean withSize) {
+        return switch (o) {
+            case Imm(long i) -> Long.toString(i);
+            case IntegerReg reg -> switch (t) {
+                case BYTE -> reg.b;
+                case WORD -> reg.w;
+                case LONGWORD -> reg.d;
+                case QUADWORD -> reg.q;
+                case ByteArray(long size, int _) ->
+                        size <= 1 ? reg.b : size <= 2 ? reg.w :
+                                size <= 4 ? reg.d : reg.q;
+                default -> throw new IllegalArgumentException("bad int reg type " + t);
+            };
+            case DoubleReg reg -> reg.toString();
+            case FrameSlot(long offset, int _) ->
+                    (withSize ? sizePrefix(t) : "") + "[rsp" + signed(offset - spDelta) + "]";
+            case IncomingStackArg(long offset) ->
+                    (withSize ? sizePrefix(t) : "") + "[rbp" + signed(offset) + "]";
+            case Memory(IntegerReg reg, long offset) ->
+                    (withSize ? sizePrefix(t) : "") + "[" + reg.q + signed(offset) + "]";
+            case Data(String identifier, long offset) -> {
+                boolean isConstant =
+                        BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
+                String label = isConstant ? masmLocal("L" + identifier) : masmSymbol(identifier);
+                yield (withSize ? sizePrefix(t) : "") + "[" + label +
+                        (offset == 0 ? "" : signed(offset)) + "]";
+            }
+            case Indexed(IntegerReg base, IntegerReg index, int scale) ->
+                    (withSize ? sizePrefix(t) : "") + "[" + base.q + "+" +
+                            index.q + "*" + scale + "]";
+            case LabelAddress(String label) -> masmSymbol(label);
+            case Pseudo p -> p.identifier;
+            default -> throw new IllegalStateException("Unexpected value: " + o);
+        };
+    }
+
+    private static String signed(long offset) {
+        return offset == 0 ? "" : offset > 0 ? "+" + offset : Long.toString(offset);
+    }
+
+    private void emitMasmInstruction(PrintWriter out, Instruction instruction,
+                                     long spDelta, FunctionIr functionAsm) {
+        String s = switch (instruction) {
+            case Pos _, Comment _ -> null;
+            case LabelIr(String label) -> masmLabel(label) + ":";
+            case Literal(String string) -> string;
+            case Mov(TypeAsm t, Operand src, Operand dst) -> {
+                String op = t == QUADWORD && (src instanceof DoubleReg || dst instanceof DoubleReg)
+                        ? "movq" : (t == DOUBLE || t == FLOAT) ? "mov" + t.suffix() : "mov";
+                yield op + " " + masmOperand(t, instruction, dst, spDelta, true) +
+                        ", " + masmOperand(t, instruction, src, spDelta, src instanceof Memory || src instanceof Data || src instanceof FrameSlot || src instanceof IncomingStackArg);
+            }
+            case Xchg(TypeAsm t, Operand src, Operand dst) ->
+                    "xchg " + masmOperand(t, instruction, dst, spDelta, true) +
+                            ", " + masmOperand(t, instruction, src, spDelta, true);
+            case Lea(Operand src, Operand dst) ->
+                    "lea " + masmOperand(QUADWORD, instruction, dst, spDelta, false) +
+                            ", " + masmOperand(QUADWORD, instruction, src, spDelta, true);
+            case Push(Operand arg) -> "push " + masmOperand(QUADWORD, instruction, arg, spDelta, false);
+            case Pop(IntegerReg arg) -> "pop " + arg.q;
+            case Nullary.RET -> {
+                StringBuilder b = new StringBuilder();
+                for (IntegerReg r : functionAsm.calleeSavedRegs) {
+                    b.append("\tpop ").append(r.q).append('\n');
+                }
+                b.append("\tmov rsp, rbp\n\tpop rbp\n\tret");
+                yield b.toString();
+            }
+            case Nullary.MFENCE -> "mfence";
+            case Unary(UnaryOperator op, TypeAsm t, Operand operand) -> {
+                String mnemonic = switch (op) {
+                    case DIV -> "div";
+                    case IDIV -> "idiv";
+                    case BITWISE_NOT, NOT -> "not";
+                    case UNARY_MINUS -> "neg";
+                    case UNARY_SHR -> "shr";
+                    case BSWAP -> t == WORD ? "rol" : "bswap";
+                    default -> throw new AssertionError("can't format " + op);
+                };
+                yield mnemonic + " " + masmOperand(t, instruction, operand, spDelta, true)
+                        + (op == UnaryOperator.BSWAP && t == WORD ? ", 8" : "");
+            }
+            case Binary(ArithmeticOperator op, TypeAsm t, Operand src, Operand dst) -> {
+                String mnemonic = switch (op) {
+                    case ADD, DOUBLE_ADD -> t == DOUBLE ? "addsd" : t == FLOAT ? "addss" : "add";
+                    case SUB, DOUBLE_SUB -> t == DOUBLE ? "subsd" : t == FLOAT ? "subss" : "sub";
+                    case IMUL -> "imul";
+                    case AND, BITWISE_AND -> "and";
+                    case OR, BITWISE_OR -> "or";
+                    case BITWISE_XOR -> t == DOUBLE ? "xorpd" : t == FLOAT ? "xorps" : "xor";
+                    case SHL -> "shl";
+                    case SAR -> "sar";
+                    case SHR -> "shr";
+                    case BSR -> "bsr";
+                    case DOUBLE_MUL -> t == FLOAT ? "mulss" : "mulsd";
+                    case DOUBLE_DIVIDE -> t == FLOAT ? "divss" : "divsd";
+                    default -> throw new IllegalStateException("Unexpected value: " + op);
+                };
+                TypeAsm srcType = switch (op) {
+                    case SHL, SAR, SHR -> BYTE;
+                    default -> t;
+                };
+                yield mnemonic + " " + masmOperand(t, instruction, dst, spDelta, true) +
+                        ", " + masmOperand(srcType, instruction, src, spDelta, true);
+            }
+            case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) -> {
+                String mnemonic = t == DOUBLE ? "comisd" : t == FLOAT ? "comiss" : "cmp";
+                yield mnemonic + " " + masmOperand(t, instruction, minuend, spDelta, true) +
+                        ", " + masmOperand(t, instruction, subtrahend, spDelta, true);
+            }
+            case Jump(String label) -> "jmp " + masmLabel(label);
+            case JmpCC(CC cc, String label) -> "j" + cc.name().toLowerCase(Locale.ENGLISH) + " " + masmLabel(label);
+            case SetCC(CmpOperator cmpOperator, boolean unsigned, Operand o) ->
+                    "set" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) +
+                            " " + masmOperand(BYTE, instruction, o, spDelta, true);
+            case Call(Operand address, FunType _) -> {
+                if (address instanceof LabelAddress(String functionName)) {
+                    yield "call " + masmSymbol(functionName);
+                }
+                yield "call " + masmOperand(QUADWORD, instruction, address, spDelta, true);
+            }
+            case Cdq(TypeAsm t) -> t == QUADWORD ? "cqo" : "cdq";
+            case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                    "movsx " + masmOperand(dstType, instruction, dst, spDelta, false) +
+                            ", " + masmOperand(srcType, instruction, src, spDelta, true);
+            case MovZeroExtend(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
+                    "movzx " + masmOperand(dstType, instruction, dst, spDelta, false) +
+                            ", " + masmOperand(srcType, instruction, src, spDelta, true);
+            case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
+                String mnemonic;
+                if (srcType.isInteger()) {
+                    mnemonic = dstType == DOUBLE ? "cvtsi2sd" : "cvtsi2ss";
+                } else if (srcType == DOUBLE) {
+                    mnemonic = dstType == FLOAT ? "cvtsd2ss" :
+                            dstType == QUADWORD ? "cvttsd2si" : "cvttsd2si";
+                } else {
+                    mnemonic = dstType == DOUBLE ? "cvtss2sd" :
+                            dstType == QUADWORD ? "cvttss2si" : "cvttss2si";
+                }
+                yield mnemonic + " " + masmOperand(dstType, instruction, dst, spDelta, false) +
+                        ", " + masmOperand(srcType, instruction, src, spDelta, true);
+            }
+            case Test(TypeAsm t, Operand src1, Operand src2) ->
+                    "test " + masmOperand(t, instruction, src2, spDelta, true) +
+                            ", " + masmOperand(t, instruction, src1, spDelta, true);
+        };
+        if (s == null) return;
+        if (instruction instanceof LabelIr) out.println(s);
+        else {
+            for (String line : s.split("\\R")) printIndent(out, line);
+        }
     }
 
     private void emitStaticConstantAsm(PrintWriter out, StaticConstant v) {

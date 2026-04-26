@@ -382,7 +382,7 @@ public class RegisterAllocator {
                     if (node.color != -1) {
                         var hardReg = colorMap.get(node.color);
                         registerMap.put(p.identifier, hardReg);
-                        if (hardReg.isCalleeSaved) {
+                        if (Codegen.isCalleeSaved(hardReg)) {
                             calleeSavedRegs.add(hardReg);
                         }
                     } else {
@@ -487,7 +487,7 @@ public class RegisterAllocator {
         int lowestAvailableColor = b.nextSetBit(0);
         if (lowestAvailableColor != -1) {
             boolean chooseHighestAvailableColor =
-                    chosenNode.operand instanceof IntegerReg r && r.isCalleeSaved;
+                    chosenNode.operand instanceof IntegerReg r && Codegen.isCalleeSaved(r);
             chosenNode.color = chooseHighestAvailableColor ? b.length() - 1 :
                     lowestAvailableColor;
             chosenNode.pruned = false;
@@ -603,8 +603,8 @@ public class RegisterAllocator {
             FunctionIr functionAsm) {
         List<Instruction> instructions = functionAsm.instructions;
         Pair<Integer, Integer> returnRegisters = functionAsm.returnRegisters;
-        var interferenceGraphGpr = baseGraph(BASE_GRAPH_GPRS);
-        var interferenceGraphMmx = baseGraph(BASE_GRAPH_DOUBLE_REGS);
+        var interferenceGraphGpr = baseGraph(baseGraphGprs());
+        var interferenceGraphMmx = baseGraph(baseGraphDoubleRegs());
         addPseudoRegisters(instructions, interferenceGraphGpr,
                 interferenceGraphMmx);
         List<CfgNode> cfg = makeCFG(instructions);
@@ -812,6 +812,17 @@ public class RegisterAllocator {
     private static final Reg[] BASE_GRAPH_DOUBLE_REGS = new Reg[]{XMM0, XMM1,
             XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8, XMM9, XMM10, XMM11,
             XMM12, XMM13};
+
+    private static Reg[] baseGraphGprs() {
+        return BASE_GRAPH_GPRS;
+    }
+
+    private static Reg[] baseGraphDoubleRegs() {
+        if (Mcc.target.isWindowsMsvc()) {
+            return new Reg[]{XMM0, XMM1, XMM2, XMM3, XMM4, XMM5};
+        }
+        return BASE_GRAPH_DOUBLE_REGS;
+    }
 
     private static List<Node> baseGraph(Reg[] baseGraphRegs) {
 

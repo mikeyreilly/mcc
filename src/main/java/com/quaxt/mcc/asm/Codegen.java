@@ -37,12 +37,48 @@ public class Codegen {
 
     private static final Imm UPPER_BOUND_LONG_IMMEDIATE = new Imm(1L << 63);
 
-    public final static IntegerReg[] INTEGER_RETURN_REGISTERS =
+    private final static IntegerReg[] SYSV_INTEGER_RETURN_REGISTERS =
             new IntegerReg[]{AX, DX};
-    public final static IntegerReg[] INTEGER_REGISTERS = new IntegerReg[]{DI,
+    private final static IntegerReg[] SYSV_INTEGER_REGISTERS = new IntegerReg[]{DI,
             SI, DX, CX, R8, R9};
-    public final static DoubleReg[] DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
+    private final static DoubleReg[] SYSV_DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
             XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
+    private final static IntegerReg[] MSVC_INTEGER_REGISTERS = new IntegerReg[]{CX,
+            DX, R8, R9};
+    private final static DoubleReg[] MSVC_DOUBLE_REGISTERS = new DoubleReg[]{XMM0,
+            XMM1, XMM2, XMM3};
+
+    public static IntegerReg[] integerReturnRegisters() {
+        return SYSV_INTEGER_RETURN_REGISTERS;
+    }
+
+    public static IntegerReg[] integerRegisters() {
+        return Mcc.target.isWindowsMsvc() ? MSVC_INTEGER_REGISTERS :
+                SYSV_INTEGER_REGISTERS;
+    }
+
+    public static DoubleReg[] doubleRegisters() {
+        return Mcc.target.isWindowsMsvc() ? MSVC_DOUBLE_REGISTERS :
+                SYSV_DOUBLE_REGISTERS;
+    }
+
+    public static Set<Operand> callerSavedRegisters() {
+        if (Mcc.target.isWindowsMsvc()) {
+            return Set.of(AX, CX, DX, R8, R9, R10, R11, XMM0, XMM1, XMM2,
+                    XMM3, XMM4, XMM5);
+        }
+        return Set.of(DI, SI, DX, CX, R8, R9, AX, XMM0, XMM1, XMM2, XMM3,
+                XMM4, XMM5, XMM6, XMM7, XMM8, XMM9, XMM10, XMM11, XMM12,
+                XMM13, XMM14, XMM15);
+    }
+
+    public static boolean isCalleeSaved(IntegerReg reg) {
+        if (Mcc.target.isWindowsMsvc()) {
+            return reg == BX || reg == BP || reg == SI || reg == DI ||
+                    reg == R12 || reg == R13 || reg == R14 || reg == R15;
+        }
+        return reg.isCalleeSaved;
+    }
 
     private static String doubleToHexString(double d) {
         return Double.toHexString(d).replaceAll("-", "_");
@@ -436,7 +472,8 @@ public class Codegen {
                  Primitive.VOID -> BYTE;
             case Primitive.SHORT, Primitive.USHORT -> WORD;
             case Primitive.INT, Primitive.UINT -> LONGWORD;
-            case Primitive.LONG, Primitive.ULONG, Primitive.LONGLONG, Primitive.ULONGLONG  -> QUADWORD;
+            case Primitive.LONG, Primitive.ULONG -> Mcc.target.isWindowsMsvc() ? LONGWORD : QUADWORD;
+            case Primitive.LONGLONG, Primitive.ULONGLONG  -> QUADWORD;
             case Primitive.DOUBLE -> DOUBLE;
             case Primitive.FLOAT -> FLOAT;
             case Pointer _, FunType _ -> QUADWORD;
@@ -599,6 +636,9 @@ public class Codegen {
     private static boolean classifyReturnValueLight(Type t) {
         if (t == Primitive.VOID || t.isScalar()) {
             return false;
+        } else if (Mcc.target.isWindowsMsvc()) {
+            long s = size(t);
+            return !(s == 1 || s == 2 || s == 4 || s == 8);
         } else {
             Structure st = (Structure) t;
             List<StructureType> classes = classifyStructure(st);
@@ -651,6 +691,10 @@ public class Codegen {
         // so for classify we can classify operands here
         if (funCall instanceof FunCall(VarIr name, ArrayList<ValIr> args,
                                        boolean varargs, _, ValIr dst)) {
+            if (Mcc.target.isWindowsMsvc()) {
+                codegenWindowsFunCall(name, args, varargs, dst, instructionAsms);
+                return;
+            }
 
             final boolean returnInMemory;
             List<TypedOperand> intDests = Collections.emptyList();
@@ -717,7 +761,7 @@ public class Codegen {
             for (TypedOperand integerArg : integerArguments) {
                 var assemblyType = integerArg.type();
 
-                IntegerReg r = INTEGER_REGISTERS[regIndex];
+                IntegerReg r = integerRegisters()[regIndex];
                 if (assemblyType instanceof ByteArray(long size, _)) {
                     copyBytesToReg(instructionAsms, integerArg.operand(), r,
                             size);
@@ -729,14 +773,30 @@ public class Codegen {
             }
             for (int i = 0; i < doubleArguments.size(); i++) {
                 Operand doubleArg = doubleArguments.get(i);
-                DoubleReg r = DOUBLE_REGISTERS[i];
+                DoubleReg r = doubleRegisters()[i];
                 instructionAsms.add(new Mov(DOUBLE, doubleArg, r));
             }
             if (varargs) {
-                instructionAsms.add(new Mov(LONGWORD,
-                        new Imm(doubleArguments.size()), AX));
+                if (Mcc.target.isWindowsMsvc()) {
+                    for (int i = 0; i < doubleArguments.size() &&
+                            i < integerRegisters().length; i++) {
+                        instructionAsms.add(new Mov(QUADWORD,
+                                doubleRegisters()[i], integerRegisters()[i]));
+                    }
+                } else {
+                    instructionAsms.add(new Mov(LONGWORD,
+                            new Imm(doubleArguments.size()), AX));
+                }
+            }
+            if (Mcc.target.isWindowsMsvc()) {
+                instructionAsms.add(new Binary(SUB, QUADWORD,
+                        new Imm(32), SP));
             }
             instructionAsms.add(new Call(toOperand(name), funType(name)));
+            if (Mcc.target.isWindowsMsvc()) {
+                instructionAsms.add(new Binary(ADD, QUADWORD,
+                        new Imm(32), SP));
+            }
             int bytesToRemove = 8 * stackArgCount + stackPadding;
             if (bytesToRemove != 0) {
                 instructionAsms.add(new Binary(ADD, QUADWORD,
@@ -752,7 +812,7 @@ public class Codegen {
                 for (var intDest : intDests) {
                     TypeAsm t = intDest.type();
                     var op = intDest.operand();
-                    IntegerReg r = INTEGER_RETURN_REGISTERS[regIndex];
+                    IntegerReg r = integerReturnRegisters()[regIndex];
                     if (t instanceof ByteArray(long size, _)) {
                         copyBytesFromReg(instructionAsms, r, op, size);
                     } else {
@@ -762,10 +822,87 @@ public class Codegen {
                 }
                 regIndex = 0;
                 for (var op : doubleDests) {
-                    DoubleReg r = DOUBLE_REGISTERS[regIndex];
+                    DoubleReg r = doubleRegisters()[regIndex];
                     instructionAsms.add(new Mov(DOUBLE, r, op));
                     regIndex++;
                 }
+            }
+        }
+    }
+
+    private static void codegenWindowsFunCall(VarIr name, ArrayList<ValIr> args,
+                                              boolean varargs, ValIr dst,
+                                              List<Instruction> ins) {
+        boolean returnInMemory = dst != null && classifyReturnValue(dst).returnInMemory();
+        int firstArgSlot = 0;
+        if (returnInMemory) {
+            ins.add(new Lea(toOperand(dst), integerRegisters()[0]));
+            firstArgSlot = 1;
+        }
+
+        int stackSlots = Math.max(0, args.size() + firstArgSlot - 4);
+        long rawStackBytes = 32L + stackSlots * 8L;
+        long stackBytes = ProgramAsm.roundAwayFromZero(rawStackBytes, 16);
+        ins.add(new Binary(SUB, QUADWORD, new Imm(stackBytes), SP));
+
+        for (int i = 0; i < args.size(); i++) {
+            ValIr arg = args.get(i);
+            int slot = i + firstArgSlot;
+            TypeAsm type = valToAsmType(arg);
+            Operand operand = toOperand(arg);
+            if (slot < 4) {
+                if (type == DOUBLE || type == FLOAT) {
+                    ins.add(new Mov(type, operand, doubleRegisters()[slot]));
+                    if (varargs) {
+                        ins.add(new Mov(QUADWORD, doubleRegisters()[slot],
+                                integerRegisters()[slot]));
+                    }
+                } else if (type instanceof ByteArray(long size, _)) {
+                    if (size <= 8) copyBytesToReg(ins, operand,
+                            integerRegisters()[slot], size);
+                    else {
+                        ins.add(new Lea(operand, integerRegisters()[slot]));
+                    }
+                } else {
+                    ins.add(new Mov(type, operand, integerRegisters()[slot]));
+                }
+            } else {
+                Operand dstSlot = new Memory(SP, 32 + (slot - 4L) * 8L);
+                if (type instanceof ByteArray(long size, _)) {
+                    if (size <= 8) {
+                        copyBytesToReg(ins, operand, AX, size);
+                        ins.add(new Mov(QUADWORD, AX, dstSlot));
+                    } else {
+                        ins.add(new Lea(operand, AX));
+                        ins.add(new Mov(QUADWORD, AX, dstSlot));
+                    }
+                } else {
+                    ins.add(new Mov(type == FLOAT ? LONGWORD : type, operand,
+                            dstSlot));
+                }
+            }
+        }
+
+        PARAMETER_CLASSIFICATION_MAP.put(funType(name),
+                new ParameterClassification(new ArrayList<>(), new ArrayList<>(),
+                        new ArrayList<>()));
+        ins.add(new Call(toOperand(name), funType(name)));
+        ins.add(new Binary(ADD, QUADWORD, new Imm(stackBytes), SP));
+        if (dst != null && !returnInMemory) {
+            ReturnValueClassification r = classifyReturnValue(dst);
+            for (int i = 0; i < r.intDests().size(); i++) {
+                TypedOperand to = r.intDests().get(i);
+                if (to.type() instanceof ByteArray(long size, _)) {
+                    copyBytesFromReg(ins, integerReturnRegisters()[i],
+                            to.operand(), size);
+                } else {
+                    ins.add(new Mov(to.type(), integerReturnRegisters()[i],
+                            to.operand()));
+                }
+            }
+            for (int i = 0; i < r.doubleDests().size(); i++) {
+                ins.add(new Mov(DOUBLE, doubleRegisters()[i],
+                        r.doubleDests().get(i)));
             }
         }
     }
@@ -835,38 +972,84 @@ public class Codegen {
                 classifyReturnValueLight(functionIr.returnType());
         int regIndex = 0;
         List<Instruction> ins = new ArrayList<>();
+        int overflowArgOffset = 16;
+        ArrayList<TypedOperand> integerArguments = new ArrayList<>();
+        ArrayList<Operand> doubleArguments = new ArrayList<>();
+        ArrayList<TypedOperand> stackArguments = new ArrayList<>();
 
         if (returnInMemory) {
-            ins.add(new Mov(QUADWORD, DI, new Memory(BP, -8)));
+            ins.add(new Mov(QUADWORD, integerRegisters()[0], new Memory(BP, -8)));
             regIndex = 1;
         }
+
+        if (Mcc.target.isWindowsMsvc()) {
+            if (functionIr.callsVaStart) {
+                for (int slot = 0; slot < integerRegisters().length; slot++) {
+                    ins.add(new Mov(QUADWORD, integerRegisters()[slot],
+                            new IncomingStackArg(16 + slot * 8L)));
+                }
+            }
+            for (int i = 0; i < operands.size(); i++) {
+                TypedOperand to = operands.get(i);
+                int slot = i + regIndex;
+                if (slot < 4) {
+                    if (to.type() == DOUBLE || to.type() == FLOAT) {
+                        ins.add(new Mov(to.type(), doubleRegisters()[slot],
+                                to.operand()));
+                    } else if (to.type() instanceof ByteArray(long size, _)) {
+                        Operand aggregateDst = aggregateOperand(to.operand());
+                        if (size <= 8) copyBytesFromReg(ins,
+                                integerRegisters()[slot], aggregateDst, size);
+                        else copyBytes(ins, new Memory(integerRegisters()[slot], 0),
+                                aggregateDst, size);
+                    } else {
+                        ins.add(new Mov(to.type(), integerRegisters()[slot],
+                                to.operand()));
+                    }
+                } else {
+                    long offset = 16 + 32 + (slot - 4L) * 8L;
+                    if (to.type() instanceof ByteArray(long size, _)) {
+                        Operand aggregateDst = aggregateOperand(to.operand());
+                        if (size <= 8) copyBytes(ins, new IncomingStackArg(offset),
+                                aggregateDst, size);
+                        else {
+                            ins.add(new Mov(QUADWORD, new IncomingStackArg(offset), AX));
+                            copyBytes(ins, new Memory(AX, 0), aggregateDst, size);
+                        }
+                    } else {
+                        ins.add(new Mov(to.type(), new IncomingStackArg(offset),
+                                to.operand()));
+                    }
+                }
+            }
+            PARAMETER_CLASSIFICATION_MAP.put(functionIr.funType,
+                    new ParameterClassification(new ArrayList<>(), new ArrayList<>(),
+                            new ArrayList<>()));
+        } else {
 
         ParameterClassification classifiedParameters =
                 classifyParameters(operands, returnInMemory);
         PARAMETER_CLASSIFICATION_MAP.put(functionIr.funType,
                 classifiedParameters);
 
-        ArrayList<TypedOperand> integerArguments =
-                classifiedParameters.integerArguments();
-        ArrayList<Operand> doubleArguments =
-                classifiedParameters.doubleArguments();
-        ArrayList<TypedOperand> stackArguments =
-                classifiedParameters.stackArguments();
+        integerArguments = classifiedParameters.integerArguments();
+        doubleArguments = classifiedParameters.doubleArguments();
+        stackArguments = classifiedParameters.stackArguments();
 
         for (TypedOperand to : integerArguments) {
             TypeAsm paramType = to.type();
             if (paramType instanceof ByteArray(long size, _)) {
-                copyBytesFromReg(ins, INTEGER_REGISTERS[regIndex],
+                copyBytesFromReg(ins, integerRegisters()[regIndex],
                         to.operand(), size);
             } else
-                ins.add(new Mov(to.type(), INTEGER_REGISTERS[regIndex],
+                ins.add(new Mov(to.type(), integerRegisters()[regIndex],
                         to.operand()));
             regIndex++;
         }
 
         for (int i = 0; i < doubleArguments.size(); i++) {
             Operand operand = doubleArguments.get(i);
-            ins.add(new Mov(DOUBLE, DOUBLE_REGISTERS[i], operand));
+            ins.add(new Mov(DOUBLE, doubleRegisters()[i], operand));
         }
         int offset = 16;
         for (int i = 0; i < stackArguments.size(); i++) {
@@ -879,6 +1062,8 @@ public class Codegen {
                 ins.add(new Mov(to.type(), new IncomingStackArg(16 + i * 8L),
                         to.operand()));
             offset += 8;
+        }
+        overflowArgOffset = offset;
         }
         // so I guess we now have overflow_arg_area = Memory(BP, offset)
         for (InstructionIr inst : instructionIrs) {
@@ -1447,6 +1632,13 @@ public class Codegen {
                 }
                 case Ignore.IGNORE -> {}
                 case BuiltinC23VaStartIr(VarIr vaList) -> {
+                    if (Mcc.target.isWindowsMsvc()) {
+                        ins.add(new Comment("VA START START"));
+                        ins.add(new Lea(new IncomingStackArg(16 + (functionType.size() + (returnInMemory ? 1 : 0)) * 8L),
+                                toOperand(vaList)));
+                        ins.add(new Comment("VA START END"));
+                        continue;
+                    }
                     ins.add(new Comment("VA START START"));
 //                    field   offset
 //                    gp_offset	0
@@ -1469,7 +1661,7 @@ public class Codegen {
                     ins.add(new Mov(LONGWORD, new Imm(48 + doubleArguments.size() * 16),
                             new PseudoMem(vaList.identifier(), 4)));
                     // overflow_arg_area
-                    ins.add(new Lea(new IncomingStackArg(offset),
+                    ins.add(new Lea(new IncomingStackArg(overflowArgOffset),
                             new PseudoMem(vaList.identifier(), 8)));
 
                     // reg_save_area The element points to the start of the
@@ -1480,7 +1672,13 @@ public class Codegen {
                     ins.add(new Comment("VA START END"));
                 }
                 case BuiltinVaArgIr(VarIr vaList, VarIr dst, Type type) ->
-                        emitBuiltInVarArg(vaList, dst, ins, type);
+                        {
+                            if (Mcc.target.isWindowsMsvc()) {
+                                emitWindowsBuiltInVarArg(vaList, dst, ins, type);
+                            } else {
+                                emitBuiltInVarArg(vaList, dst, ins, type);
+                            }
+                        }
                 case MFENCE -> ins.add(MFENCE);
                 case Pos pos -> ins.add(pos);
                 case DebugScopeMarker marker -> ins.add(new LabelIr(marker.label()));
@@ -1513,6 +1711,37 @@ public class Codegen {
             return dst;
         }
         return new PseudoMem(vaList.identifier(), offset);
+    }
+
+    private static Operand aggregateOperand(Operand operand) {
+        return operand instanceof Pseudo p ? new PseudoMem(p.identifier, 0) :
+                operand;
+    }
+
+    private static void emitWindowsBuiltInVarArg(VarIr vaList, VarIr dst,
+                                                 List<Instruction> ins,
+                                                 Type type) {
+        ins.add(new Comment("VA_ARG START"));
+        Operand vaListOperand = toOperand(vaList);
+        Operand dstOperand = toOperand(dst);
+        long typeSize = size(type);
+        boolean byReferenceAggregate =
+                toTypeAsm(type) instanceof ByteArray &&
+                        !(typeSize == 1 || typeSize == 2 || typeSize == 4 || typeSize == 8);
+        long slotSize = byReferenceAggregate ? 8 : ProgramAsm.roundAwayFromZero(typeSize, 8);
+        ins.add(new Mov(QUADWORD, vaListOperand, AX));
+        if (toTypeAsm(type) instanceof ByteArray) {
+            if (!byReferenceAggregate) {
+                copyBytes(ins, new Memory(AX, 0), dstOperand, typeSize);
+            } else {
+                ins.add(new Mov(QUADWORD, new Memory(AX, 0), DX));
+                copyBytes(ins, new Memory(DX, 0), dstOperand, typeSize);
+            }
+        } else {
+            ins.add(new Mov(toTypeAsm(type), new Memory(AX, 0), dstOperand));
+        }
+        ins.add(new Binary(ADD, QUADWORD, new Imm(slotSize), vaListOperand));
+        ins.add(new Comment("VA_ARG END"));
     }
 
     private static void incrementVaListField(VarIr vaList, int offset,
@@ -1722,7 +1951,7 @@ public class Codegen {
             for (TypedOperand to : intDests) {
                 Operand op = to.operand();
                 TypeAsm t = to.type();
-                var r = INTEGER_RETURN_REGISTERS[regIndex];
+                var r = integerReturnRegisters()[regIndex];
                 if (t instanceof ByteArray(long size, _)) {
                     copyBytesToReg(ins, op, r, size);
                 } else {
@@ -1732,7 +1961,7 @@ public class Codegen {
             }
             regIndex = 0;
             for (Operand op : doubleDests) {
-                var r = DOUBLE_REGISTERS[regIndex];
+                var r = doubleRegisters()[regIndex];
                 ins.add(new Mov(DOUBLE, op, r));
                 regIndex++;
             }

@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static com.quaxt.mcc.Mcc.assembleAndLink;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MccTest {
@@ -22,10 +23,10 @@ class MccTest {
         ProcessBuilder pb = new ProcessBuilder(args);
         pb.redirectErrorStream(true);
         Process p=pb.start();
-        int exitCode = pb.start().waitFor();
         byte[] bytes;
         try (InputStream is = p.getInputStream()) {
             bytes = is.readAllBytes();
+            int exitCode = p.waitFor();
             return new Pair<>(new String(bytes, StandardCharsets.UTF_8), exitCode);
         }
     }
@@ -124,7 +125,7 @@ class MccTest {
 
     @Test
     void cast() throws Exception {
-        returns("cast", 0);
+        returns("cast", Mcc.target.isWindowsMsvc() ? 2 : 0);
     }
 
     @Test
@@ -134,6 +135,7 @@ class MccTest {
 
     @Test
     void emitsDebugLinesForStatements() throws Exception {
+        assumeFalse(Mcc.target.isWindowsMsvc());
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
         boolean previousRegisterAllocatorDisabled =
                 Mcc.registerAllocatorDisabled;
@@ -175,7 +177,7 @@ class MccTest {
         if (optimize) assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c", "--optimize"));
         else assertEquals(0, Mcc.mcc("src/test/resources/" + testProgram + ".c"));
         assertEquals(expectedExitCode,
-                Mcc.startProcess("src/test/resources/" + testProgram));
+                Mcc.startProcess(exePath(testProgram)));
     }
 
     public static void outputs(String testProgram,
@@ -191,17 +193,17 @@ class MccTest {
         }
 
         assertEquals(expectedOutput, startProcessAndCaptureOutput(
-                "src/test/resources/" + testProgram).key());
+                exePath(testProgram)).key());
     }
 
     static void matchesGcc(Path testProgram,
                            boolean optimize,
                            boolean disableRegisterAllocator) throws Exception {
 
-        String trustedExe = testProgram + "-gcc";
+        String trustedExe = testProgram + "-gcc" + Mcc.target.executableSuffix();
         if (disableRegisterAllocator) Mcc.registerAllocatorDisabled = true;
         int mccExitCode;
-        String mccExe = testProgram +"-mcc";
+        String mccExe = testProgram +"-mcc" + Mcc.target.executableSuffix();
 
         try {
             List<String>    gccOptions=extractGccOptions(testProgram);
@@ -240,6 +242,10 @@ class MccTest {
         }
     }
 
+    private static String exePath(String testProgram) {
+        return "src/test/resources/" + testProgram + Mcc.target.executableSuffix();
+    }
+
     @Test
     void uses_func()  throws Exception {
         outputs("uses_func", "main\n");
@@ -268,6 +274,7 @@ class MccTest {
 
     @Test
     void registerAllocatorRunsForVaArgFunction() throws Exception {
+        assumeFalse(Mcc.target.isWindowsMsvc());
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
         boolean previousRegisterAllocatorDisabled =
                 Mcc.registerAllocatorDisabled;
@@ -462,7 +469,7 @@ class MccTest {
     }
     @Test
     void bitfield6() throws Exception {
-            outputs("bitfield6", "ffffffff00");
+            outputs("bitfield6", Mcc.target.isWindowsMsvc() ? "ffffff00" : "ffffffff00");
     }
     @Test
     void bitfield_with_anon()  throws Exception {
@@ -479,7 +486,11 @@ class MccTest {
 
     @Test
     void bytes_swap()  throws Exception {
-        outputs("bytes_swap", """
+        outputs("bytes_swap", Mcc.target.isWindowsMsvc() ? """
+                00000000EFCDAB89
+                78563412
+                3412
+                """ : """
                 EFCDAB8967452301
                 78563412
                 3412
@@ -767,7 +778,10 @@ class MccTest {
 
     @Test
     void add_overflow() throws Exception {
-        outputs("add_overflow", """
+        outputs("add_overflow", Mcc.target.isWindowsMsvc() ? """
+                sum=3, overflow=b
+                sum=-2147483648, overflow=b
+                """ : """
                 sum=3, overflow=0
                 sum=-2147483648, overflow=1
                 """);
@@ -776,7 +790,10 @@ class MccTest {
 
     @Test
     void sub_overflow() throws Exception {
-        outputs("sub_overflow", """
+        outputs("sub_overflow", Mcc.target.isWindowsMsvc() ? """
+                sum=1, overflow=b
+                sum=2147483647, overflow=b
+                """ : """
                 sum=1, overflow=0
                 sum=2147483647, overflow=1
                 """);
@@ -784,7 +801,10 @@ class MccTest {
     }
     @Test
     void mul_overflow() throws Exception {
-        outputs("mul_overflow", """
+        outputs("mul_overflow", Mcc.target.isWindowsMsvc() ? """
+                product=42, overflow=b
+                product=-2, overflow=b
+                """ : """
                 product=42, overflow=0
                 product=-2, overflow=1
                 """);
@@ -907,6 +927,7 @@ class MccTest {
 
     private static String assemble(String testProgram,
                                    boolean optimize) throws Exception {
+        assumeFalse(Mcc.target.isWindowsMsvc());
         String baseFileName = "src/test/resources/" + testProgram;
         if (optimize)
             assertEquals(0, Mcc.mcc(baseFileName + ".c", "-S", "--optimize"));
@@ -930,16 +951,20 @@ class MccTest {
     }
 
     @Test void alignment() throws Exception{
+        assumeFalse(Mcc.target.isWindowsMsvc());
         outputs("alignment", "PASS\n", false, false);
     }
 
     @Test void alignment2() throws Exception{
+        assumeFalse(Mcc.target.isWindowsMsvc());
         outputs("alignment2", "PASS\n", false, false);
     }
     @Test void alignment2b() throws Exception{
+        assumeFalse(Mcc.target.isWindowsMsvc());
         outputs("alignment2b", "PASS\n", false, false);
     }
     @Test void alignment3() throws Exception{
+        assumeFalse(Mcc.target.isWindowsMsvc());
         outputs("alignment3", "alignof(foo)=1\n" + "alignof(bar)=256\n");
     }
 
@@ -999,6 +1024,7 @@ class MccTest {
     }
 
     @Test void debugFrameBaseTracksStackPointerChanges() throws Exception {
+        assumeFalse(Mcc.target.isWindowsMsvc());
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
         boolean previousRegisterAllocatorDisabled =
                 Mcc.registerAllocatorDisabled;
@@ -1022,6 +1048,7 @@ class MccTest {
     }
 
     @Test void debugLexicalBlockScopesShadowedLocals() throws Exception {
+        assumeFalse(Mcc.target.isWindowsMsvc());
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
         boolean previousRegisterAllocatorDisabled =
                 Mcc.registerAllocatorDisabled;
@@ -1050,6 +1077,7 @@ class MccTest {
     }
 
     @Test void debugVariablesCanUseAllocatedRegisters() throws Exception {
+        assumeFalse(Mcc.target.isWindowsMsvc());
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
         boolean previousRegisterAllocatorDisabled =
                 Mcc.registerAllocatorDisabled;

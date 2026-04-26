@@ -83,6 +83,7 @@ public class Mcc {
      * This is sometimes useful in testing
      */
     public static boolean registerAllocatorDisabled = false;
+    public static Target target = Target.hostDefault();
 
     public static void setAliased(String identifier) {
         SYMBOL_TABLE.get(identifier).aliased = true;
@@ -101,20 +102,7 @@ public class Mcc {
             }
             case FunType _ -> 0;
             case Pointer _, NullptrT _ -> 8;
-            case CHAR -> 1;
-            case UCHAR -> 1;
-            case SCHAR -> 1;
-            case SHORT -> 2;
-            case USHORT -> 2;
-            case INT -> 4;
-            case FLOAT -> 4;
-            case UINT -> 4;
-            case LONG -> 8;
-            case ULONG -> 8;
-            case ULONGLONG -> 8;
-            case LONGLONG -> 8;
-            case DOUBLE -> 8;
-            case VOID -> 1;
+            case Primitive p -> target.alignment(p);
             case Typeof(Exp e) when e == NULLPTR-> 8;
             case Structure(boolean isUnion, String tag, StructDef _) -> {
                 var st = TYPE_TABLE.get(tag);
@@ -132,20 +120,7 @@ public class Mcc {
                          Exp alignment) -> alignment ==
                     null ? 1 : (int) SemanticAnalysis.evaluateExpAsConstant(alignment).toLong();
             case Pointer _, NullptrT _ -> 8;
-            case CHAR -> 1;
-            case UCHAR -> 1;
-            case SCHAR -> 1;
-            case SHORT -> 2;
-            case USHORT -> 2;
-            case INT -> 4;
-            case UINT -> 4;
-            case FLOAT -> 4;
-            case LONG -> 8;
-            case ULONG -> 8;
-            case LONGLONG -> 8;
-            case ULONGLONG -> 8;
-            case DOUBLE -> 8;
-            case VOID -> 1;
+            case Primitive p -> target.alignment(p);
             case Structure(boolean isUnion, String tag, StructDef _) -> TYPE_TABLE.get(tag).alignment();
             case Aligned(Type _, Exp alignment) -> (int)SemanticAnalysis.evaluateExpAsConstant(alignment).toLong();
             default -> throw new IllegalStateException("Unexpected value: " + type);
@@ -159,21 +134,7 @@ public class Mcc {
                     size(element) * arraySize.toLong();
             case FunType _ -> 0;
             case Pointer _, NullptrT _ -> 8;
-            case BOOL->1;
-            case CHAR -> 1;
-            case UCHAR -> 1;
-            case SCHAR -> 1;
-            case SHORT -> 2;
-            case USHORT -> 2;
-            case INT -> 4;
-            case UINT -> 4;
-            case FLOAT -> 4;
-            case LONG -> 8;
-            case ULONG -> 8;
-            case LONGLONG -> 8;
-            case ULONGLONG -> 8;
-            case DOUBLE -> 8;
-            case VOID -> 1;
+            case Primitive p -> target.size(p);
 
             case Structure(boolean isUnion, String tag, StructDef _) -> {
                 var st = TYPE_TABLE.get(tag);
@@ -234,9 +195,18 @@ public class Mcc {
                                  Path iFile, List<String> includePaths) throws IOException,
             InterruptedException {
         ArrayList<String> args = new ArrayList<>();
-        args.addAll(Arrays.asList("gcc", "-E", "-std=c23", "-D_POSIX_C_SOURCE=200809",
-                cFile.toString(), "-o", iFile.toString()));
-        args.addAll(includePaths);
+        if (target.isWindowsMsvc()) {
+            args.addAll(Arrays.asList("cl", "/nologo", "/P", "/TC",
+                    "/Fi" + iFile, "/I", "src/main/resources/msvc-include",
+                    "/D__ATOMIC_SEQ_CST=5", cFile.toString()));
+            for (String includePath : includePaths) {
+                args.add(includePath.startsWith("-I") ? "/I" + includePath.substring(2) : includePath);
+            }
+        } else {
+            args.addAll(Arrays.asList("gcc", "-E", "-std=c23", "-D_POSIX_C_SOURCE=200809",
+                    cFile.toString(), "-o", iFile.toString()));
+            args.addAll(includePaths);
+        }
         return startProcess(args.toArray(new String[0]));
     }
 
@@ -249,15 +219,32 @@ public class Mcc {
                                       boolean doNotCompile,
                                       List<String> libs,
                                       String outputFileName) throws InterruptedException, IOException {
-        List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc",
-                asmFile.toString()));
-        if (doNotCompile) {
-            gccArgs.add("-c");
+        if (target.isWindowsMsvc()) {
+            Path objectFile = doNotCompile ? Paths.get(outputFileName) :
+                    Files.createTempFile("mcc-", ".obj");
+            int assembleExit = startProcess("ml64", "/nologo", "/c",
+                    "/Fo" + objectFile, asmFile.toString());
+            if (assembleExit != 0 || doNotCompile) return assembleExit;
+            ArrayList<String> linkArgs = new ArrayList<>(Arrays.asList("cl",
+                    "/nologo", objectFile.toString(), "/Fe" + outputFileName,
+                    "/link", "/subsystem:console", "/defaultlib:libcmt",
+                    "/defaultlib:oldnames",
+                    "/defaultlib:legacy_stdio_definitions"));
+            linkArgs.addAll(libs);
+            int linkExit = startProcess(linkArgs.toArray(new String[0]));
+            Files.deleteIfExists(objectFile);
+            return linkExit;
+        } else {
+            List<String> gccArgs = new ArrayList<>(Arrays.asList("gcc",
+                    asmFile.toString()));
+            if (doNotCompile) {
+                gccArgs.add("-c");
+            }
+            gccArgs.addAll(Arrays.asList("-o",
+                    outputFileName));
+            gccArgs.addAll(libs);
+            return startProcess(gccArgs.toArray(new String[0]));
         }
-        gccArgs.addAll(Arrays.asList("-o",
-                outputFileName));
-        gccArgs.addAll(libs);
-        return startProcess(gccArgs.toArray(new String[0]));
     }
 
     public static void main(String[] args) {
@@ -279,6 +266,7 @@ public class Mcc {
         TEMP_COUNT.set(0L);
         ENUM_MAP.clear();
         Codegen.clear();
+        target = Target.hostDefault();
         ArrayList<String> args =
                 Arrays.stream(args0).collect(Collectors.toCollection(ArrayList::new));
         Mode mode = Mode.ASSEMBLE;
@@ -319,6 +307,10 @@ public class Mcc {
                 case "-S", "-s" -> Mode.COMPILE;
                 case "-g" -> {
                     addDebugInfo = true;
+                    yield Mode.DUMMY;
+                }
+                case String s when s.startsWith("--target=") -> {
+                    target = Target.parse(s.substring("--target=".length()));
                     yield Mode.DUMMY;
                 }
                 case "-c" -> {
@@ -377,7 +369,13 @@ public class Mcc {
         Map<String, SemanticAnalysis.TagEntry> structureMap = new DebugHashMap<>();
         ArrayList<Declaration> builtinDeclarations = new ArrayList<>();
 
-        mccHelper("""
+        String vaListBuiltin = target.isWindowsMsvc() ? """
+                typedef char *__builtin_va_list;
+                void abort (void);
+                static inline void __builtin_abort (void) {
+                    abort();
+                }
+                """ : """
                 struct __builtin_va_list_item {
                     unsigned int gp_offset;
                     unsigned int fp_offset;
@@ -390,15 +388,16 @@ public class Mcc {
                 static inline void __builtin_abort (void) {
                     abort();
                 }
-                """, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null,null);
+                """;
+        mccHelper(vaListBuiltin, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null,null);
         BUILTIN_VA_LIST =
-                (Array) Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
+                Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
         ArrayList<Declaration> declarations = new ArrayList<>();
         //Path asmFile = srcFile.resolveSibling(bareFileName + ".s");
         if (outputFileName == null) {
             outputFileName = srcFile.resolveSibling(
-                    bareFileName + (doNotCompile ? ".o" : "")).toString();
-            if (mode == Mode.COMPILE) outputFileName = outputFileName + ".s";
+                    bareFileName + (doNotCompile ? target.objectSuffix() : target.executableSuffix())).toString();
+            if (mode == Mode.COMPILE) outputFileName = srcFile.resolveSibling(bareFileName + target.assemblySuffix()).toString();
         }
 
         return mccHelper(cSource, mode, optimizations, srcFile, doNotCompile, libs, identifierMap, structureMap, declarations, builtinDeclarations, outputFileName);
@@ -417,7 +416,7 @@ public class Mcc {
         return t instanceof Array(Type r, Constant _) ? new Pointer(r) : t;
     }
 
-    public static Array BUILTIN_VA_LIST = null;
+    public static Type BUILTIN_VA_LIST = null;
     private static int mccHelper(String cSource, Mode mode,
                                  EnumSet<Optimization> optimizations,
                                  Path srcFile,
@@ -470,7 +469,7 @@ public class Mcc {
         if (mode == Mode.CODEGEN) {
             return 0;
         }
-        Path asmFile = mode == Mode.COMPILE ? Paths.get(outputFileName) : Paths.get(outputFileName+".s");
+        Path asmFile = mode == Mode.COMPILE ? Paths.get(outputFileName) : Paths.get(outputFileName + target.assemblySuffix());
         try (PrintWriter pw =
                      new PrintWriter(Files.newBufferedWriter(asmFile))) {
             if (addDebugInfo){

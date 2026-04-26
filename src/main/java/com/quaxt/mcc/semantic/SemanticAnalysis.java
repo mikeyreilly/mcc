@@ -1083,8 +1083,9 @@ enclosingFunction), label);
         Var typedAp = (Var) typeCheckExpression(ap);
         var t = typedAp.type();
         if (!t.equals(BUILTIN_VA_LIST) &&
-                !(t instanceof Pointer(Type referenced) &&
-                        referenced.equals(BUILTIN_VA_LIST.element()))) {
+                !(BUILTIN_VA_LIST instanceof Array(Type element, Constant _) &&
+                        t instanceof Pointer(Type referenced) &&
+                        referenced.equals(element))) {
             throw new Err(ap + " is of type " + t + " but va_list is required");
         }
         return typedAp;
