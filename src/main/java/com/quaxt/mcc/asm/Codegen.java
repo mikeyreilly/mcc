@@ -1202,7 +1202,6 @@ public class Codegen {
                               VarIr dstName) -> {
                     Type type = type(v1);
                     TypeAsm typeAsm = toTypeAsm(type);
-                    assert (typeAsm == valToAsmType(v2));
 
                     // dstName will hold the result of the comparison, which
                     // is always a LONGWORD

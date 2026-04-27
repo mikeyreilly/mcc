@@ -15,6 +15,7 @@ import java.util.stream.Stream;
 
 import static com.quaxt.mcc.Mcc.assembleAndLink;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MccTest {
@@ -27,7 +28,8 @@ class MccTest {
         try (InputStream is = p.getInputStream()) {
             bytes = is.readAllBytes();
             int exitCode = p.waitFor();
-            return new Pair<>(new String(bytes, StandardCharsets.UTF_8), exitCode);
+            return new Pair<>(normalizeOutput(new String(bytes,
+                    StandardCharsets.UTF_8)), exitCode);
         }
     }
 
@@ -41,7 +43,12 @@ class MccTest {
             bytes = is.readAllBytes();
         }
         int exitCode = p.waitFor();
-        return new Pair<>(new String(bytes, StandardCharsets.UTF_8), exitCode);
+        return new Pair<>(normalizeOutput(new String(bytes,
+                StandardCharsets.UTF_8)), exitCode);
+    }
+
+    private static String normalizeOutput(String output) {
+        return output.replace("\r\n", "\n");
     }
 
     @Test
@@ -62,6 +69,12 @@ class MccTest {
     @Test
     void hello_world() throws Exception {
         outputs("hello_world", "hello world");
+    }
+
+    @Test
+    void msvc_real_crt_headers() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        outputs("msvc_real_crt_headers", "ok 42 64\n", false, false);
     }
 
     @Test

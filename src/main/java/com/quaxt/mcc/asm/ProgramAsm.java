@@ -10,8 +10,10 @@ import com.quaxt.mcc.tacky.*;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import static com.quaxt.mcc.ArithmeticOperator.*;
 import static com.quaxt.mcc.Mcc.*;
@@ -151,11 +153,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
     private void emitMasm(PrintWriter out) {
         out.println("option casemap:none");
-        for (var e : Mcc.SYMBOL_TABLE.entrySet()) {
-            if (e.getValue().attrs() instanceof FunAttributes(boolean defined, boolean _)
-                    && !defined && !e.getKey().startsWith("__builtin")) {
-                out.println("EXTERN " + masmSymbol(e.getKey()) + ":PROC");
-            }
+        for (String functionName : referencedExternalFunctions()) {
+            out.println("EXTERN " + masmSymbol(functionName) + ":PROC");
         }
         out.println(".code");
         for (TopLevelAsm t : topLevelAsms) {
@@ -174,6 +173,46 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         out.println("END");
     }
 
+    private Set<String> referencedExternalFunctions() {
+        Set<String> referenced = new LinkedHashSet<>();
+        for (TopLevelAsm topLevelAsm : topLevelAsms) {
+            switch (topLevelAsm) {
+                case FunctionIr functionAsm -> {
+                    for (Instruction instruction : functionAsm.instructions) {
+                        if (instruction instanceof Call(LabelAddress(String functionName), FunType _)
+                                && isExternalFunction(functionName)) {
+                            referenced.add(functionName);
+                        }
+                    }
+                }
+                case StaticVariableAsm staticVariableAsm -> {
+                    for (StaticInit init : staticVariableAsm.init()) {
+                        addReferencedFunction(init, referenced);
+                    }
+                }
+                case StaticConstant staticConstant ->
+                        addReferencedFunction(staticConstant.init(), referenced);
+                default -> {}
+            }
+        }
+        return referenced;
+    }
+
+    private static void addReferencedFunction(StaticInit init,
+                                              Set<String> referenced) {
+        if (init instanceof PointerInit(String label, long _)
+                && isExternalFunction(label)) {
+            referenced.add(label);
+        }
+    }
+
+    private static boolean isExternalFunction(String name) {
+        return !name.startsWith("__builtin")
+                && Mcc.SYMBOL_TABLE.get(name) instanceof SymbolTableEntry entry
+                && entry.attrs() instanceof FunAttributes(boolean defined, boolean _)
+                && !defined;
+    }
+
     private void emitMasmStaticConstant(PrintWriter out, StaticConstant v) {
         out.println(".const");
         if (v.alignment() > 1) out.println("ALIGN " + v.alignment());
@@ -188,7 +227,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         if (v.global()) out.println("PUBLIC " + masmSymbol(v.name()));
         if (v.alignment() > 1) out.println("ALIGN " + v.alignment());
         out.println(masmSymbol(v.name()) + " LABEL BYTE");
-        for (StaticInit init : v.init()) writeMasmValue(out, init);
+        if (zeroOnly) {
+            ZeroInit zeroInit = (ZeroInit) v.init().getFirst();
+            out.println("    BYTE " + zeroInit.bytes() + " DUP (?)");
+        } else {
+            for (StaticInit init : v.init()) writeMasmValue(out, init);
+        }
     }
 
     private static void writeMasmValue(PrintWriter out, StaticInit init) {

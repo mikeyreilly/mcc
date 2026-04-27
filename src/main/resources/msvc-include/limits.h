@@ -1,1 +1,0 @@
-#define BITINT_MAXWIDTH 64

@@ -198,7 +198,9 @@ public class Mcc {
         if (target.isWindowsMsvc()) {
             args.addAll(Arrays.asList("cl", "/nologo", "/P", "/TC",
                     "/Fi" + iFile, "/I", "src/main/resources/msvc-include",
-                    "/D__ATOMIC_SEQ_CST=5", cFile.toString()));
+                    "/D__ATOMIC_SEQ_CST=5", "/D_CRT_SECURE_NO_WARNINGS",
+                    "/D_NO_CRT_STDIO_INLINE", "/DBITINT_MAXWIDTH=64",
+                    cFile.toString()));
             for (String includePath : includePaths) {
                 args.add(includePath.startsWith("-I") ? "/I" + includePath.substring(2) : includePath);
             }

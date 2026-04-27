@@ -31,7 +31,7 @@ public class Lexer {
         TokenList tokens = new TokenList();
         int lineNumber = 1;
         String filename="<builtin>";
-        int startOfLine = 0;
+        int startOfLine = -1;
         int len = src.length();
         outer:
         for (int i = 0; i < len; ) {
@@ -53,7 +53,8 @@ public class Lexer {
                 }
 
             }
-            boolean atStartOfLine = i - startOfLine <= 1;
+            boolean atStartOfLine =
+                    containsOnlyHorizontalWhitespace(src, startOfLine + 1, i);
             while (atStartOfLine && src.charAt(i) == '#' && i < len - 1 &&
                     (src.charAt(i + 1) == ' ' || src.startsWith("#line ", i))) {
                 int startOfLineNumber = src.startsWith("#line ", i) ? i + 6 : i + 2;
@@ -86,6 +87,17 @@ public class Lexer {
 
                 }
             }
+            int skippedMsvcKeyword = skipMsvcKeywordCall(src, i);
+            if (skippedMsvcKeyword != -1) {
+                for (int j = i; j < skippedMsvcKeyword; j++) {
+                    if (src.charAt(j) == '\n') {
+                        lineNumber++;
+                        startOfLine = j;
+                    }
+                }
+                i = skippedMsvcKeyword;
+                continue;
+            }
             matcher.region(i, src.length());
             for (Token tokenType : TOKEN_TYPES_TO_MATCH) {
                 matcher.usePattern(tokenType.regex());
@@ -107,12 +119,18 @@ public class Lexer {
                                 tokenType == HEX_LONG_LITERAL ||
                                 tokenType == UNSIGNED_HEX_INT_LITERAL ||
                                 tokenType == HEX_INT_LITERAL ||
-                                tokenType == INT_LITERAL ||
-                                tokenType == LONG_LITERAL ||
-                                tokenType == UNSIGNED_INT_LITERAL ||
-                                tokenType == UNSIGNED_LONG_LITERAL) {
+                                        tokenType == INT_LITERAL ||
+                                        tokenType == LONG_LITERAL ||
+                                        tokenType == UNSIGNED_INT_LITERAL ||
+                                        tokenType == UNSIGNED_LONG_LITERAL) {
                             int start = matcher.start();
                             String value = src.substring(start, end);
+                            if (value.equals("__int64")) {
+                                tokens.add(LONG, filename, lineNumber);
+                                tokens.add(LONG, filename, lineNumber);
+                                i = end;
+                                continue outer;
+                            }
                             Token token = switch (value) {
                                 case "_Atomic" -> ATOMIC;
                                 case "alignof", "_Alignof", "__alignof__" ->
@@ -131,6 +149,11 @@ public class Lexer {
                                 case "__builtin_va_arg" -> BUILTIN_VA_ARG;
                                 case "__builtin_va_end" -> BUILTIN_VA_END;
                                 case "__extension__" -> null;
+                                case "__cdecl", "_cdecl", "__stdcall", "_stdcall",
+                                     "__fastcall", "_fastcall", "__thiscall",
+                                     "__vectorcall", "__clrcall", "__ptr32",
+                                     "__ptr64", "__sptr", "__uptr",
+                                     "__unaligned" -> null;
                                 case "__restrict" -> RESTRICT;
                                 case "__restrict__" -> RESTRICT;
                                 case "__signed__" -> SIGNED;
@@ -154,6 +177,7 @@ public class Lexer {
                                 case "int" -> INT;
                                 case "inline" -> INLINE;
                                 case "__inline" -> INLINE;
+                                case "__inline__", "__forceinline" -> INLINE;
                                 case "long" -> LONG;
                                 case "nullptr" -> NULLPTR;
                                 case "register" -> REGISTER;
@@ -190,6 +214,73 @@ public class Lexer {
                     " at " + src.substring(i));
         }
         return tokens;
+    }
+
+    private static int skipMsvcKeywordCall(String src, int start) {
+        if (startsWithWord(src, start, "__declspec")) {
+            return skipParenthesizedCall(src, start + "__declspec".length());
+        }
+        if (startsWithWord(src, start, "__pragma")) {
+            return skipParenthesizedCall(src, start + "__pragma".length());
+        }
+        return -1;
+    }
+
+    private static boolean containsOnlyHorizontalWhitespace(String src,
+                                                           int start,
+                                                           int end) {
+        for (int i = start; i < end; i++) {
+            char c = src.charAt(i);
+            if (c != ' ' && c != '\t' && c != '\r' && c != '\f') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean startsWithWord(String src, int start, String word) {
+        if (!src.startsWith(word, start)) return false;
+        int end = start + word.length();
+        return end >= src.length() || !isIdentifierPart(src.charAt(end));
+    }
+
+    private static boolean isIdentifierPart(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
+    }
+
+    private static int skipParenthesizedCall(String src, int start) {
+        int i = start;
+        while (i < src.length() && Character.isWhitespace(src.charAt(i))) {
+            i++;
+        }
+        if (i >= src.length() || src.charAt(i) != '(') return -1;
+
+        int depth = 0;
+        boolean inString = false;
+        boolean inChar = false;
+        boolean escaped = false;
+        for (; i < src.length(); i++) {
+            char c = src.charAt(i);
+            if (escaped) {
+                escaped = false;
+            } else if (inString) {
+                if (c == '\\') escaped = true;
+                else if (c == '"') inString = false;
+            } else if (inChar) {
+                if (c == '\\') escaped = true;
+                else if (c == '\'') inChar = false;
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == '\'') {
+                inChar = true;
+            } else if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+                if (depth == 0) return i + 1;
+            }
+        }
+        return -1;
     }
 
 }
