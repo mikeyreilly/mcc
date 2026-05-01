@@ -366,7 +366,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             case Indexed(IntegerReg base, IntegerReg index, int scale) ->
                     (withSize ? sizePrefix(t) : "") + "[" + base.q + "+" +
                             index.q + "*" + scale + "]";
-            case LabelAddress(String label) -> masmSymbol(label);
+            case LabelAddress(String label) -> "OFFSET " + masmSymbol(label);
             case Pseudo p -> p.identifier;
             default -> throw new IllegalStateException("Unexpected value: " + o);
         };

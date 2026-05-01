@@ -875,10 +875,11 @@ public class IrGen {
             case Cast(Type t, Exp inner): {
                 ValIr result = emitTackyAndConvert(inner, instructions, inlineFunctions);
                 Type innerType = inner.type();
-                // for the purposes of casting we treat pointers exactly like
-                // unsigned long (p. 375)
-                if (t instanceof Pointer) t = ULONG;
-                if (innerType instanceof Pointer) innerType = ULONG;
+                // For casts, model pointers as an unsigned integer with pointer
+                // width. On MSVC, unsigned long is only 32 bits.
+                if (t instanceof Pointer) t = pointerIntegerType();
+                if (innerType instanceof Pointer || innerType instanceof FunType)
+                    innerType = pointerIntegerType();
                 if (t == innerType || t == VOID) {
                     return new PlainOperand(result);
                 }
@@ -1273,6 +1274,10 @@ public class IrGen {
                 instructions.add(new ZeroExtendIr(src, dst));
             }
         }
+    }
+
+    private static Primitive pointerIntegerType() {
+        return Mcc.target.isWindowsMsvc() ? ULONGLONG : ULONG;
     }
 
     private static String tag(Exp structure) {

@@ -297,7 +297,12 @@ public class Codegen {
                     }
                 }
                 case Mov(TypeAsm typeAsm, Operand src, Operand dst) -> {
-                    if (isRam(src) && isRam(dst)) {
+                    if (Mcc.target.isWindowsMsvc() && src instanceof LabelAddress && isRam(dst)) {
+                        instructions.set(i, new Mov(QUADWORD, src,
+                                srcReg(QUADWORD)));
+                        instructions.add(i + 1, new Mov(QUADWORD,
+                                srcReg(QUADWORD), dst));
+                    } else if (isRam(src) && isRam(dst)) {
                         instructions.set(i, new Mov(typeAsm, src,
                                 srcReg(typeAsm)));
                         instructions.add(i + 1, new Mov(typeAsm,
@@ -374,7 +379,24 @@ public class Codegen {
                 }
 
                 case Cmp(TypeAsm typeAsm, Operand src, Operand dst) -> {
-                    if ((typeAsm == DOUBLE || typeAsm == FLOAT) && !(dst instanceof DoubleReg)) {
+                    if (Mcc.target.isWindowsMsvc() && src instanceof LabelAddress && dst instanceof LabelAddress) {
+                        instructions.set(i, new Mov(QUADWORD, dst,
+                                dstReg(QUADWORD)));
+                        instructions.add(i + 1, new Mov(QUADWORD, src,
+                                srcReg(QUADWORD)));
+                        instructions.add(i + 2, new Cmp(QUADWORD,
+                                srcReg(QUADWORD), dstReg(QUADWORD)));
+                    } else if (Mcc.target.isWindowsMsvc() && dst instanceof LabelAddress) {
+                        instructions.set(i, new Mov(QUADWORD, dst,
+                                dstReg(QUADWORD)));
+                        instructions.add(i + 1, new Cmp(QUADWORD, src,
+                                dstReg(QUADWORD)));
+                    } else if (Mcc.target.isWindowsMsvc() && src instanceof LabelAddress) {
+                        instructions.set(i, new Mov(QUADWORD, src,
+                                srcReg(QUADWORD)));
+                        instructions.add(i + 1, new Cmp(QUADWORD,
+                                srcReg(QUADWORD), dst));
+                    } else if ((typeAsm == DOUBLE || typeAsm == FLOAT) && !(dst instanceof DoubleReg)) {
                         instructions.set(i, new Mov(typeAsm, dst,
                                 dstReg(typeAsm)));
                         instructions.add(i + 1, new Cmp(typeAsm, src,
