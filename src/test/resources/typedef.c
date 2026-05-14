@@ -25,10 +25,10 @@ int main(void) {
     if (a() != 5) {
         return 1;
     }
-    if (b() != 17 + 8) {
+    if (b() != 17 + sizeof(long)) {
         return 2;
     }
-    if (c() != 8) {
+    if (c() != sizeof(long)) {
         return 3;
     }
     if (d() != 4) {

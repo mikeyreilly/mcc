@@ -1,4 +1,4 @@
-typedef long unsigned int size_t;
+typedef __SIZE_TYPE__ size_t;
 extern int printf (const char *__restrict __format, ...);
 
 int main ()

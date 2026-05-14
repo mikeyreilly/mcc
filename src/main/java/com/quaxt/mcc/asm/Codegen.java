@@ -1114,7 +1114,17 @@ public class Codegen {
                     if (index instanceof Imm(long l)) {
                         ins.add(new Lea(new Memory(AX, l * scale), dst));
                     } else {
-                        ins.add(new Mov(QUADWORD, index, DX));
+                        Type indexType = type(indexV);
+                        TypeAsm indexTypeAsm = toTypeAsm(indexType);
+                        if (indexTypeAsm == QUADWORD) {
+                            ins.add(new Mov(QUADWORD, index, DX));
+                        } else if (indexType.isSigned()) {
+                            ins.add(new Movsx(indexTypeAsm, QUADWORD,
+                                    index, DX));
+                        } else {
+                            ins.add(new MovZeroExtend(indexTypeAsm, QUADWORD,
+                                    index, DX));
+                        }
                         switch (scale) {
                             case 1, 2, 4, 8 ->
                                     ins.add(new Lea(new Indexed(AX, DX,

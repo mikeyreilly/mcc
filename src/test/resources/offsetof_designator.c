@@ -12,6 +12,11 @@ struct Picture {
 	struct Tile tiles[3];
 };
 
+struct RuntimeGridPrefix {
+	char tag;
+	unsigned long rows[1];
+};
+
 static unsigned long nested_designator_offset(int tile, int pixel, int channel) {
 	return __builtin_offsetof(struct Picture,
 			tiles[tile].pixels[pixel].channels[channel]);
@@ -24,6 +29,11 @@ static unsigned long runtime_stride_offset(int columns, int row, int column) {
 		RuntimeRow rows[3];
 	};
 	return __builtin_offsetof(struct RuntimeGrid, rows[row][column]);
+}
+
+static unsigned long runtime_stride_expected(int columns, int row, int column) {
+	return __builtin_offsetof(struct RuntimeGridPrefix, rows)
+			+ (row * columns + column) * sizeof(unsigned long);
 }
 
 int main(void) {
@@ -40,7 +50,7 @@ int main(void) {
 		return 3;
 	}
 
-	if (runtime_stride_offset(7, 2, 5) != 160) {
+	if (runtime_stride_offset(7, 2, 5) != runtime_stride_expected(7, 2, 5)) {
 		return 4;
 	}
 	return 0;

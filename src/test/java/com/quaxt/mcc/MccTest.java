@@ -138,7 +138,7 @@ class MccTest {
 
     @Test
     void cast() throws Exception {
-        returns("cast", Mcc.target.isWindowsMsvc() ? 2 : 0);
+        returns("cast", 0);
     }
 
     @Test
@@ -413,12 +413,12 @@ class MccTest {
 
     @Test
     void varargs_struct()  throws Exception {
-        returns("varargs_struct", 163, false, false);
+        outputs("varargs_struct", "2979\n", false, false);
     }
 
     @Test
     void varargs_struct2()  throws Exception {
-        returns("varargs_struct2", 163);
+        outputs("varargs_struct2", "2979\n");
     }
 
     @Test
@@ -873,13 +873,22 @@ class MccTest {
 
     @Test
     void double_to_uint() throws Exception {
-        outputs("double_to_uint", """
+        String longOutput = Mcc.target.isWindowsMsvc() ? """
+                long
+                4294967295
+                1
+                1410065408
+                0
+                0
+                """ : """
                 long
                 18446744073709551615
                 1
                 10000000000
                 0
                 0
+                """;
+        outputs("double_to_uint", longOutput + """
                 int
                 4294967295
                 1

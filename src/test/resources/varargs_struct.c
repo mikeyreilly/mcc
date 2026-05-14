@@ -1,5 +1,7 @@
 #include <stdarg.h>
 
+extern int printf (const char *__restrict __format, ...);
+
 struct S {
     int i;
     double d;
@@ -47,5 +49,6 @@ int main(void) {
         700,
         37.0
     };
-    return foo(a0,a1,a2,a3,a4,a5,a6);
+    printf("%d\n", foo(a0,a1,a2,a3,a4,a5,a6));
+    return 0;
 }

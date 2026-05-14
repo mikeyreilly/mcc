@@ -13,7 +13,7 @@ int main(int argc, char** args) {
     if (sum != 20) {
         return 1;
     }
-    long l = 1L + (1L << 32);
+    long long l = 1LL + (1LL << 32);
     int i = (int) l;
     if (i != 1) {
         return 2;

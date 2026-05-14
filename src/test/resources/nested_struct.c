@@ -1,4 +1,4 @@
-typedef long unsigned int size_t;
+typedef __SIZE_TYPE__ size_t;
 extern int printf (const char * __format, ...);
 extern int snprintf (char * __s, size_t __maxlen, const char * __format, ...);
 extern void perror (const char *__s);
@@ -13,8 +13,8 @@ struct Outer {
 };
 int main(void) {
     int n = 3;
-    printf("sizeof(struct Outer) = %lu\n", sizeof(struct Outer));
-    printf("offsetof(struct Outer, inner) = %lu\n", __builtin_offsetof(struct Outer, inner));
+    printf("sizeof(struct Outer) = %zu\n", sizeof(struct Outer));
+    printf("offsetof(struct Outer, inner) = %zu\n", __builtin_offsetof(struct Outer, inner));
     struct Outer *outer = malloc(sizeof(struct Outer) + n * sizeof(outer->inner[0]));
     if (!outer) {
         perror("malloc");

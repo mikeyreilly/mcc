@@ -446,7 +446,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             }
             case Cdq(TypeAsm t) -> t == QUADWORD ? "cqo" : "cdq";
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
-                    "movsx " + windowsOperand(dstType, instruction, dst, spDelta, false) +
+                    (srcType == LONGWORD && dstType == QUADWORD ? "movsxd " : "movsx ") +
+                            windowsOperand(dstType, instruction, dst, spDelta, false) +
                             ", " + windowsOperand(srcType, instruction, src, spDelta, true);
             case MovZeroExtend(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
                     "movzx " + windowsOperand(dstType, instruction, dst, spDelta, false) +
