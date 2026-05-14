@@ -91,7 +91,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
     public void emitAsm(PrintWriter out, Path srcFile) {
         if (Mcc.target.isWindowsMsvc()) {
-            emitMasm(out);
+            emitWindowsClang(out);
             return;
         }
         String textStart = null;
@@ -151,26 +151,22 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 "@progbits");
     }
 
-    private void emitMasm(PrintWriter out) {
-        out.println("option casemap:none");
-        for (String functionName : referencedExternalFunctions()) {
-            out.println("EXTERN " + masmSymbol(functionName) + ":PROC");
-        }
-        out.println(".code");
+    private void emitWindowsClang(PrintWriter out) {
+        out.println(".intel_syntax noprefix");
+        out.println(".text");
         for (TopLevelAsm t : topLevelAsms) {
             if (t instanceof FunctionIr functionAsm) {
                 prepareStackMetadata(functionAsm, false);
-                emitMasmFunction(out, functionAsm);
+                emitWindowsFunction(out, functionAsm);
             }
         }
         for (TopLevelAsm t : topLevelAsms) {
             switch (t) {
-                case StaticVariableAsm staticVariableAsm -> emitMasmStaticVariable(out, staticVariableAsm);
-                case StaticConstant sc -> emitMasmStaticConstant(out, sc);
+                case StaticVariableAsm staticVariableAsm -> emitWindowsStaticVariable(out, staticVariableAsm);
+                case StaticConstant sc -> emitWindowsStaticConstant(out, sc);
                 default -> {}
             }
         }
-        out.println("END");
     }
 
     private Set<String> referencedExternalFunctions() {
@@ -213,73 +209,61 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 && !defined;
     }
 
-    private void emitMasmStaticConstant(PrintWriter out, StaticConstant v) {
-        out.println(".const");
-        if (v.alignment() > 1) out.println("ALIGN " + v.alignment());
-        out.println(masmLocal("L" + v.label()) + " LABEL BYTE");
-        writeMasmValue(out, v.init());
+    private void emitWindowsStaticConstant(PrintWriter out, StaticConstant v) {
+        out.println(".section .rdata,\"dr\"");
+        if (v.alignment() > 1) out.println("    .balign " + v.alignment());
+        out.println(windowsLocal("L" + v.label()) + ":");
+        writeWindowsValue(out, v.init());
     }
 
-    private void emitMasmStaticVariable(PrintWriter out, StaticVariableAsm v) {
+    private void emitWindowsStaticVariable(PrintWriter out, StaticVariableAsm v) {
         boolean zeroOnly = v.init().size() == 1 &&
                 v.init().getFirst() instanceof ZeroInit;
-        out.println(zeroOnly ? ".data?" : ".data");
-        if (v.global()) out.println("PUBLIC " + masmSymbol(v.name()));
-        if (v.alignment() > 1) out.println("ALIGN " + v.alignment());
-        out.println(masmSymbol(v.name()) + " LABEL BYTE");
+        out.println(zeroOnly ? ".bss" : ".data");
+        if (v.global()) out.println("    .globl " + windowsSymbol(v.name()));
+        if (v.alignment() > 1) out.println("    .balign " + v.alignment());
+        out.println(windowsSymbol(v.name()) + ":");
         if (zeroOnly) {
             ZeroInit zeroInit = (ZeroInit) v.init().getFirst();
-            out.println("    BYTE " + zeroInit.bytes() + " DUP (?)");
+            out.println("    .zero " + zeroInit.bytes());
         } else {
-            for (StaticInit init : v.init()) writeMasmValue(out, init);
+            for (StaticInit init : v.init()) writeWindowsValue(out, init);
         }
     }
 
-    private static void writeMasmValue(PrintWriter out, StaticInit init) {
+    private static void writeWindowsValue(PrintWriter out, StaticInit init) {
         String s = switch (init) {
-            case DoubleInit(double d) -> "QWORD " + Double.doubleToLongBits(d);
-            case FloatInit(float d) -> "DWORD " + Float.floatToIntBits(d);
-            case ShortInit(short l) -> "WORD " + l;
-            case UShortInit(short l) -> "WORD " + Integer.toUnsignedString(l & 0xffff);
-            case IntInit(int l) -> "DWORD " + l;
-            case LongInit(long l) -> "DWORD " + (int) l;
-            case LongLongInit(long l) -> "QWORD " + l;
-            case UIntInit(int l) -> "DWORD " + Integer.toUnsignedString(l);
-            case ULongInit(long l) -> "DWORD " + Integer.toUnsignedString((int) l);
-            case ULongLongInit(long l) -> "QWORD " + Long.toUnsignedString(l);
-            case ZeroInit(long l) -> "BYTE " + l + " DUP (0)";
-            case CharInit(byte i) -> "BYTE " + (i & 0xff);
-            case UCharInit(byte i) -> "BYTE " + (i & 0xff);
-            case BoolInit(byte i) -> "BYTE " + (i & 0xff);
+            case DoubleInit(double d) -> ".quad " + Double.doubleToLongBits(d);
+            case FloatInit(float d) -> ".long " + Float.floatToIntBits(d);
+            case ShortInit(short l) -> ".short " + l;
+            case UShortInit(short l) -> ".short " + Integer.toUnsignedString(l & 0xffff);
+            case IntInit(int l) -> ".long " + l;
+            case LongInit(long l) -> ".long " + (int) l;
+            case LongLongInit(long l) -> ".quad " + l;
+            case UIntInit(int l) -> ".long " + Integer.toUnsignedString(l);
+            case ULongInit(long l) -> ".long " + Integer.toUnsignedString((int) l);
+            case ULongLongInit(long l) -> ".quad " + Long.toUnsignedString(l);
+            case ZeroInit(long l) -> ".zero " + l;
+            case CharInit(byte i) -> ".byte " + (i & 0xff);
+            case UCharInit(byte i) -> ".byte " + (i & 0xff);
+            case BoolInit(byte i) -> ".byte " + (i & 0xff);
             case PointerInit(String label, long offset) -> {
                 boolean isConstant =
                         BACKEND_SYMBOL_TABLE.get(label) instanceof ObjEntry e && e.isConstant();
-                String symbol = isConstant ? masmLocal("L" + label) : masmSymbol(label);
-                yield "QWORD " + symbol + (offset == 0 ? "" :
+                String symbol = isConstant ? windowsLocal("L" + label) : windowsSymbol(label);
+                yield ".quad " + symbol + (offset == 0 ? "" :
                         offset > 0 ? " + " + offset : " - " + -offset);
             }
             case StringInit(String s0, boolean nullTerminated) ->
-                    masmStringBytes(s0, nullTerminated);
+                    stringDirective(s0, nullTerminated).toString();
         };
         out.println("    " + s);
     }
 
-    private static String masmStringBytes(String s, boolean nullTerminated) {
-        ArrayList<String> bytes = new ArrayList<>();
-        for (int i = 0; i < s.length(); i++) bytes.add(Integer.toString(s.charAt(i) & 0xff));
-        if (nullTerminated) bytes.add("0");
-        ArrayList<String> lines = new ArrayList<>();
-        for (int i = 0; i < bytes.size(); i += 32) {
-            lines.add("BYTE " + String.join(",",
-                    bytes.subList(i, Math.min(i + 32, bytes.size()))));
-        }
-        return String.join(System.lineSeparator() + "    ", lines);
-    }
-
-    private void emitMasmFunction(PrintWriter out, FunctionIr functionAsm) {
-        String name = masmSymbol(functionAsm.name);
-        if (functionAsm.global) out.println("PUBLIC " + name);
-        out.println(name + " PROC");
+    private void emitWindowsFunction(PrintWriter out, FunctionIr functionAsm) {
+        String name = windowsSymbol(functionAsm.name);
+        if (functionAsm.global) out.println("    .globl " + name);
+        out.println(name + ":");
         printIndent(out, "push rbp");
         printIndent(out, "mov rbp, rsp");
         long stackSize = functionAsm.stackSize;
@@ -295,13 +279,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             printIndent(out, "push " + calleeSavedRegs[i].q);
         }
         for (int i = 0; i < functionAsm.instructions.size(); i++) {
-            emitMasmInstruction(out, functionAsm.instructions.get(i),
+            emitWindowsInstruction(out, functionAsm.instructions.get(i),
                     functionAsm.instructionStackDeltas[i], functionAsm);
         }
-        out.println(name + " ENDP");
     }
 
-    private static String masmSymbol(String s) {
+    private static String windowsSymbol(String s) {
         String base = s.replace('.', '$');
         SymbolTableEntry entry = Mcc.SYMBOL_TABLE.get(s);
         if (!"main".equals(s) && entry != null &&
@@ -315,12 +298,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         return base;
     }
 
-    private static String masmLocal(String s) {
-        return "$" + masmSymbol(s).replace("$L", "L");
+    private static String windowsLocal(String s) {
+        return ".L" + windowsSymbol(s).replace("$L", "L");
     }
 
-    private static String masmLabel(String s) {
-        return s.startsWith(".") ? masmLocal(s.substring(1)) : masmSymbol(s);
+    private static String windowsLabel(String s) {
+        return s.startsWith(".") ? s : windowsSymbol(s);
     }
 
     private static String sizePrefix(TypeAsm t) {
@@ -335,7 +318,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         };
     }
 
-    private static String masmOperand(TypeAsm t, Instruction s, Operand o,
+    private static String windowsOperand(TypeAsm t, Instruction s, Operand o,
                                       long spDelta, boolean withSize) {
         return switch (o) {
             case Imm(long i) -> Long.toString(i);
@@ -359,14 +342,14 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             case Data(String identifier, long offset) -> {
                 boolean isConstant =
                         BACKEND_SYMBOL_TABLE.get(identifier) instanceof ObjEntry e && e.isConstant();
-                String label = isConstant ? masmLocal("L" + identifier) : masmSymbol(identifier);
-                yield (withSize ? sizePrefix(t) : "") + "[" + label +
+                String label = isConstant ? windowsLocal("L" + identifier) : windowsSymbol(identifier);
+                yield (withSize ? sizePrefix(t) : "") + "[rip+" + label +
                         (offset == 0 ? "" : signed(offset)) + "]";
             }
             case Indexed(IntegerReg base, IntegerReg index, int scale) ->
                     (withSize ? sizePrefix(t) : "") + "[" + base.q + "+" +
                             index.q + "*" + scale + "]";
-            case LabelAddress(String label) -> "OFFSET " + masmSymbol(label);
+            case LabelAddress(String label) -> "OFFSET " + windowsSymbol(label);
             case Pseudo p -> p.identifier;
             default -> throw new IllegalStateException("Unexpected value: " + o);
         };
@@ -376,25 +359,29 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         return offset == 0 ? "" : offset > 0 ? "+" + offset : Long.toString(offset);
     }
 
-    private void emitMasmInstruction(PrintWriter out, Instruction instruction,
+    private void emitWindowsInstruction(PrintWriter out, Instruction instruction,
                                      long spDelta, FunctionIr functionAsm) {
         String s = switch (instruction) {
             case Pos _, Comment _ -> null;
-            case LabelIr(String label) -> masmLabel(label) + ":";
+            case LabelIr(String label) -> windowsLabel(label) + ":";
             case Literal(String string) -> string;
             case Mov(TypeAsm t, Operand src, Operand dst) -> {
+                if (src instanceof LabelAddress(String label) && dst instanceof IntegerReg reg) {
+                    yield "lea " + windowsOperand(QUADWORD, instruction, reg, spDelta, false) +
+                            ", [rip+" + windowsSymbol(label) + "]";
+                }
                 String op = t == QUADWORD && (src instanceof DoubleReg || dst instanceof DoubleReg)
                         ? "movq" : (t == DOUBLE || t == FLOAT) ? "mov" + t.suffix() : "mov";
-                yield op + " " + masmOperand(t, instruction, dst, spDelta, true) +
-                        ", " + masmOperand(t, instruction, src, spDelta, src instanceof Memory || src instanceof Data || src instanceof FrameSlot || src instanceof IncomingStackArg);
+                yield op + " " + windowsOperand(t, instruction, dst, spDelta, true) +
+                        ", " + windowsOperand(t, instruction, src, spDelta, src instanceof Memory || src instanceof Data || src instanceof FrameSlot || src instanceof IncomingStackArg);
             }
             case Xchg(TypeAsm t, Operand src, Operand dst) ->
-                    "xchg " + masmOperand(t, instruction, dst, spDelta, true) +
-                            ", " + masmOperand(t, instruction, src, spDelta, true);
+                    "xchg " + windowsOperand(t, instruction, dst, spDelta, true) +
+                            ", " + windowsOperand(t, instruction, src, spDelta, true);
             case Lea(Operand src, Operand dst) ->
-                    "lea " + masmOperand(QUADWORD, instruction, dst, spDelta, false) +
-                            ", " + masmOperand(QUADWORD, instruction, src, spDelta, true);
-            case Push(Operand arg) -> "push " + masmOperand(QUADWORD, instruction, arg, spDelta, false);
+                    "lea " + windowsOperand(QUADWORD, instruction, dst, spDelta, false) +
+                            ", " + windowsOperand(QUADWORD, instruction, src, spDelta, true);
+            case Push(Operand arg) -> "push " + windowsOperand(QUADWORD, instruction, arg, spDelta, false);
             case Pop(IntegerReg arg) -> "pop " + arg.q;
             case Nullary.RET -> {
                 StringBuilder b = new StringBuilder();
@@ -415,7 +402,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                     case BSWAP -> t == WORD ? "rol" : "bswap";
                     default -> throw new AssertionError("can't format " + op);
                 };
-                yield mnemonic + " " + masmOperand(t, instruction, operand, spDelta, true)
+                yield mnemonic + " " + windowsOperand(t, instruction, operand, spDelta, true)
                         + (op == UnaryOperator.BSWAP && t == WORD ? ", 8" : "");
             }
             case Binary(ArithmeticOperator op, TypeAsm t, Operand src, Operand dst) -> {
@@ -438,32 +425,32 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                     case SHL, SAR, SHR -> BYTE;
                     default -> t;
                 };
-                yield mnemonic + " " + masmOperand(t, instruction, dst, spDelta, true) +
-                        ", " + masmOperand(srcType, instruction, src, spDelta, true);
+                yield mnemonic + " " + windowsOperand(t, instruction, dst, spDelta, true) +
+                        ", " + windowsOperand(srcType, instruction, src, spDelta, true);
             }
             case Cmp(TypeAsm t, Operand subtrahend, Operand minuend) -> {
                 String mnemonic = t == DOUBLE ? "comisd" : t == FLOAT ? "comiss" : "cmp";
-                yield mnemonic + " " + masmOperand(t, instruction, minuend, spDelta, true) +
-                        ", " + masmOperand(t, instruction, subtrahend, spDelta, true);
+                yield mnemonic + " " + windowsOperand(t, instruction, minuend, spDelta, true) +
+                        ", " + windowsOperand(t, instruction, subtrahend, spDelta, true);
             }
-            case Jump(String label) -> "jmp " + masmLabel(label);
-            case JmpCC(CC cc, String label) -> "j" + cc.name().toLowerCase(Locale.ENGLISH) + " " + masmLabel(label);
+            case Jump(String label) -> "jmp " + windowsLabel(label);
+            case JmpCC(CC cc, String label) -> "j" + cc.name().toLowerCase(Locale.ENGLISH) + " " + windowsLabel(label);
             case SetCC(CmpOperator cmpOperator, boolean unsigned, Operand o) ->
                     "set" + (unsigned ? cmpOperator.unsignedCode : cmpOperator.code) +
-                            " " + masmOperand(BYTE, instruction, o, spDelta, true);
+                            " " + windowsOperand(BYTE, instruction, o, spDelta, true);
             case Call(Operand address, FunType _) -> {
                 if (address instanceof LabelAddress(String functionName)) {
-                    yield "call " + masmSymbol(functionName);
+                    yield "call " + windowsSymbol(functionName);
                 }
-                yield "call " + masmOperand(QUADWORD, instruction, address, spDelta, true);
+                yield "call " + windowsOperand(QUADWORD, instruction, address, spDelta, true);
             }
             case Cdq(TypeAsm t) -> t == QUADWORD ? "cqo" : "cdq";
             case Movsx(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
-                    "movsx " + masmOperand(dstType, instruction, dst, spDelta, false) +
-                            ", " + masmOperand(srcType, instruction, src, spDelta, true);
+                    "movsx " + windowsOperand(dstType, instruction, dst, spDelta, false) +
+                            ", " + windowsOperand(srcType, instruction, src, spDelta, true);
             case MovZeroExtend(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) ->
-                    "movzx " + masmOperand(dstType, instruction, dst, spDelta, false) +
-                            ", " + masmOperand(srcType, instruction, src, spDelta, true);
+                    "movzx " + windowsOperand(dstType, instruction, dst, spDelta, false) +
+                            ", " + windowsOperand(srcType, instruction, src, spDelta, true);
             case Cvt(TypeAsm srcType, TypeAsm dstType, Operand src, Operand dst) -> {
                 String mnemonic;
                 if (srcType.isInteger()) {
@@ -475,12 +462,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                     mnemonic = dstType == DOUBLE ? "cvtss2sd" :
                             dstType == QUADWORD ? "cvttss2si" : "cvttss2si";
                 }
-                yield mnemonic + " " + masmOperand(dstType, instruction, dst, spDelta, false) +
-                        ", " + masmOperand(srcType, instruction, src, spDelta, true);
+                yield mnemonic + " " + windowsOperand(dstType, instruction, dst, spDelta, false) +
+                        ", " + windowsOperand(srcType, instruction, src, spDelta, true);
             }
             case Test(TypeAsm t, Operand src1, Operand src2) ->
-                    "test " + masmOperand(t, instruction, src2, spDelta, true) +
-                            ", " + masmOperand(t, instruction, src1, spDelta, true);
+                    "test " + windowsOperand(t, instruction, src2, spDelta, true) +
+                            ", " + windowsOperand(t, instruction, src1, spDelta, true);
         };
         if (s == null) return;
         if (instruction instanceof LabelIr) out.println(s);

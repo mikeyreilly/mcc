@@ -35,7 +35,7 @@ public enum Target {
     }
 
     public String assemblySuffix() {
-        return isWindowsMsvc() ? ".asm" : ".s";
+        return ".s";
     }
 
     public long size(Type type) {

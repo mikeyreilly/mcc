@@ -196,7 +196,7 @@ public class Mcc {
             InterruptedException {
         ArrayList<String> args = new ArrayList<>();
         if (target.isWindowsMsvc()) {
-            args.addAll(Arrays.asList("cl", "/nologo", "/P", "/TC",
+            args.addAll(Arrays.asList("clang-cl", "/nologo", "/P", "/TC",
                     "/Fi" + iFile, "/I", "src/main/resources/msvc-include",
                     "/D__ATOMIC_SEQ_CST=5", "/D_CRT_SECURE_NO_WARNINGS",
                     "/D_NO_CRT_STDIO_INLINE", "/DBITINT_MAXWIDTH=64",
@@ -224,14 +224,16 @@ public class Mcc {
         if (target.isWindowsMsvc()) {
             Path objectFile = doNotCompile ? Paths.get(outputFileName) :
                     Files.createTempFile("mcc-", ".obj");
-            int assembleExit = startProcess("ml64", "/nologo", "/c",
-                    "/Fo" + objectFile, asmFile.toString());
+            int assembleExit = startProcess("clang",
+                    "--target=x86_64-pc-windows-msvc",
+                    "-x", "assembler", "-c", asmFile.toString(),
+                    "-o", objectFile.toString());
             if (assembleExit != 0 || doNotCompile) return assembleExit;
-            ArrayList<String> linkArgs = new ArrayList<>(Arrays.asList("cl",
-                    "/nologo", objectFile.toString(), "/Fe" + outputFileName,
-                    "/link", "/subsystem:console", "/defaultlib:libcmt",
-                    "/defaultlib:oldnames",
-                    "/defaultlib:legacy_stdio_definitions"));
+            ArrayList<String> linkArgs = new ArrayList<>(Arrays.asList("clang",
+                    "--target=x86_64-pc-windows-msvc", "-fuse-ld=lld",
+                    objectFile.toString(), "-o", outputFileName,
+                    "-Wl,/subsystem:console",
+                    "-Wl,/defaultlib:legacy_stdio_definitions"));
             linkArgs.addAll(libs);
             int linkExit = startProcess(linkArgs.toArray(new String[0]));
             Files.deleteIfExists(objectFile);
@@ -474,7 +476,7 @@ public class Mcc {
         Path asmFile = mode == Mode.COMPILE ? Paths.get(outputFileName) : Paths.get(outputFileName + target.assemblySuffix());
         try (PrintWriter pw =
                      new PrintWriter(Files.newBufferedWriter(asmFile))) {
-            if (addDebugInfo){
+            if (addDebugInfo && !target.isWindowsMsvc()){
                 var filesNames = tokenList.fileNames;
                 for (int i = 0; i < filesNames.size(); i++) {
                     String fileName = filesNames.get(i);

@@ -343,7 +343,22 @@ public class Codegen {
                 }
                 case Binary(ArithmeticOperator op, TypeAsm typeAsm, Operand src,
                             Operand dst) -> {
-                    if (src instanceof Imm imm && imm.isAwkward()) {
+                    if (Mcc.target.isWindowsMsvc() && op == BITWISE_XOR &&
+                            (typeAsm == FLOAT || typeAsm == DOUBLE) && isRam(src)) {
+                        instructions.set(i, new Mov(typeAsm, src,
+                                srcReg(typeAsm)));
+                        if (isRam(dst)) {
+                            instructions.add(i + 1, new Mov(typeAsm, dst,
+                                    dstReg(typeAsm)));
+                            instructions.add(i + 2, new Binary(op, typeAsm,
+                                    srcReg(typeAsm), dstReg(typeAsm)));
+                            instructions.add(i + 3, new Mov(typeAsm,
+                                    dstReg(typeAsm), dst));
+                        } else {
+                            instructions.add(i + 1, new Binary(op, typeAsm,
+                                    srcReg(typeAsm), dst));
+                        }
+                    } else if (src instanceof Imm imm && imm.isAwkward()) {
                         instructions.set(i, new Mov(typeAsm, src,
                                 srcReg(typeAsm)));
                         instructions.add(i + 1, new Binary(op, typeAsm,
