@@ -1,6 +1,7 @@
 package com.quaxt.mcc.asm;
 
 import com.quaxt.mcc.*;
+import com.quaxt.mcc.debug.CodeView;
 import com.quaxt.mcc.debug.Dwarf;
 import com.quaxt.mcc.parser.Position;
 import com.quaxt.mcc.semantic.FunType;
@@ -23,8 +24,6 @@ import static com.quaxt.mcc.asm.IntegerReg.SP;
 import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> positions) {
-
-    private record WindowsDebugFunction(int id, String symbol, String endLabel) {}
 
     /**
      * FrameSlot offsets are relative to an abstract local-frame base. spDelta
@@ -154,7 +153,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     }
 
     private void emitWindowsClang(PrintWriter out) {
-        List<WindowsDebugFunction> debugFunctions = new ArrayList<>();
+        List<CodeView.DebugFunction> debugFunctions = new ArrayList<>();
         int nextFunctionId = 0;
         out.println(".intel_syntax noprefix");
         out.println(".text");
@@ -168,8 +167,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                         windowsFunctionEndLabel(symbol) : null;
                 emitWindowsFunction(out, functionAsm, functionId, endLabel);
                 if (debuggable) {
-                    debugFunctions.add(new WindowsDebugFunction(functionId,
-                            symbol, endLabel));
+                    debugFunctions.add(new CodeView.DebugFunction(functionId,
+                            symbol, endLabel, functionAsm));
                 }
             }
         }
@@ -181,7 +180,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
             }
         }
         if (Mcc.addDebugInfo) {
-            emitWindowsCodeViewDebugSection(out, debugFunctions);
+            CodeView.emit(out, debugFunctions);
         }
     }
 
@@ -191,19 +190,6 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
 
     private static String windowsFunctionEndLabel(String symbol) {
         return ".L" + symbol + ".end";
-    }
-
-    private static void emitWindowsCodeViewDebugSection(PrintWriter out,
-                                                        List<WindowsDebugFunction> functions) {
-        out.println(".section .debug$S,\"dr\"");
-        printIndent(out, ".p2align 2");
-        printIndent(out, ".long 4");
-        for (WindowsDebugFunction function : functions) {
-            printIndent(out, ".cv_linetable " + function.id + ", " +
-                    function.symbol + ", " + function.endLabel);
-        }
-        printIndent(out, ".cv_filechecksums");
-        printIndent(out, ".cv_stringtable");
     }
 
     private Set<String> referencedExternalFunctions() {
@@ -307,10 +293,8 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         }
         printIndent(out, "push rbp");
         printIndent(out, "mov rbp, rsp");
-        long stackSize = functionAsm.stackSize;
         IntegerReg[] calleeSavedRegs = functionAsm.calleeSavedRegs;
-        long calleeSavedBytes = roundAwayFromZero(8L * calleeSavedRegs.length, 16);
-        long totalStackBytes = roundAwayFromZero(calleeSavedBytes + stackSize, 16);
+        long totalStackBytes = windowsTotalStackBytes(functionAsm);
         if (totalStackBytes != 0)
             printIndent(out, "sub rsp, " + totalStackBytes);
         if (calleeSavedRegs.length % 2 == 1) {
@@ -329,7 +313,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         }
     }
 
-    private static String windowsSymbol(String s) {
+    public static String windowsSymbol(String s) {
         String base = s.replace('.', '$');
         SymbolTableEntry entry = Mcc.SYMBOL_TABLE.get(s);
         if (!"main".equals(s) && entry != null &&
@@ -343,12 +327,18 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         return base;
     }
 
-    private static String windowsLocal(String s) {
+    public static String windowsLocal(String s) {
         return ".L" + windowsSymbol(s).replace("$L", "L");
     }
 
     private static String windowsLabel(String s) {
         return s.startsWith(".") ? s : windowsSymbol(s);
+    }
+
+    public static long windowsTotalStackBytes(FunctionIr functionAsm) {
+        long calleeSavedBytes =
+                roundAwayFromZero(8L * functionAsm.calleeSavedRegs.length, 16);
+        return roundAwayFromZero(calleeSavedBytes + functionAsm.stackSize, 16);
     }
 
     private static String sizePrefix(TypeAsm t) {

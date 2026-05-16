@@ -236,6 +236,187 @@ class MccTest {
     }
 
     @Test
+    void emitsCodeViewLocalsAndTypesOnWindows() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path src = Files.createTempFile("mcc-codeview-types", ".c");
+        Path asm = Files.createTempFile("mcc-codeview-types", ".s");
+        try {
+            Files.writeString(src, codeViewAggregateSource());
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "--no-register-allocator", "-S",
+                    "-o", asm.toString(), src.toString()));
+            String assembly = Files.readString(asm);
+
+            for (String marker : List.of("S_GPROC32_ID", "S_FRAMEPROC",
+                    "S_LOCAL", ".cv_def_range", "S_PROC_ID_END", "S_UDT",
+                    "LF_POINTER", "LF_ARRAY", "LF_STRUCTURE", "LF_UNION",
+                    "LF_FIELDLIST", "LF_MEMBER", "LF_BITFIELD",
+                    "LF_ARGLIST", "LF_PROCEDURE", "LF_FUNC_ID")) {
+                assertTrue(assembly.contains(marker), marker + "\n" + assembly);
+            }
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(src);
+            Files.deleteIfExists(asm);
+        }
+    }
+
+    @Test
+    void emitsCodeViewLocalsAndTypesInWindowsObjects() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path src = Files.createTempFile("mcc-codeview-types", ".c");
+        Path object = Files.createTempFile("mcc-codeview-types", ".obj");
+        try {
+            Files.writeString(src, codeViewAggregateSource());
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "--no-register-allocator", "-c",
+                    "-o", object.toString(), src.toString()));
+
+            Pair<String, Integer> readobj =
+                    runAndCapture("llvm-readobj", "--codeview",
+                            object.toString());
+            assertEquals(0, readobj.value(), readobj.key());
+            String codeView = readobj.key();
+            for (String marker : List.of("LocalSym", "VarName: nodes",
+                    "VarName: u", "VarName: p",
+                    "DefRangeFramePointerRelSym", "Struct", "Union",
+                    "Array", "Pointer", "FieldList", "DataMember",
+                    "BitField", "UDTSym")) {
+                assertTrue(codeView.contains(marker), marker + "\n" + codeView);
+            }
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(src);
+            Files.deleteIfExists(object);
+        }
+    }
+
+    @Test
+    void emitsCodeViewRegisterLocalRangesInWindowsObjects() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path object = Files.createTempFile("mcc-codeview-registers", ".obj");
+        try {
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "-c", "-o", object.toString(),
+                    "src/test/resources/scopes.c"));
+
+            Pair<String, Integer> readobj =
+                    runAndCapture("llvm-readobj", "--codeview",
+                            object.toString());
+            assertEquals(0, readobj.value(), readobj.key());
+            String codeView = readobj.key();
+            assertTrue(codeView.contains("LocalSym"), codeView);
+            assertTrue(codeView.contains("DefRangeRegisterSym"), codeView);
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(object);
+        }
+    }
+
+    @Test
+    void emitsCorrectCodeViewRegistersForAllocatedWindowsLocals() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path src = Files.createTempFile("mcc-codeview-register-locals", ".c");
+        Path object =
+                Files.createTempFile("mcc-codeview-register-locals", ".obj");
+        try {
+            Files.writeString(src, codeViewRegisterLocalSource());
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "-c", "-o", object.toString(),
+                    src.toString()));
+
+            Pair<String, Integer> readobj =
+                    runAndCapture("llvm-readobj", "--codeview",
+                            object.toString());
+            assertEquals(0, readobj.value(), readobj.key());
+            String codeView = readobj.key();
+            assertCodeViewRegisterForLocal(codeView, "l", "ESI");
+            assertCodeViewRegisterForLocal(codeView, "prime", "CL");
+            assertCodeViewRegisterForLocal(codeView, "d", "EDI");
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(src);
+            Files.deleteIfExists(object);
+        }
+    }
+
+    private static void assertCodeViewRegisterForLocal(String codeView,
+                                                       String local,
+                                                       String register) {
+        Pattern pattern = Pattern.compile("(?s)VarName: " +
+                Pattern.quote(local) + "\\R\\s*}\\R\\s*" +
+                "DefRangeRegisterSym \\{.*?Register: " +
+                Pattern.quote(register) + "\\b");
+        assertTrue(pattern.matcher(codeView).find(),
+                "missing CodeView register " + register + " for local " +
+                        local + "\n" + codeView);
+    }
+
+    private static String codeViewAggregateSource() {
+        return """
+                struct Node { int value; struct Node *next; unsigned int bits:3; };
+                union U { int i; double d; };
+                int main(void) {
+                    struct Node nodes[2];
+                    union U u;
+                    int *p = &nodes[0].value;
+                    nodes[0].value = 3;
+                    nodes[0].next = &nodes[1];
+                    nodes[0].bits = 5;
+                    u.i = *p;
+                    return u.i == 3 ? 0 : 1;
+                }
+                """;
+    }
+
+    private static String codeViewRegisterLocalSource() {
+        return """
+                #include <stdbool.h>
+                extern int printf (const char *__restrict __format, ...);
+                extern unsigned long int strtoul (const char *__restrict __nptr, char **__restrict __endptr, int __base);
+
+                int main(int argc, char** argv) {
+                    char *endptr;
+                    unsigned long l = strtoul(argv[1], &endptr, 10);
+                    if (endptr == argv[1]) {
+                        printf("didn't get number\\n");
+                        return -1;
+                    }
+                    bool prime = true;
+                    for (unsigned long d = 2; d < l; d++) {
+                        if (l % d == 0) {
+                            printf("%lu\\n", d);
+                            prime = false;
+                        }
+                    }
+                    if (prime) {
+                        printf("prime\\n");
+                    }
+                }
+                """;
+    }
+
+    @Test
     void linksWindowsDebugExecutableWithPdb() throws Exception {
         assumeTrue(Mcc.target.isWindowsMsvc());
         boolean previousAddDebugInfo = Mcc.addDebugInfo;
