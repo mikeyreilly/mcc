@@ -24,6 +24,8 @@ import static com.quaxt.mcc.asm.PrimitiveTypeAsm.*;
 
 public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> positions) {
 
+    private record WindowsDebugFunction(int id, String symbol, String endLabel) {}
+
     /**
      * FrameSlot offsets are relative to an abstract local-frame base. spDelta
      * is the current %rsp minus that base at this instruction.
@@ -152,12 +154,23 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     }
 
     private void emitWindowsClang(PrintWriter out) {
+        List<WindowsDebugFunction> debugFunctions = new ArrayList<>();
+        int nextFunctionId = 0;
         out.println(".intel_syntax noprefix");
         out.println(".text");
         for (TopLevelAsm t : topLevelAsms) {
             if (t instanceof FunctionIr functionAsm) {
                 prepareStackMetadata(functionAsm, false);
-                emitWindowsFunction(out, functionAsm);
+                boolean debuggable = isWindowsDebuggable(functionAsm);
+                int functionId = debuggable ? nextFunctionId++ : -1;
+                String symbol = windowsSymbol(functionAsm.name);
+                String endLabel = debuggable ?
+                        windowsFunctionEndLabel(symbol) : null;
+                emitWindowsFunction(out, functionAsm, functionId, endLabel);
+                if (debuggable) {
+                    debugFunctions.add(new WindowsDebugFunction(functionId,
+                            symbol, endLabel));
+                }
             }
         }
         for (TopLevelAsm t : topLevelAsms) {
@@ -167,6 +180,30 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
                 default -> {}
             }
         }
+        if (Mcc.addDebugInfo) {
+            emitWindowsCodeViewDebugSection(out, debugFunctions);
+        }
+    }
+
+    private static boolean isWindowsDebuggable(FunctionIr functionAsm) {
+        return Mcc.addDebugInfo && !functionAsm.name.startsWith("__builtin");
+    }
+
+    private static String windowsFunctionEndLabel(String symbol) {
+        return ".L" + symbol + ".end";
+    }
+
+    private static void emitWindowsCodeViewDebugSection(PrintWriter out,
+                                                        List<WindowsDebugFunction> functions) {
+        out.println(".section .debug$S,\"dr\"");
+        printIndent(out, ".p2align 2");
+        printIndent(out, ".long 4");
+        for (WindowsDebugFunction function : functions) {
+            printIndent(out, ".cv_linetable " + function.id + ", " +
+                    function.symbol + ", " + function.endLabel);
+        }
+        printIndent(out, ".cv_filechecksums");
+        printIndent(out, ".cv_stringtable");
     }
 
     private Set<String> referencedExternalFunctions() {
@@ -260,10 +297,14 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         out.println("    " + s);
     }
 
-    private void emitWindowsFunction(PrintWriter out, FunctionIr functionAsm) {
+    private void emitWindowsFunction(PrintWriter out, FunctionIr functionAsm,
+                                     int cvFunctionId, String endLabel) {
         String name = windowsSymbol(functionAsm.name);
         if (functionAsm.global) out.println("    .globl " + name);
         out.println(name + ":");
+        if (cvFunctionId >= 0) {
+            printIndent(out, ".cv_func_id " + cvFunctionId);
+        }
         printIndent(out, "push rbp");
         printIndent(out, "mov rbp, rsp");
         long stackSize = functionAsm.stackSize;
@@ -280,7 +321,11 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         }
         for (int i = 0; i < functionAsm.instructions.size(); i++) {
             emitWindowsInstruction(out, functionAsm.instructions.get(i),
-                    functionAsm.instructionStackDeltas[i], functionAsm);
+                    functionAsm.instructionStackDeltas[i], functionAsm,
+                    cvFunctionId);
+        }
+        if (endLabel != null) {
+            out.println(endLabel + ":");
         }
     }
 
@@ -360,9 +405,18 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     }
 
     private void emitWindowsInstruction(PrintWriter out, Instruction instruction,
-                                     long spDelta, FunctionIr functionAsm) {
+                                     long spDelta, FunctionIr functionAsm,
+                                     int cvFunctionId) {
         String s = switch (instruction) {
-            case Pos _, Comment _ -> null;
+            case Pos(int pos) -> {
+                if (cvFunctionId < 0) yield null;
+                Position p = positions.get(pos);
+                int file = p.file() + 1;
+                int lineNumber = p.lineNumber();
+                yield ".cv_loc " + cvFunctionId + " " + file + " " +
+                        lineNumber + " 0 is_stmt 1";
+            }
+            case Comment _ -> null;
             case LabelIr(String label) -> windowsLabel(label) + ":";
             case Literal(String string) -> string;
             case Mov(TypeAsm t, Operand src, Operand dst) -> {

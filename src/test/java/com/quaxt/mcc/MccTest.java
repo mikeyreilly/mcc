@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -170,11 +171,122 @@ class MccTest {
         }
     }
 
+    @Test
+    void emitsCodeViewDebugLinesForStatementsOnWindows() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path asm = Files.createTempFile("mcc-codeview-lines", ".s");
+        try {
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "-S", "-o", asm.toString(),
+                    "src/test/resources/debug_statement_lines.c"));
+            String assembly = Files.readString(asm);
+
+            assertTrue(Pattern.compile(
+                    "(?m)^\\s*\\.cv_file\\s+1\\s+\".*debug_statement_lines\\.c\"\\s+\"[0-9A-F]{32}\"\\s+1\\s*$")
+                    .matcher(assembly).find(), assembly);
+            assertTrue(assembly.contains(".cv_func_id 0"), assembly);
+            for (int line : List.of(3, 4, 5, 8, 11, 14, 16, 18, 19, 21, 22, 25, 28, 29)) {
+                assertHasCvLocLine(assembly, line);
+            }
+            assertTrue(Pattern.compile(
+                    "(?m)^\\s*\\.cv_linetable\\s+0,\\s*main,\\s*\\.Lmain\\.end\\s*$")
+                    .matcher(assembly).find(), assembly);
+            assertTrue(assembly.contains(".cv_filechecksums"), assembly);
+            assertTrue(assembly.contains(".cv_stringtable"), assembly);
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(asm);
+        }
+    }
+
+    @Test
+    void emitsCodeViewLineTablesInWindowsObjects() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path object = Files.createTempFile("mcc-codeview-lines", ".obj");
+        try {
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "-c", "-o", object.toString(),
+                    "src/test/resources/debug_statement_lines.c"));
+
+            Pair<String, Integer> readobj =
+                    runAndCapture("llvm-readobj", "--codeview",
+                            object.toString());
+            assertEquals(0, readobj.value(), readobj.key());
+            String codeView = readobj.key();
+            assertTrue(codeView.contains("CodeViewDebugInfo"), codeView);
+            assertTrue(codeView.contains("FunctionLineTable"), codeView);
+            for (int line : List.of(3, 4, 29)) {
+                assertTrue(codeView.contains("LineNumberStart: " + line),
+                        codeView);
+            }
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(object);
+        }
+    }
+
+    @Test
+    void linksWindowsDebugExecutableWithPdb() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path dir = Files.createTempDirectory("mcc-codeview-exe");
+        try {
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            Path exe = dir.resolve("debug-smoke.exe");
+            Path pdb = dir.resolve("debug-smoke.pdb");
+            assertEquals(0, Mcc.mcc("-g", "-o", exe.toString(),
+                    "src/test/resources/return42.c"));
+            assertEquals(42, Mcc.startProcess(exe.toString()));
+            assertTrue(Files.exists(pdb), "missing PDB at " + pdb);
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            deleteRecursively(dir);
+        }
+    }
+
     private static void assertHasLocLine(String assembly, int lineNumber) {
         Pattern pattern =
                 Pattern.compile("(?m)^\\s*\\.loc\\s+1\\s+" + lineNumber + "\\b");
         assertTrue(pattern.matcher(assembly).find(),
                 "missing .loc entry for source line " + lineNumber + "\n" + assembly);
+    }
+
+    private static void assertHasCvLocLine(String assembly, int lineNumber) {
+        Pattern pattern =
+                Pattern.compile("(?m)^\\s*\\.cv_loc\\s+0\\s+1\\s+" +
+                        lineNumber + "\\s+0\\s+is_stmt\\s+1\\b");
+        assertTrue(pattern.matcher(assembly).find(),
+                "missing .cv_loc entry for source line " + lineNumber + "\n" +
+                        assembly);
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) return;
+        try (Stream<Path> paths = Files.walk(root)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
     }
 
 

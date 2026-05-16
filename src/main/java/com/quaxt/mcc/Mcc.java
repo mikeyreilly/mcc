@@ -8,9 +8,12 @@ import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.*;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -234,6 +237,10 @@ public class Mcc {
                     objectFile.toString(), "-o", outputFileName,
                     "-Wl,/subsystem:console",
                     "-Wl,/defaultlib:legacy_stdio_definitions"));
+            if (addDebugInfo) {
+                linkArgs.add("-Wl,/debug");
+                linkArgs.add("-Wl,/pdb:" + pdbPath(outputFileName));
+            }
             linkArgs.addAll(libs);
             int linkExit = startProcess(linkArgs.toArray(new String[0]));
             Files.deleteIfExists(objectFile);
@@ -249,6 +256,19 @@ public class Mcc {
             gccArgs.addAll(libs);
             return startProcess(gccArgs.toArray(new String[0]));
         }
+    }
+
+    private static String pdbPath(String outputFileName) {
+        Path outputPath = Paths.get(outputFileName);
+        Path fileNamePath = outputPath.getFileName();
+        String fileName = fileNamePath == null ? outputFileName :
+                fileNamePath.toString();
+        String pdbName = fileName.toLowerCase(Locale.ROOT).endsWith(".exe") ?
+                fileName.substring(0, fileName.length() - ".exe".length()) +
+                        ".pdb" :
+                fileName + ".pdb";
+        Path parent = outputPath.getParent();
+        return parent == null ? pdbName : parent.resolve(pdbName).toString();
     }
 
     public static void main(String[] args) {
@@ -482,6 +502,9 @@ public class Mcc {
                     String fileName = filesNames.get(i);
                     pw.println("\t.file " + (i+1) + " \"" + fileName + "\"");
                 }
+            } else if (addDebugInfo) {
+                emitCodeViewSourceFiles(pw, tokenList.fileNames,
+                        srcFile.toAbsolutePath());
             }
             programAsm.emitAsm(pw, srcFile.toAbsolutePath());
             pw.flush();
@@ -494,6 +517,78 @@ public class Mcc {
         int exitCode = assembleAndLink(asmFile, doNotCompile, libs, outputFileName);
         Files.delete(asmFile);
         return exitCode;
+    }
+
+    private static void emitCodeViewSourceFiles(PrintWriter out,
+                                                List<String> fileNames,
+                                                Path mainSourcePath) throws IOException {
+        Path fallback = mainSourcePath.toAbsolutePath().normalize();
+        for (int i = 0; i < fileNames.size(); i++) {
+            Path debugPath = readableDebugFile(fileNames.get(i), fallback);
+            out.println("\t.cv_file " + (i + 1) + " " +
+                    assemblyStringLiteral(debugPath.toString()) + " \"" +
+                    md5(debugPath) + "\" 1");
+        }
+    }
+
+    private static Path readableDebugFile(String fileName, Path fallback) {
+        Path candidate;
+        try {
+            candidate = Paths.get(fileName);
+        } catch (InvalidPathException _) {
+            return fallback;
+        }
+        if (!candidate.isAbsolute()) {
+            candidate = Paths.get("").toAbsolutePath().resolve(candidate);
+        }
+        candidate = candidate.normalize();
+        return Files.isRegularFile(candidate) && Files.isReadable(candidate) ?
+                candidate : fallback;
+    }
+
+    private static String md5(Path file) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+        byte[] buffer = new byte[8192];
+        try (InputStream in = Files.newInputStream(file)) {
+            for (int read; (read = in.read(buffer)) != -1; ) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        byte[] bytes = digest.digest();
+        char[] hex = new char[bytes.length * 2];
+        char[] digits = "0123456789ABCDEF".toCharArray();
+        for (int i = 0; i < bytes.length; i++) {
+            int b = bytes[i] & 0xff;
+            hex[i * 2] = digits[b >>> 4];
+            hex[i * 2 + 1] = digits[b & 0xf];
+        }
+        return new String(hex);
+    }
+
+    private static String assemblyStringLiteral(String value) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\\') sb.append("\\\\");
+            else if (c == '"') sb.append("\\\"");
+            else if (c == '\n') sb.append("\\n");
+            else if (c == '\r') sb.append("\\r");
+            else if (c == '\t') sb.append("\\t");
+            else if (c < 32 || c > 126) {
+                String octal = Integer.toString(c & 0xff, 8);
+                sb.append("\\000", 0, 4 - octal.length());
+                sb.append(octal);
+            } else {
+                sb.append(c);
+            }
+        }
+        sb.append('"');
+        return sb.toString();
     }
 
 
