@@ -96,6 +96,11 @@ class MccTest {
     }
 
     @Test
+    void msvc_seh_try_except() throws Exception {
+        outputs("msvc_seh_try_except", "3\n");
+    }
+
+    @Test
     void nullptr() throws Exception {
         outputs("nullptr", """
                 p is a null pointer.

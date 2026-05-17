@@ -650,6 +650,10 @@ public class Parser {
             return new LocatedStatement(new LabelledStatement(label, parseStatement(tokens,
                     labels, enclosingSwitch, typeAliases)), pos);
         }
+        if (isIdentifier(token, "__try")) {
+            return parseMsvcSehTryStatement(tokens, labels, enclosingSwitch,
+                    typeAliases);
+        }
         if (tokens.getFirst() == OPEN_PAREN &&
                 tokens.get(1) == OPEN_BRACE) {
             tokens.discardFirst();
@@ -665,6 +669,28 @@ public class Parser {
         }
         expect(SEMICOLON, tokens);
         return new LocatedStatement(exp, pos);
+    }
+
+    private static Statement parseMsvcSehTryStatement(TokenList tokens,
+                                                      List<String> labels,
+                                                      Switch enclosingSwitch,
+                                                      ArrayList<Map<String, Type>> typeAliases) {
+        tokens.discardFirst();
+        Statement body = parseStatement(tokens, labels, enclosingSwitch,
+                typeAliases);
+        if (isIdentifier(tokens.getFirst(), "__except")) {
+            tokens.discardFirst();
+            expect(OPEN_PAREN, tokens);
+            parseExp(tokens, 0, true, typeAliases, labels, enclosingSwitch);
+            expect(CLOSE_PAREN, tokens);
+            parseStatement(tokens, labels, enclosingSwitch, typeAliases);
+        }
+        return body;
+    }
+
+    private static boolean isIdentifier(Token token, String value) {
+        return token instanceof TokenWithValue(Token type, String actual) &&
+                type == IDENTIFIER && actual.equals(value);
     }
 
 
