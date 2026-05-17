@@ -116,6 +116,11 @@ class MccTest {
     }
 
     @Test
+    void typedef_name_block_statement_ambiguity() throws Exception {
+        outputs("typedef_name_block_statement_ambiguity", "8 10\n");
+    }
+
+    @Test
     void typedef_callback() throws Exception {
         outputs("typedef_callback", "8\n15\n");
     }

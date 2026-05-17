@@ -1466,8 +1466,11 @@ public class Parser {
                 stripGccAttribute(tokens, typeAliases, labels, enclosingSwitch);
             }
             Token t = tokens.getFirst();
-            if (t == EXTERN || t == STATIC || t == TYPEDEF || t == REGISTER
-                    || t==VOLATILE || isTypeSpecifier(tokens, 0, typeAliases)) {
+            if (t instanceof TokenWithValue(Token type, String _) &&
+                    type == IDENTIFIER && tokens.get(1) == COLON) {
+                blockItems.add(parseStatement(tokens, labels, enclosingSwitch,
+                        typeAliases));
+            } else if (isBlockDeclarationStart(tokens, typeAliases)) {
                 blockItems.addAll(parseDeclarationList(tokens, false,
                         typeAliases, false, labels, enclosingSwitch).list());
             } else {
@@ -1482,6 +1485,56 @@ public class Parser {
         typeAliases.removeLast();
         tokens.discardFirst();
         return new Block(blockItems);
+    }
+
+    private static boolean isBlockDeclarationStart(TokenList tokens,
+                                                   ArrayList<Map<String, Type>> typeAliases) {
+        Token t = tokens.getFirst();
+        if (t == EXTERN || t == STATIC || t == TYPEDEF || t == REGISTER) {
+            return true;
+        }
+        if (!isTypeSpecifier(tokens, 0, typeAliases)) {
+            return false;
+        }
+        return !isTypedefName(tokens.getFirst(), typeAliases) ||
+                followingTokensCanBeginDeclarator(tokens);
+    }
+
+    private static boolean isTypedefName(Token token,
+                                         ArrayList<Map<String, Type>> typeAliases) {
+        return typeAliases != null &&
+                token instanceof TokenWithValue(Token type, String name) &&
+                type == IDENTIFIER && findTypeByName(typeAliases, name) != null;
+    }
+
+    private static boolean followingTokensCanBeginDeclarator(TokenList tokens) {
+        int i = 1;
+        while (tokens.get(i) == CONST || tokens.get(i) == VOLATILE ||
+                tokens.get(i) == RESTRICT || tokens.get(i) == INLINE ||
+                tokens.get(i) == GCC_ATTRIBUTE) {
+            if (tokens.get(i) == GCC_ATTRIBUTE) {
+                i = skipGccAttributeForLookahead(tokens, i + 1);
+            } else {
+                i++;
+            }
+        }
+        Token t = tokens.get(i);
+        return t == IMUL || t == OPEN_PAREN ||
+                t instanceof TokenWithValue(Token type, String _) &&
+                        type == IDENTIFIER;
+    }
+
+    private static int skipGccAttributeForLookahead(TokenList tokens, int i) {
+        if (tokens.get(i) != OPEN_PAREN) {
+            return i;
+        }
+        int depth = 0;
+        do {
+            Token t = tokens.get(i++);
+            if (t == OPEN_PAREN) depth++;
+            if (t == CLOSE_PAREN) depth--;
+        } while (depth > 0);
+        return i;
     }
 
     private static While parseWhile(TokenList tokens, List<String> labels,
