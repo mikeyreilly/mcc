@@ -6,5 +6,5 @@ struct S {
 };
 
 int main(void) {
-    return alignof(struct S);
+    return alignof(struct S) + __alignof(struct S) + __alignof__(struct S);
 }

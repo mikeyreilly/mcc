@@ -150,7 +150,8 @@ public class Lexer {
                             }
                             Token token = switch (value) {
                                 case "_Atomic" -> ATOMIC;
-                                case "alignof", "_Alignof", "__alignof__" ->
+                                case "alignof", "_Alignof", "__alignof",
+                                     "__alignof__" ->
                                         ALIGNOF;
                                 case "alignas", "_Alignas" -> ALIGNAS;
                                 case "_Bool" -> BOOL;

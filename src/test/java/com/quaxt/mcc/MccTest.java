@@ -878,7 +878,7 @@ class MccTest {
     }
 
     @Test void alignof() throws Exception{
-        returns("alignof", 8);
+        returns("alignof", 24);
     }
 
     @Test
