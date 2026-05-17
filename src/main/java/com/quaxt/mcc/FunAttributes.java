@@ -1,4 +1,5 @@
 package com.quaxt.mcc;
 
-public record FunAttributes(boolean defined, boolean global) implements IdentifierAttributes {
+public record FunAttributes(boolean defined, boolean global,
+                            boolean inline) implements IdentifierAttributes {
 }

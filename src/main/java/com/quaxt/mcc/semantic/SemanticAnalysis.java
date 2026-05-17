@@ -927,7 +927,8 @@ false);
             }
         }
         FunAttributes attrs =
-                new FunAttributes(alreadyDefined || decl.body != null, global);
+                new FunAttributes(alreadyDefined || decl.body != null, global,
+                        decl.inline);
 
         SYMBOL_TABLE.put(decl.name, new SymbolTableEntry(funType, attrs));
 

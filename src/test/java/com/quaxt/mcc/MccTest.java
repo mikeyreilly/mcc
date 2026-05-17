@@ -466,6 +466,51 @@ class MccTest {
         }
     }
 
+    @Test
+    void linksWindowsObjectsWithDuplicateStaticHeaderFunctionNames() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        Path dir = Files.createTempDirectory("mcc-static-header-link");
+        try {
+            Path header = dir.resolve("helper.h");
+            Path a = dir.resolve("a.c");
+            Path b = dir.resolve("b.c");
+            Path aObj = dir.resolve("a.obj");
+            Path bObj = dir.resolve("b.obj");
+            Path exe = dir.resolve("static-header-link.exe");
+
+            Files.writeString(header, """
+                    __inline int inline_header_helper(void) {
+                        return 1;
+                    }
+                    static int header_helper(void) {
+                        return 20;
+                    }
+                    """);
+            Files.writeString(a, """
+                    #include "helper.h"
+                    int a(void) {
+                        return header_helper() + inline_header_helper();
+                    }
+                    """);
+            Files.writeString(b, """
+                    #include "helper.h"
+                    int a(void);
+                    int main(void) {
+                        return a() + header_helper() + inline_header_helper();
+                    }
+                    """);
+
+            assertEquals(0, Mcc.mcc("-c", "-o", aObj.toString(), a.toString()));
+            assertEquals(0, Mcc.mcc("-c", "-o", bObj.toString(), b.toString()));
+            assertEquals(0, Mcc.startProcess("clang",
+                    "--target=x86_64-pc-windows-msvc", "-fuse-ld=lld",
+                    aObj.toString(), bObj.toString(), "-o", exe.toString()));
+            assertEquals(42, Mcc.startProcess(exe.toString()));
+        } finally {
+            deleteRecursively(dir);
+        }
+    }
+
     private static void assertHasLocLine(String assembly, int lineNumber) {
         Pattern pattern =
                 Pattern.compile("(?m)^\\s*\\.loc\\s+1\\s+" + lineNumber + "\\b");

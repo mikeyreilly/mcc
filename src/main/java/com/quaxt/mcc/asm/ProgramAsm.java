@@ -230,7 +230,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     private static boolean isExternalFunction(String name) {
         return !name.startsWith("__builtin")
                 && Mcc.SYMBOL_TABLE.get(name) instanceof SymbolTableEntry entry
-                && entry.attrs() instanceof FunAttributes(boolean defined, boolean _)
+                && entry.attrs() instanceof FunAttributes(boolean defined,
+                                                          boolean _,
+                                                          boolean _)
                 && !defined;
     }
 
@@ -288,7 +290,12 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     private void emitWindowsFunction(PrintWriter out, FunctionIr functionAsm,
                                      int cvFunctionId, String endLabel) {
         String name = windowsSymbol(functionAsm.name);
-        if (functionAsm.global) out.println("    .globl " + name);
+        boolean publicSymbol = isWindowsPublicFunction(functionAsm);
+        out.println("    .def " + name);
+        out.println("    .scl " + (publicSymbol ? 2 : 3));
+        out.println("    .type 32");
+        out.println("    .endef");
+        if (publicSymbol) out.println("    .globl " + name);
         out.println(name + ":");
         if (cvFunctionId >= 0) {
             printIndent(out, ".cv_func_id " + cvFunctionId);
@@ -319,14 +326,25 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         String base = s.replace('.', '$');
         SymbolTableEntry entry = Mcc.SYMBOL_TABLE.get(s);
         if (!"main".equals(s) && entry != null &&
-                entry.attrs() instanceof FunAttributes(boolean defined, boolean _) &&
-                defined) {
+                entry.attrs() instanceof FunAttributes(boolean defined,
+                                                       boolean global,
+                                                       boolean inline) &&
+                defined && (!global || inline)) {
             return "mcc$" + base;
         }
         if (entry != null && entry.attrs() instanceof StaticAttributes) {
             return "mcc$" + base;
         }
         return base;
+    }
+
+    private static boolean isWindowsPublicFunction(FunctionIr functionAsm) {
+        SymbolTableEntry entry = Mcc.SYMBOL_TABLE.get(functionAsm.name);
+        if (entry != null && entry.attrs() instanceof FunAttributes(
+                boolean _, boolean global, boolean inline)) {
+            return global && !inline;
+        }
+        return functionAsm.global;
     }
 
     public static String windowsLocal(String s) {

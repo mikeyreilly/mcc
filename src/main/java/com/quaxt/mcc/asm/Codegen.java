@@ -129,7 +129,7 @@ public class Codegen {
             SymbolTableEntry v = e.getValue();
             IdentifierAttributes attrs = v.attrs();
             var entry = switch (attrs) {
-                case FunAttributes(boolean defined, boolean _) ->
+                case FunAttributes(boolean defined, boolean _, boolean _) ->
                         new FunEntry(defined,
                                 defined && classifyReturnValueLight(((FunType) v.type()).ret()));
                 case IdentifierAttributes.LocalAttr _ ->
