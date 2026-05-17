@@ -865,7 +865,7 @@ false);
             case UCHAR -> new UCharInit((byte) initL);
             case SHORT -> new ShortInit((short) initL);
             case USHORT -> new UShortInit((short) initL);
-            case Pointer _ -> new ULongInit((int) initL);
+            case Pointer _ -> new ULongLongInit(initL);
             default -> null;
         };
     }

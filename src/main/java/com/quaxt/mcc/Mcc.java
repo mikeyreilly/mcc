@@ -422,6 +422,11 @@ public class Mcc {
                     *Addend = old + Value;
                     return old;
                 }
+                static long _InterlockedCompareExchange(long volatile *Destination, long Exchange, long Comperand) {
+                    long old = *Destination;
+                    if (old == Comperand) *Destination = Exchange;
+                    return old;
+                }
                 static long long _InterlockedExchangeAdd64(long long volatile *Addend, long long Value) {
                     long long old = *Addend;
                     *Addend = old + Value;

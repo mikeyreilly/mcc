@@ -86,7 +86,7 @@ class MccTest {
     @Test
     void msvc_winnt_intrinsics() throws Exception {
         assumeTrue(Mcc.target.isWindowsMsvc());
-        outputs("msvc_winnt_intrinsics", "7 5 8 AAA 1\n", false, false);
+        outputs("msvc_winnt_intrinsics", "7 5 8 0 9 9 9 AAA 1\n", false, false);
     }
 
     @Test
@@ -1492,6 +1492,10 @@ class MccTest {
 
     @Test void nested_partial_struct_initializer_zero_fill() throws Exception {
         returns("nested_partial_struct_initializer_zero_fill", 0);
+    }
+
+    @Test void static_nested_pointer_zero_initializer() throws Exception {
+        returns("static_nested_pointer_zero_initializer", 0);
     }
 
     @Test void va_struct_two_fp_registers() throws Exception {
