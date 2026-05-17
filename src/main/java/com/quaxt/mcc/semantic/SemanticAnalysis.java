@@ -1490,7 +1490,7 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                 size(targetReferenced) <= 2 &&
                 e instanceof AddrOf(Exp exp, Type _) &&
                 exp instanceof Str) {
-            if (targetReferenced != CHAR) {
+            if (targetReferenced != CHAR && targetReferenced != USHORT) {
                 throw new Err("Can't initialize pointer to " +
                         targetReferenced + " with string literal");
             }

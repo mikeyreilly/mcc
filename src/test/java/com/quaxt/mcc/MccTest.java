@@ -1311,6 +1311,11 @@ class MccTest {
                 "sizeof char32_t 4\n" + "char 'A' = 65\n" + "L'A' = 65\n");
     }
 
+    @Test
+    void wide_string_literal_to_ushort_pointer() throws Exception {
+        returns("wide_string_literal_to_ushort_pointer", 0);
+    }
+
     @Test void lea() throws Exception {
         outputs("lea", "a[0]=11\n" + "b[0]=13\n", false, true);
     }
