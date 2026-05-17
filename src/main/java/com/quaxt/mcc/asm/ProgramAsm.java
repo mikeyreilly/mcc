@@ -185,7 +185,9 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
     }
 
     private static boolean isWindowsDebuggable(FunctionIr functionAsm) {
-        return Mcc.addDebugInfo && !functionAsm.name.startsWith("__builtin");
+        return Mcc.addDebugInfo &&
+                !functionAsm.name.startsWith("__builtin") &&
+                !Mcc.BUILTIN_SOURCE_FUNCTIONS.contains(functionAsm.name);
     }
 
     private static String windowsFunctionEndLabel(String symbol) {
@@ -400,6 +402,7 @@ public record ProgramAsm(List<TopLevelAsm> topLevelAsms, ArrayList<Position> pos
         String s = switch (instruction) {
             case Pos(int pos) -> {
                 if (cvFunctionId < 0) yield null;
+                if (pos < 0 || pos >= positions.size()) yield null;
                 Position p = positions.get(pos);
                 int file = p.file() + 1;
                 int lineNumber = p.lineNumber();

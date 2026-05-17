@@ -552,7 +552,7 @@ false);
                 } else if (exp instanceof AddrOf(Exp exp1, Type type1) &&
                         exp1 instanceof Str(String s, Type _) &&
                         targetType instanceof Pointer(Type element)) {
-                    if (!element.isCharacter()) {
+                    if (element != CHAR) {
                         throw new Err("Can't initialize pointer to " + element +
                                 " with string literal");
                     }
@@ -560,7 +560,18 @@ false);
                 } else if (exp instanceof Cast(Type type, Exp exp1) &&
                         type instanceof Pointer(Type referenced) &&
                         referenced.isCharacter()) {
-                    convertCompoundInitializerToStaticInitList(new SingleInit(exp1, t), targetType, acc);
+                    if (targetType instanceof Pointer(Type element) &&
+                            element.isCharacter() &&
+                            exp1 instanceof AddrOf(Exp castInner, Type _) &&
+                            castInner instanceof Str(String s, Type _)) {
+                        handleStringLiteral(acc, s, element, null, true);
+                    } else if (targetType instanceof Pointer(Type element) &&
+                            element.isCharacter() &&
+                            exp1 instanceof Str(String s, Type _)) {
+                        handleStringLiteral(acc, s, element, null, true);
+                    } else {
+                        convertCompoundInitializerToStaticInitList(new SingleInit(exp1, t), targetType, acc);
+                    }
                 } else {
                     if (targetType instanceof Array) {
                         throw new Err("Can't initialize static array with a " +
@@ -1479,6 +1490,10 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                 size(targetReferenced) <= 2 &&
                 e instanceof AddrOf(Exp exp, Type _) &&
                 exp instanceof Str) {
+            if (targetReferenced != CHAR) {
+                throw new Err("Can't initialize pointer to " +
+                        targetReferenced + " with string literal");
+            }
             return convertTo(e, targetType);
         }
         if (e == NULLPTR || targetType == NULLPTR_T) {

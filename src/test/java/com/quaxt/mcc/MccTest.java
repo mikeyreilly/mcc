@@ -809,11 +809,7 @@ class MccTest {
 
     @Test
     void bytes_swap()  throws Exception {
-        outputs("bytes_swap", Mcc.target.isWindowsMsvc() ? """
-                00000000EFCDAB89
-                78563412
-                3412
-                """ : """
+        outputs("bytes_swap", """
                 EFCDAB8967452301
                 78563412
                 3412

@@ -69,6 +69,9 @@ public class Mcc {
                     "trunc", "truncf", "truncl", "vfprintf", "vfscanf",
                     "vprintf", "vscanf", "vsnprintf", "vsprintf", "vsscanf");
 
+    public static final Set<String> BUILTIN_SOURCE_FUNCTIONS =
+            new HashSet<>();
+
     private static final Logger LOGGER = Logger.getLogger(Mcc.class.getName());
 
     public static final HashMap<String, SymbolTableEntry> SYMBOL_TABLE =
@@ -301,6 +304,7 @@ public class Mcc {
 
         SYMBOL_TABLE.clear();
         TYPE_TABLE.clear();
+        BUILTIN_SOURCE_FUNCTIONS.clear();
         TEMP_COUNT.set(0L);
         ENUM_MAP.clear();
         Codegen.clear();
@@ -479,6 +483,12 @@ public class Mcc {
                 }
                 """;
         mccHelper(vaListBuiltin, Mode.VALIDATE, EnumSet.noneOf(Optimization.class), null, true, Collections.emptyList(), identifierMap, structureMap, builtinDeclarations, null,null);
+        for (Declaration declaration : builtinDeclarations) {
+            if (declaration instanceof Function function &&
+                    function.body != null) {
+                BUILTIN_SOURCE_FUNCTIONS.add(function.name);
+            }
+        }
         BUILTIN_VA_LIST =
                 Mcc.SYMBOL_TABLE.get("__builtin_va_list").type();
         ArrayList<Declaration> declarations = new ArrayList<>();
