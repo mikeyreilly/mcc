@@ -399,6 +399,57 @@ public class Mcc {
                 static inline void __builtin_abort (void) {
                     abort();
                 }
+                static long _InterlockedExchangeAdd(long volatile *Addend, long Value) {
+                    long old = *Addend;
+                    *Addend = old + Value;
+                    return old;
+                }
+                static long long _InterlockedExchangeAdd64(long long volatile *Addend, long long Value) {
+                    long long old = *Addend;
+                    *Addend = old + Value;
+                    return old;
+                }
+                static long long _mul128(long long Multiplier, long long Multiplicand, long long *HighProduct) {
+                    if (HighProduct) *HighProduct = 0;
+                    return Multiplier * Multiplicand;
+                }
+                static unsigned long long _umul128(unsigned long long Multiplier, unsigned long long Multiplicand, unsigned long long *HighProduct) {
+                    if (HighProduct) *HighProduct = 0;
+                    return Multiplier * Multiplicand;
+                }
+                static unsigned long long __shiftright128(unsigned long long LowPart, unsigned long long HighPart, unsigned char Shift) {
+                    if (Shift == 0) return LowPart;
+                    if (Shift < 64) return (LowPart >> Shift) | (HighPart << (64 - Shift));
+                    return HighPart >> (Shift - 64);
+                }
+                static void _ReadWriteBarrier(void) {
+                }
+                static void __stosb(unsigned char *Destination, unsigned char Value, unsigned long long Count) {
+                    for (unsigned long long i = 0; i < Count; i = i + 1) Destination[i] = Value;
+                }
+                static unsigned char __readgsbyte(unsigned long Offset) {
+                    return 0;
+                }
+                static unsigned short __readgsword(unsigned long Offset) {
+                    return 0;
+                }
+                static unsigned long __readgsdword(unsigned long Offset) {
+                    return 0;
+                }
+                static unsigned long long __readgsqword(unsigned long Offset) {
+                    return 0;
+                }
+                static volatile void *RtlSetVolatileMemory(volatile void *Destination, int Fill, unsigned long long Length) {
+                    volatile unsigned char *p = Destination;
+                    for (unsigned long long i = 0; i < Length; i = i + 1) p[i] = (unsigned char)Fill;
+                    return Destination;
+                }
+                static void *MapViewOfFileNuma2(void *FileMappingHandle, void *ProcessHandle, unsigned long long Offset, void *BaseAddress, unsigned long long ViewSize, unsigned long AllocationType, unsigned long PageProtection, unsigned long PreferredNode) {
+                    return (void *)0;
+                }
+                static unsigned short *CharUpperW(unsigned short *lpsz) {
+                    return lpsz;
+                }
                 """ : """
                 struct __builtin_va_list_item {
                     unsigned int gp_offset;

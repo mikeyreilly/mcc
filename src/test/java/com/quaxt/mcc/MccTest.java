@@ -79,6 +79,12 @@ class MccTest {
     }
 
     @Test
+    void msvc_winnt_intrinsics() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        outputs("msvc_winnt_intrinsics", "7 5 8 AAA 1\n", false, false);
+    }
+
+    @Test
     void nullptr() throws Exception {
         outputs("nullptr", """
                 p is a null pointer.
