@@ -12,11 +12,11 @@ import static com.quaxt.mcc.TokenType.*;
 
 public class Lexer {
     static Pattern WHITESPACE = Pattern.compile("\\s+");
-    static final Token[] TOKEN_TYPES_TO_MATCH = new Token[]{CHAR_LITERAL,IDENTIFIER,
+    static final Token[] TOKEN_TYPES_TO_MATCH = new Token[]{CHAR_LITERAL, STRING_LITERAL, IDENTIFIER,
             SUB_EQ, ADD_EQ, IMUL_EQ, DIVIDE_EQ, REMAINDER_EQ, AND_EQ,
             BITWISE_AND_EQ, OR_EQ, BITWISE_OR_EQ, BITWISE_XOR_EQ, SHL_EQ,
             SAR_EQ, OPEN_PAREN, CLOSE_PAREN, OPEN_BRACE,
-            STRING_LITERAL, HEX_FLOAT_LITERAL,HEX_DOUBLE_LITERAL, FLOAT_LITERAL, DOUBLE_LITERAL, UNSIGNED_LONG_LITERAL, UNSIGNED_HEX_LONG_LITERAL,
+            HEX_FLOAT_LITERAL,HEX_DOUBLE_LITERAL, FLOAT_LITERAL, DOUBLE_LITERAL, UNSIGNED_LONG_LITERAL, UNSIGNED_HEX_LONG_LITERAL,
             HEX_LONG_LITERAL, UNSIGNED_HEX_INT_LITERAL, HEX_INT_LITERAL, UNSIGNED_INT_LITERAL, CLOSE_BRACE, LONG_LITERAL,
             INT_LITERAL, SEMICOLON, SINGLE_LINE_COMMENT, MULTILINE_COMMENT,
             DECREMENT, INCREMENT, BITWISE_NOT, ARROW, SUB, ADD, IMUL, DIVIDE,
@@ -105,7 +105,7 @@ public class Lexer {
                     int end = matcher.end(tokenType.group());
                     if (tokenType != SINGLE_LINE_COMMENT && tokenType != MULTILINE_COMMENT) {
                         if (tokenType == STRING_LITERAL) {
-                            int start = matcher.start() + 1;
+                            int start = src.indexOf('"', matcher.start()) + 1;
                             String value = src.substring(start, end - 1);
                             Token token = new TokenWithValue(tokenType, value);
                             tokens.add(token, filename,lineNumber);
@@ -125,11 +125,28 @@ public class Lexer {
                                         tokenType == UNSIGNED_LONG_LITERAL) {
                             int start = matcher.start();
                             String value = src.substring(start, end);
-                            if (value.equals("__int64")) {
-                                tokens.add(LONG, filename, lineNumber);
-                                tokens.add(LONG, filename, lineNumber);
-                                i = end;
-                                continue outer;
+                            switch (value) {
+                                case "__int8" -> {
+                                    tokens.add(CHAR, filename, lineNumber);
+                                    i = end;
+                                    continue outer;
+                                }
+                                case "__int16" -> {
+                                    tokens.add(SHORT, filename, lineNumber);
+                                    i = end;
+                                    continue outer;
+                                }
+                                case "__int32" -> {
+                                    tokens.add(INT, filename, lineNumber);
+                                    i = end;
+                                    continue outer;
+                                }
+                                case "__int64" -> {
+                                    tokens.add(LONG, filename, lineNumber);
+                                    tokens.add(LONG, filename, lineNumber);
+                                    i = end;
+                                    continue outer;
+                                }
                             }
                             Token token = switch (value) {
                                 case "_Atomic" -> ATOMIC;
@@ -144,7 +161,8 @@ public class Lexer {
                                 case "_Generic" -> GENERIC;
                                 case "__asm__" -> ASM;
                                 case "__attribute__" -> GCC_ATTRIBUTE;
-                                case "__builtin_c23_va_start" -> BUILTIN_C23_VA_START;
+                                case "__builtin_c23_va_start",
+                                     "__builtin_va_start" -> BUILTIN_C23_VA_START;
                                 case "__builtin_offsetof" -> BUILTIN_OFFSETOF;
                                 case "__builtin_va_arg" -> BUILTIN_VA_ARG;
                                 case "__builtin_va_end" -> BUILTIN_VA_END;
@@ -222,6 +240,13 @@ public class Lexer {
         }
         if (startsWithWord(src, start, "__pragma")) {
             return skipParenthesizedCall(src, start + "__pragma".length());
+        }
+        if (startsWithWord(src, start, "_Static_assert") ||
+                startsWithWord(src, start, "static_assert")) {
+            return skipParenthesizedCall(src,
+                    start + (src.startsWith("_Static_assert", start) ?
+                            "_Static_assert".length() :
+                            "static_assert".length()));
         }
         return -1;
     }

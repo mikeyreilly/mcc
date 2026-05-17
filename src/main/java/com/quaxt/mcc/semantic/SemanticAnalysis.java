@@ -679,6 +679,10 @@ false);
     }
 
     private static VarDecl typeCheckFileScopeVariableDeclaration(VarDecl decl) {
+        if (decl.storageClass() == TYPEDEF &&
+                decl.name().name().startsWith("__C_ASSERT__")) {
+            return decl;
+        }
         var structOrUnionSpecifier = decl.structOrUnionSpecifier();
         StructDef sd = null;
         if (structOrUnionSpecifier != null) {
@@ -1470,10 +1474,18 @@ new StaticAttributes(initialValue, false, decl.storageClass())));
                 referenced == VOID && targetType instanceof Pointer) {
             return convertTo(e, targetType);
         }
+        if (targetType instanceof Pointer(Type targetReferenced) &&
+                targetReferenced.isInteger() &&
+                size(targetReferenced) <= 2 &&
+                e instanceof AddrOf(Exp exp, Type _) &&
+                exp instanceof Str) {
+            return convertTo(e, targetType);
+        }
         if (e == NULLPTR || targetType == NULLPTR_T) {
             return convertTo(e, targetType);
         }
-        throw new Err("Cannot convert type for assignment");
+        throw new Err("Cannot convert type for assignment from " + t +
+                " to " + targetType + " in " + e);
     }
 
     private static boolean isArithmeticType(Type t) {
@@ -2268,6 +2280,11 @@ commonType);
                 } else if ("__builtin_va_list_item.0".equals(tag)) {
                     yield new Structure(isUnion, "__builtin_va_list_item.0",
                      null);
+                } else if (structureMap.values().stream().anyMatch(entry ->
+                        entry.name().equals(tag))) {
+                    yield new Structure(isUnion, tag, sd);
+                } else if (tag != null && tag.startsWith("tag.")) {
+                    yield new Structure(isUnion, tag, sd);
                 } else throw new Err("Specified an undeclared tag: tag=" + tag);
             }
             case Pointer(Type referenced) -> {
@@ -2343,6 +2360,7 @@ resolveFileScopeVariableDeclaration(varDecl,
             // enumerations that have just been parsed while we are still
             // parsing an enum
             ENUM_MAP.put("CURRENT-ENUM", decl);
+            ENUM_MAP.put(decl.tag(), decl);
             return decl;
         }
         TagEntry prevEntry = structureMap.get(decl.tag());
@@ -2402,13 +2420,22 @@ resolveFileScopeVariableDeclaration(varDecl,
                     }
                 }
                 StructOrUnionSpecifier sous = member.structOrUnionSpecifier();
+                Type memberType = member.type();
                 if (sous != null && sous.members() !=
                         null) { // sous without members would already be
                     // resolved
+                    String originalTag = sous.tag();
                     sous =
                             resolveStructureDeclaration(member.structOrUnionSpecifier(), identifierMap, structureMap, enclosingFunction);
+                    if (memberType instanceof Structure(boolean isUnion,
+                                                        String tag,
+                                                        StructDef structDef) &&
+                            Objects.equals(tag, originalTag)) {
+                        memberType = new Structure(isUnion, sous.tag(),
+                                structDef);
+                    }
                 }
-                processedMembers.add(new MemberDeclaration(resolveType(member.type(), identifierMap, structureMap, enclosingFunction), member.name(), sous, member.bitFieldWidth()));
+                processedMembers.add(new MemberDeclaration(resolveType(memberType, identifierMap, structureMap, enclosingFunction), member.name(), sous, member.bitFieldWidth()));
             }
         }
         return new StructOrUnionSpecifier(decl.isUnion(), uniqueTag,

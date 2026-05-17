@@ -318,6 +318,13 @@ public class Parser {
                 List<DeclarationList> dl = new ArrayList<>();
                 while(tokens.getFirst()!=CLOSE_BRACE) {
                     DeclarationList x = parseDeclarationList(tokens, false, typeAliases, true, labels, enclosingSwitch);
+                    if (x == null) {
+                        if (tokens.getFirst() == SEMICOLON) {
+                            tokens.discardFirst();
+                            continue;
+                        }
+                        throw makeErr("Expected struct or union member declaration", tokens);
+                    }
                     for(Declaration y:x.list()){
                         switch(y){
                             case VarDecl(Var name,
@@ -1123,6 +1130,10 @@ public class Parser {
                 }
             }
 
+            if (isMemberDeclarationList) {
+                return new DeclarationList(Collections.emptyList());
+            }
+
             throw new Todo();
         }
         List<Declaration> l = new ArrayList<>();
@@ -1178,7 +1189,7 @@ public class Parser {
                             if (isMemberDeclarationList) {
                                 tokens.discardFirst();
                                 bitFieldWidth =
-                                        parseConst(tokens, true);
+                                        parseConstExp(tokens, typeAliases, labels, enclosingSwitch);
                                 break;
                             }
                         default:
@@ -1200,7 +1211,7 @@ public class Parser {
                 if (decl instanceof Function) break out;
             } else if (token == COLON && isMemberDeclarationList) {
                 tokens.discardFirst();
-                bitFieldWidth = parseConst(tokens, true);
+                bitFieldWidth = parseConstExp(tokens, typeAliases, labels, enclosingSwitch);
                 VarDecl decl =
                         new VarDecl(new Var(null, null), null,
                                 typeAndStorageClass.type(),
@@ -1919,8 +1930,7 @@ public class Parser {
                 if (current == CLOSE_PAREN) {
                     break;
                 } else
-                    throw new IllegalArgumentException(
-                            "unexpected token while parsing " + "function call: " + current);
+                    throw makeErr("Unexpected token while parsing function call: " + current, tokens);
 
             }
             return newFunctionCall(id, args, false, null, pos);

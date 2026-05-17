@@ -160,7 +160,8 @@ public class IrGen {
                         function.parameters,
                         instructions,
                         function.funType,
-                        function.inline && !function.callsVaStart);
+                        function.inline && !function.callsVaStart &&
+                                !Mcc.target.isWindowsMsvc());
         f.debugScopes = debugContext.scopes();
         f.debugLocals = debugContext.locals();
         ReturnIr ret = new ReturnIr(IntInit.ZERO);
