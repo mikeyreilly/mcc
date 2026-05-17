@@ -110,6 +110,13 @@ public enum BuiltInFunction {
     }
 
     static BuiltInFunction fromIdentifier(String identifier) {
+        BuiltInFunction alias = switch (identifier) {
+            case "_byteswap_ushort" -> BUILTIN_BSWAP16;
+            case "_byteswap_ulong" -> BUILTIN_BSWAP32;
+            case "_byteswap_uint64" -> BUILTIN_BSWAP64;
+            default -> null;
+        };
+        if (alias != null) return alias;
         for (BuiltInFunction v : BuiltInFunction.class.getEnumConstants()) {
             if (v.identifier.equals(identifier)) return v;
         }

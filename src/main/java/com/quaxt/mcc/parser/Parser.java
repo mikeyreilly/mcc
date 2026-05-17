@@ -839,8 +839,9 @@ public class Parser {
                     if (sawBareVoidParameter) {
                         throw new Err("void parameter must be the only parameter");
                     }
-                    if (type instanceof FunType)
-                        throw new Err("function pointers are not supported");
+                    if (type instanceof FunType) {
+                        type = new Pointer(type);
+                    }
                     paramNames.add(name);
                     paramTypes.add(type);
                 }

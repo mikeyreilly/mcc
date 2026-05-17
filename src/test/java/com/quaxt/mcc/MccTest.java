@@ -63,6 +63,11 @@ class MccTest {
     }
 
     @Test
+    void function_parameter_decay() throws Exception {
+        returns("function_parameter_decay", 49, true, false);
+    }
+
+    @Test
     void canReturn42() throws Exception {
         returns("return42", 42);
     }
