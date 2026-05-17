@@ -85,6 +85,12 @@ class MccTest {
     }
 
     @Test
+    void msvc_intrin_header() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        outputs("msvc_intrin_header", "3412 78563412 EFCDAB8967452301\n", false, false);
+    }
+
+    @Test
     void nullptr() throws Exception {
         outputs("nullptr", """
                 p is a null pointer.

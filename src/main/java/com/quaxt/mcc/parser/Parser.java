@@ -1686,6 +1686,10 @@ public class Parser {
         boolean isLongLong = false;
         if (token instanceof TokenWithValue(Token tokenType,
                                                         String value)) {
+            String lowerValue = value.toLowerCase(Locale.ROOT);
+            isLongLong = lowerValue.endsWith("ll") ||
+                    lowerValue.endsWith("llu") ||
+                    lowerValue.endsWith("ull");
             boolean isHex = UNSIGNED_HEX_INT_LITERAL == token.type() ||
                     UNSIGNED_HEX_LONG_LITERAL == token.type() ||
                     HEX_LONG_LITERAL == token.type() ||
@@ -1695,7 +1699,6 @@ public class Parser {
                 case HEX_LONG_LITERAL:
                 case UNSIGNED_LONG_LITERAL:
                 case LONG_LITERAL:
-                    if (value.endsWith("LL")||value.endsWith("ll")) isLongLong = true;
                 case FLOAT_LITERAL:
                 case HEX_FLOAT_LITERAL:
                 case HEX_DOUBLE_LITERAL:

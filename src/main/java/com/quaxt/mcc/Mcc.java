@@ -8,6 +8,8 @@ import com.quaxt.mcc.semantic.*;
 import com.quaxt.mcc.tacky.*;
 
 import java.io.*;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -200,7 +202,7 @@ public class Mcc {
         ArrayList<String> args = new ArrayList<>();
         if (target.isWindowsMsvc()) {
             args.addAll(Arrays.asList("clang-cl", "/nologo", "/P", "/TC",
-                    "/Fi" + iFile, "/I", "src/main/resources/msvc-include",
+                    "/Fi" + iFile, "/I", msvcIncludePath().toString(),
                     "/D__ATOMIC_SEQ_CST=5", "/D_CRT_SECURE_NO_WARNINGS",
                     "/D_NO_CRT_STDIO_INLINE", "/DBITINT_MAXWIDTH=64",
                     cFile.toString()));
@@ -213,6 +215,18 @@ public class Mcc {
             args.addAll(includePaths);
         }
         return startProcess(args.toArray(new String[0]));
+    }
+
+    private static Path msvcIncludePath() throws IOException {
+        URL resource = Mcc.class.getClassLoader().getResource("msvc-include");
+        if (resource == null) {
+            throw new FileNotFoundException("missing msvc-include resources");
+        }
+        try {
+            return Path.of(resource.toURI()).toAbsolutePath().normalize();
+        } catch (IllegalArgumentException | URISyntaxException e) {
+            throw new IOException("msvc-include resources are not available as files", e);
+        }
     }
 
     public static int startProcess(String... args) throws InterruptedException, IOException {

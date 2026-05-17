@@ -56,11 +56,11 @@ public enum BuiltInFunction {
 
     BUILTIN_BSWAP64("__builtin_bswap64", 1){
         public Type determineReturnType(List<Exp> args) {
-            return Primitive.ULONG;
+            return Primitive.ULONGLONG;
         }
 
         public Type getParamType(int i) {
-            return Primitive.ULONG;
+            return Primitive.ULONGLONG;
         }
     },
     BUILTIN_BSWAP32("__builtin_bswap32", 1){
