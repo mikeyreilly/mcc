@@ -473,6 +473,9 @@ public class Mcc {
                 static unsigned short *CharUpperW(unsigned short *lpsz) {
                     return lpsz;
                 }
+                static unsigned short *uaw_CharUpperW(unsigned short *String) {
+                    return CharUpperW(String);
+                }
                 """ : """
                 struct __builtin_va_list_item {
                     unsigned int gp_offset;

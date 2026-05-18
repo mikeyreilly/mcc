@@ -90,6 +90,28 @@ class MccTest {
     }
 
     @Test
+    void msvcStralignCharUpperDebugLinks() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path dir = Files.createTempDirectory("mcc-stralign-charupper");
+        try {
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            Path exe = dir.resolve("stralign-charupper.exe");
+            assertEquals(0, Mcc.mcc("-g", "-o", exe.toString(),
+                    "src/test/resources/msvc_stralign_charupper.c"));
+            assertEquals("1 109\n", startProcessAndCaptureOutput(
+                    exe.toString()).key());
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            deleteRecursively(dir);
+        }
+    }
+
+    @Test
     void msvc_intrin_header() throws Exception {
         assumeTrue(Mcc.target.isWindowsMsvc());
         outputs("msvc_intrin_header", "3412 78563412 EFCDAB8967452301\n", false, false);
