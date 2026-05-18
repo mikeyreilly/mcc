@@ -110,6 +110,52 @@ class MccTest {
             deleteRecursively(dir);
         }
     }
+
+    @Test
+    void sqliteOptimizedDebugBuildRunsBasicSql() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        Path sqliteDir = Paths.get("C:\\wa\\sqlite-amalgamation-3500400");
+        assumeTrue(Files.isDirectory(sqliteDir));
+
+        Path dir = Files.createTempDirectory("mcc-sqlite-opt-debug");
+        try {
+            Path shellObj = dir.resolve("shell.obj");
+            Path sqliteObj = dir.resolve("sqlite3.obj");
+            Path exe = dir.resolve("sqlite-opt-debug.exe");
+            Path pdb = dir.resolve("sqlite-opt-debug.pdb");
+
+            Pair<String, Integer> shellCompile = runAndCapture("cmd", "/c",
+                    "mcc.bat", "-g", "--optimize", "-c", "-o",
+                    shellObj.toString(), sqliteDir.resolve("shell.c").toString());
+            assertEquals(0, shellCompile.value(), shellCompile.key());
+
+            Pair<String, Integer> sqliteCompile = runAndCapture("cmd", "/c",
+                    "mcc.bat", "-g", "--optimize", "-c", "-o",
+                    sqliteObj.toString(), sqliteDir.resolve("sqlite3.c").toString());
+            assertEquals(0, sqliteCompile.value(), sqliteCompile.key());
+
+            Pair<String, Integer> link = runAndCapture("clang",
+                    "--target=x86_64-pc-windows-msvc", "-fuse-ld=lld",
+                    shellObj.toString(), sqliteObj.toString(), "-o",
+                    exe.toString(), "-Wl,/subsystem:console", "-Wl,/debug",
+                    "-Wl,/pdb:" + pdb,
+                    "-Wl,/defaultlib:legacy_stdio_definitions");
+            assertEquals(0, link.value(), link.key());
+
+            Pair<String, Integer> selectOne = runAndCapture(exe.toString(),
+                    ":memory:", "select 1;");
+            assertEquals(0, selectOne.value(), selectOne.key());
+            assertEquals("1\n", selectOne.key());
+
+            Pair<String, Integer> insertSelect = runAndCapture(exe.toString(),
+                    ":memory:",
+                    "create table t(x); insert into t values(7); select x from t;");
+            assertEquals(0, insertSelect.value(), insertSelect.key());
+            assertEquals("7\n", insertSelect.key());
+        } finally {
+            deleteRecursively(dir);
+        }
+    }
     
     @Test
     void msvc_intrin_header() throws Exception {
@@ -342,6 +388,38 @@ class MccTest {
                     "BitField", "UDTSym")) {
                 assertTrue(codeView.contains(marker), marker + "\n" + codeView);
             }
+        } finally {
+            Mcc.addDebugInfo = previousAddDebugInfo;
+            Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;
+            Files.deleteIfExists(src);
+            Files.deleteIfExists(object);
+        }
+    }
+
+    @Test
+    void optimizedCodeViewSkipsEliminatedScopeLocalRanges() throws Exception {
+        assumeTrue(Mcc.target.isWindowsMsvc());
+        boolean previousAddDebugInfo = Mcc.addDebugInfo;
+        boolean previousRegisterAllocatorDisabled =
+                Mcc.registerAllocatorDisabled;
+        Path src = Files.createTempFile("mcc-codeview-eliminated-scope", ".c");
+        Path object =
+                Files.createTempFile("mcc-codeview-eliminated-scope", ".obj");
+        try {
+            Files.writeString(src, """
+                    void sink(int);
+                    int main(void) {
+                        if (0) {
+                            int eliminated = 1;
+                            sink(eliminated);
+                        }
+                        return 0;
+                    }
+                    """);
+            Mcc.addDebugInfo = false;
+            Mcc.registerAllocatorDisabled = false;
+            assertEquals(0, Mcc.mcc("-g", "--optimize", "-c", "-o",
+                    object.toString(), src.toString()));
         } finally {
             Mcc.addDebugInfo = previousAddDebugInfo;
             Mcc.registerAllocatorDisabled = previousRegisterAllocatorDisabled;

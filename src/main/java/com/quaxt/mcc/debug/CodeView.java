@@ -5,6 +5,7 @@ import com.quaxt.mcc.asm.*;
 import com.quaxt.mcc.parser.Constant;
 import com.quaxt.mcc.parser.Exp;
 import com.quaxt.mcc.semantic.*;
+import com.quaxt.mcc.tacky.LabelIr;
 
 import java.io.PrintWriter;
 import java.util.*;
@@ -121,6 +122,7 @@ public final class CodeView {
                 scopes.put(scope.id(), scope);
             }
         }
+        Set<String> labels = definedLabels(function);
 
         for (DebugLocal local : function.debugLocals) {
             SymbolTableEntry entry = SYMBOL_TABLE.get(local.internalName());
@@ -140,6 +142,10 @@ public final class CodeView {
                     scope.startLabel();
             String end = scope == null ? debugFunction.endLabel :
                     scope.endLabel();
+            if (scope != null &&
+                    (!labels.contains(start) || !labels.contains(end))) {
+                continue;
+            }
 
             emitRecord(out, S_LOCAL, "S_LOCAL", () -> {
                 printIndent(out, ".long 0x" + Integer.toHexString(type));
@@ -159,6 +165,17 @@ public final class CodeView {
                         ", frame_ptr_rel, " + rbpRelativeOffset);
             }
         }
+    }
+
+    private static Set<String> definedLabels(FunctionIr function) {
+        Set<String> labels = new HashSet<>();
+        if (function.instructions == null) return labels;
+        for (Instruction instruction : function.instructions) {
+            if (instruction instanceof LabelIr(String label)) {
+                labels.add(label);
+            }
+        }
+        return labels;
     }
 
     private static void emitUdts(PrintWriter out, TypeTable types) {
