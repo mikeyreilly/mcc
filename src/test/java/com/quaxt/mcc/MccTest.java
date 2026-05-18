@@ -110,7 +110,7 @@ class MccTest {
             deleteRecursively(dir);
         }
     }
-
+    
     @Test
     void msvc_intrin_header() throws Exception {
         assumeTrue(Mcc.target.isWindowsMsvc());
@@ -827,6 +827,11 @@ class MccTest {
     @Test
     void const_literals_test()  throws Exception {
         returns("const_literals", 3);
+    }
+
+    @Test
+    void unsignedHexLiteralWidening() throws Exception {
+        outputs("unsigned_hex_widen_or", "7080000060\n", false, false);
     }
 
 

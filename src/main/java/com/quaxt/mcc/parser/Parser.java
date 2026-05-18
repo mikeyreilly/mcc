@@ -1582,16 +1582,85 @@ public class Parser {
             return new DoubleInit(Double.parseDouble(value));
         if (type == Primitive.FLOAT)
             return new FloatInit(Float.parseFloat(value));
+        if (hex) {
+            long v = Long.parseUnsignedLong(value, base);
+            if (type == Primitive.INT) {
+                return parseHexIntegerLiteral(v);
+            }
+            if (type == Primitive.LONG) {
+                return parseHexLongLiteral(v, isLongLong);
+            }
+            if (type == Primitive.UINT) {
+                return parseUnsignedIntegerLiteral(v, isLongLong);
+            }
+            if (type == Primitive.ULONG) {
+                return parseUnsignedLongLiteral(v, isLongLong);
+            }
+        }
         if (type.isSigned()) {
             long v = Long.parseUnsignedLong(value, base);
-            if (v < 1L << 31 && type == Primitive.INT)
+            if (type == Primitive.INT && fitsSigned(v, Primitive.INT))
                 return new IntInit((int) v);
-            else return isLongLong ? new LongLongInit(v) : new LongInit(v);
+            if (!isLongLong && fitsSigned(v, Primitive.LONG)) {
+                return new LongInit(v);
+            }
+            return new LongLongInit(v);
         }
         long v = Long.parseUnsignedLong(value, base);
-        if (Long.compareUnsigned(v, 0xffff_ffffL) <= 0 && (type == Primitive.INT || type == Primitive.UINT))
+        return parseUnsignedIntegerLiteral(v, isLongLong);
+    }
+
+    private static Constant parseHexIntegerLiteral(long v) {
+        if (fitsSigned(v, Primitive.INT)) return new IntInit((int) v);
+        if (fitsUnsigned(v, Primitive.UINT)) return new UIntInit((int) v);
+        if (fitsSigned(v, Primitive.LONG)) return new LongInit(v);
+        if (fitsUnsigned(v, Primitive.ULONG)) return new ULongInit(v);
+        if (Long.compareUnsigned(v, Long.MAX_VALUE) <= 0) {
+            return new LongLongInit(v);
+        }
+        return new ULongLongInit(v);
+    }
+
+    private static Constant parseHexLongLiteral(long v, boolean isLongLong) {
+        if (isLongLong) {
+            return Long.compareUnsigned(v, Long.MAX_VALUE) <= 0 ?
+                    new LongLongInit(v) : new ULongLongInit(v);
+        }
+        if (fitsSigned(v, Primitive.LONG)) return new LongInit(v);
+        if (fitsUnsigned(v, Primitive.ULONG)) return new ULongInit(v);
+        if (Long.compareUnsigned(v, Long.MAX_VALUE) <= 0) {
+            return new LongLongInit(v);
+        }
+        return new ULongLongInit(v);
+    }
+
+    private static Constant parseUnsignedIntegerLiteral(long v,
+                                                       boolean isLongLong) {
+        if (!isLongLong && fitsUnsigned(v, Primitive.UINT)) {
             return new UIntInit((int) v);
-        else return isLongLong ?new ULongLongInit(v) : new ULongInit(v);
+        }
+        return parseUnsignedLongLiteral(v, isLongLong);
+    }
+
+    private static Constant parseUnsignedLongLiteral(long v,
+                                                    boolean isLongLong) {
+        if (!isLongLong && fitsUnsigned(v, Primitive.ULONG)) {
+            return new ULongInit(v);
+        }
+        return new ULongLongInit(v);
+    }
+
+    private static boolean fitsSigned(long value, Primitive type) {
+        int bits = (int) Mcc.size(type) * 8;
+        long max = bits == 64 ? Long.MAX_VALUE : (1L << (bits - 1)) - 1;
+        return Long.compareUnsigned(value, max) <= 0;
+    }
+
+    private static boolean fitsUnsigned(long value, Primitive type) {
+        int bits = (int) Mcc.size(type) * 8;
+        if (bits == 64) return true;
+        long max = (1L << bits) - 1;
+        return Long.compareUnsigned(value, max) <= 0;
     }
 
     private static Type processAbstractDeclarator(

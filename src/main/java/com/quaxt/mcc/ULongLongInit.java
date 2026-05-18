@@ -92,6 +92,6 @@ public record ULongLongInit(long l) implements StaticInit, Constant<ULongLongIni
         if (c2 instanceof ULongLongInit l) {
             return this.apply(op, l);
         }
-        return this.apply(op, new ULongLongInit((int) c2.toLong()));
+        return this.apply(op, new ULongLongInit(c2.toLong()));
     }
 }

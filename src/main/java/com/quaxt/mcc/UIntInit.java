@@ -26,7 +26,7 @@ public record UIntInit(int i) implements StaticInit, Constant<UIntInit> {
     }
 
     public long toLong() {
-        return i;
+        return Integer.toUnsignedLong(i);
     }
 
     @Override
