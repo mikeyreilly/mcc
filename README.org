@@ -1,2 +1,165 @@
-Incomplete implementation of a C compiler in Java. Owes its existence
-to Nora Sandler's [[https://nostarch.com/writing-c-compiler][Writing a C Compiler]].
+#+title: mcc
+
+A C compiler in Java with x86-64 code generation, optimization passes,
+and debug information support. It owes its existence to Nora Sandler's
+[[https://nostarch.com/writing-c-compiler][Writing a C Compiler]]. I followed that book and ended up with a lot of
+a c compiler and then I kept going. It's not complete - I haven't got
+round to atomic types or BitInts but it can compile SQLite.
+
+* Overview
+
+~mcc~ is a C compiler written in Java that targets x86-64. It preprocesses C
+source with the platform C toolchain, parses and type-checks it in Java, emits
+assembly, and then asks the system toolchain to assemble and link the result.
+
+Alongside the usual frontend and code generation pieces, it includes features
+that are often skipped in small compiler projects:
+
+- register allocation
+- optimization passes, including constant folding, copy propagation,
+  unreachable-code elimination, and dead-store elimination
+- debug information, with DWARF on Linux/GNU and CodeView/PDB support on
+  Windows
+- ABI-aware code generation for Linux and Windows x86-64 calls
+
+Supported output targets are:
+
+- ~linux-gnu~
+- ~windows-msvc~
+
+By default the compiler targets the host operating system.
+
+* Requirements
+
+- JDK 25 or newer
+- Maven 3.x
+- A C toolchain on ~PATH~
+
+For Linux, ~mcc~ invokes ~gcc~ for preprocessing, assembly, and linking.
+
+For Windows, ~mcc~ uses Clang/LLVM: ~clang-cl~ for preprocessing and ~clang~
+plus ~lld~ for assembly and linking. Linking still requires the Windows SDK and
+runtime libraries to be visible to Clang, such as from a Visual Studio Developer
+Command Prompt or an equivalent LLVM setup.
+
+* Getting Started
+
+Compile the Java sources:
+
+#+begin_src sh
+mvn -q compile
+#+end_src
+
+The launcher scripts run the main class from ~target/classes~, so run the build
+step before using them.
+
+On Unix-like systems:
+
+#+begin_src sh
+./mcc -o factors factors.c
+./factors 42
+#+end_src
+
+On Windows:
+
+#+begin_src bat
+mcc.bat -o factors.exe factors.c
+factors.exe 42
+#+end_src
+
+You can also run the compiler directly:
+
+#+begin_src sh
+java -Xss10M -Djava.util.logging.config.file=logging.properties \
+  -cp target/classes com.quaxt.mcc.Mcc factors.c
+#+end_src
+
+* Usage
+
+#+begin_src text
+mcc [options] <source.c>
+#+end_src
+
+The compiler accepts one C source file. If no output file is specified, it writes
+the result next to the input file:
+
+- executable: ~source~ on Linux, ~source.exe~ on Windows
+- object file with ~-c~: ~source.o~ on Linux, ~source.obj~ on Windows
+- assembly with ~-S~: ~source.s~
+
+Common options:
+
+| Option | Meaning |
+|--------+---------|
+| ~-o <file>~ | Set the output path |
+| ~-S~ or ~-s~ | Emit assembly only |
+| ~-c~ | Compile to an object file, but do not link |
+| ~-g~ | Emit debug information |
+| ~-I<dir>~ | Add an include directory for preprocessing |
+| ~-l<name>~ | Pass a library argument to the linker |
+| ~--target=linux-gnu~ | Emit Linux/GNU ABI output |
+| ~--target=windows-msvc~ | Emit Windows/MSVC ABI output |
+
+Optimization options:
+
+| Option | Meaning |
+|--------+---------|
+| ~--optimize~ | Enable all implemented optimizations |
+| ~--fold-constants~ | Fold constant expressions |
+| ~--propagate-copies~ | Propagate copy values |
+| ~--eliminate-unreachable-code~ | Remove unreachable code |
+| ~--eliminate-dead-stores~ | Remove dead stores |
+
+Debugging and development options:
+
+| Option | Meaning |
+|--------+---------|
+| ~--lex~ | Stop after lexing |
+| ~--parse~ | Stop after parsing |
+| ~--validate~ | Stop after semantic validation |
+| ~--tacky~ | Stop after IR generation. Tacky is what Writing a C Compiler calls its IR |
+| ~--codegen~ | Stop after assembly generation in memory |
+| ~--no-register-allocator~ | Disable the register allocator |
+
+* Examples
+
+Build an executable with optimizations:
+
+#+begin_src sh
+./mcc --optimize -o factors factors.c
+#+end_src
+
+Compile to assembly:
+
+#+begin_src sh
+./mcc -S -o factors.s factors.c
+#+end_src
+
+Compile to an object file:
+
+#+begin_src sh
+./mcc -c -o factors.o factors.c
+#+end_src
+
+Compile a file that uses an extra include directory:
+
+#+begin_src sh
+./mcc -Iinclude -o program program.c
+#+end_src
+
+Cross-select a supported target:
+
+#+begin_src sh
+./mcc --target=linux-gnu -S -o program.s program.c
+#+end_src
+
+* Tests
+
+Run the test suite with Maven:
+
+#+begin_src sh
+mvn test
+#+end_src
+
+Many tests compile C files from ~src/test/resources~ and then run the resulting
+programs. The same external toolchain requirements apply to tests.
